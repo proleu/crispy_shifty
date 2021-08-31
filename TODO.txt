@@ -1,0 +1,8 @@
+structure python modules and add code
+unit tests?
+add submodules:
+	pymatcher?
+	pompd?
+
+should design subdirs be submodules too or is that too wacky
+
