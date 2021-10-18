@@ -77,17 +77,14 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
         dssp = pose.secstruct()
         # get leading loop from ss
         if dssp[0] == "H":  # in case no leading loop is detected
-            py_idx_n_term = 0
+            rosetta_idx_n_term = "1"
         else:  # get beginning index of first occurrence of LH in dssp
-            py_idx_n_term = dssp.find("LH")
+            rosetta_idx_n_term  = str(dssp.find("LH")+1)
         # get trailing loop from ss
         if dssp[-1] == "H":  # in case no trailing loop is detected
-            py_idx_c_term = -1
+            rosetta_idx_c_term  = str(pose.chain_end(1)) 
         else:  # get ending index of last occurrence of HL in dssp
-            py_idx_c_term = dssp.rfind("HL") + 1
-        rosetta_idx_n_term, rosetta_idx_c_term = str(py_idx_n_term + 1), str(
-            py_idx_c_term + 1
-        )
+            rosetta_idx_c_term = str(dssp.rfind("HL")+2)
         trimmed_pose = pose.clone()
         # setup trimming mover
         trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
