@@ -72,29 +72,35 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
         )
     final_pposes = []
     for pose in poses:
+        # setup rechain mover to sanitize the trimmed pose
+        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        rechain.chain_order("1")
         # get secondary structure
         pyrosetta.rosetta.core.scoring.dssp.Dssp(pose).insert_ss_into_pose(pose, True)
         dssp = pose.secstruct()
         # get leading loop from ss
+        trimmed_pose = pose.clone()
         if dssp[0] == "H":  # in case no leading loop is detected
-            rosetta_idx_n_term = "1"
+            pass
         else:  # get beginning index of first occurrence of LH in dssp
             rosetta_idx_n_term  = str(dssp.find("LH")+1)
+            # setup trimming mover
+            trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
+            trimmer.start(rosetta_idx_n_term)
+            trimmer.end(str(pose.chain_end(1)))
+            trimmer.apply(trimmed_pose)
+            rechain.apply(trimmed_pose)
         # get trailing loop from ss
         if dssp[-1] == "H":  # in case no trailing loop is detected
-            rosetta_idx_c_term  = str(pose.chain_end(1)) 
+            pass
         else:  # get ending index of last occurrence of HL in dssp
             rosetta_idx_c_term = str(dssp.rfind("HL")+2)
-        trimmed_pose = pose.clone()
-        # setup trimming mover
-        trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
-        trimmer.start(rosetta_idx_n_term)
-        trimmer.end(rosetta_idx_c_term)
-        trimmer.apply(trimmed_pose)
-        # setup rechain mover to sanitize the trimmed pose
-        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-        rechain.chain_order("1")
-        rechain.apply(trimmed_pose)
+            # setup trimming mover
+            trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
+            trimmer.start("1")
+            trimmer.end(rosetta_idx_c_term)
+            trimmer.apply(trimmed_pose)
+            rechain.apply(trimmed_pose)
         trimmed_length = len(trimmed_pose.residues)
         if "metadata" in kwargs:
             metadata = kwargs["metadata"]
