@@ -55,12 +55,13 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
     Assumes a monomer. Must provide either a packed_pose_in or "pdb_path" kwarg.
     """
 
+    import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
-    import sys
+    from pyrosetta.rosetta.core.scoring.dssp import Dssp
 
     # TODO import crispy shifty module
-    sys.path.append("/home/pleung/projects/crispy_shifty")
+    sys.path.append("/mnt/home/pleung/projects/crispy_shifty")
     from protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
@@ -76,7 +77,7 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
         rechain.chain_order("1")
         # get secondary structure
-        pyrosetta.rosetta.core.scoring.dssp.Dssp(pose).insert_ss_into_pose(pose, True)
+        Dssp(pose).insert_ss_into_pose(pose, True)
         dssp = pose.secstruct()
         # get leading loop from ss
         trimmed_pose = pose.clone()
@@ -91,6 +92,8 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
         # get trailing loop from ss
+        Dssp(trimmed_pose).insert_ss_into_pose(pose, True)
+        dssp = trimmed_pose.secstruct()
         if dssp[-1] == "H":  # in case no trailing loop is detected
             pass
         else:  # get ending index of last occurrence of HL in dssp
@@ -130,7 +133,7 @@ def redesign_disulfides(packed_pose_in=None, **kwargs):
     import sys
 
     # TODO import crispy shifty module
-    sys.path.append("/home/pleung/projects/crispy_shifty")
+    sys.path.append("/mnt/home/pleung/projects/crispy_shifty")
     from protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
