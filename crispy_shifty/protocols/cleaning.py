@@ -9,7 +9,7 @@ from pyrosetta.rosetta.core.pose import Pose
 
 @requires_init
 def path_to_pose_or_ppose(
-    path: Required[str] = "", 
+    path = "", 
     cluster_scores: Optional[bool] = False, 
     pack_result: Optional[bool] = False, 
 ) -> Generator[str, Union[PackedPose, Pose], None]:
@@ -52,7 +52,7 @@ def path_to_pose_or_ppose(
 
 @requires_init
 def remove_terminal_loops(
-    packed_pose_in:Required[PackedPose] = None, **kwargs
+    packed_pose_in:Optional[PackedPose] = None, **kwargs
 ) -> Generator[PackedPose, PackedPose, None]:
     """
     Use DSSP and delete region mover to idealize inputs. Add metadata.
@@ -126,7 +126,7 @@ def remove_terminal_loops(
         yield ppose
 
 def redesign_disulfides(
-    packed_pose_in:Required[PackedPose] = None, **kwargs
+    packed_pose_in:Optional[PackedPose] = None, **kwargs
 ) -> Generator[PackedPose, PackedPose, None]:
     """
     fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
