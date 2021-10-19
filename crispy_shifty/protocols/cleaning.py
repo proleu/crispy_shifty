@@ -9,7 +9,9 @@ from pyrosetta.rosetta.core.pose import Pose
 
 @requires_init
 def path_to_pose_or_ppose(
-    path: "", cluster_scores=False, pack_result=False
+    path: Required[str] = "", 
+    cluster_scores: Optional[bool] = False, 
+    pack_result: Optional[bool] = False, 
 ) -> Generator[str, Union[PackedPose, Pose], None]:
     """
     Generate PackedPose objects given an input path to a file on disk to read in.
@@ -49,7 +51,9 @@ def path_to_pose_or_ppose(
 
 
 @requires_init
-def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
+def remove_terminal_loops(
+    packed_pose_in:Required[PackedPose] = None, **kwargs
+) -> Generator[PackedPose, PackedPose, None]:
     """
     Use DSSP and delete region mover to idealize inputs. Add metadata.
     Assumes a monomer. Must provide either a packed_pose_in or "pdb_path" kwarg.
@@ -60,9 +64,8 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.scoring.dssp import Dssp
 
-    # TODO import crispy shifty module
-    sys.path.append("/mnt/home/pleung/projects/crispy_shifty")
-    from protocols.cleaning import path_to_pose_or_ppose
+    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -122,7 +125,9 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
     for ppose in final_pposes:
         yield ppose
 
-def redesign_disulfides(packed_pose_in=None, **kwargs):
+def redesign_disulfides(
+    packed_pose_in:Required[PackedPose] = None, **kwargs
+) -> Generator[PackedPose, PackedPose, None]:
     """
     fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
     Requires the following init flags:
@@ -139,9 +144,8 @@ def redesign_disulfides(packed_pose_in=None, **kwargs):
     )
     import sys
 
-    # TODO import crispy shifty module
-    sys.path.append("/mnt/home/pleung/projects/crispy_shifty")
-    from protocols.cleaning import path_to_pose_or_ppose
+    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
