@@ -89,9 +89,8 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
         else:  # get beginning index of first occurrence of LH in dssp
             rosetta_idx_n_term  = str(dssp.find("LH")+1)
             # setup trimming mover
-            trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
-            trimmer.start(rosetta_idx_n_term)
-            trimmer.end(str(pose.chain_end(1)))
+            trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
+            trimmer.region(rosetta_idx_n_term, str(trimmed_pose.chain_end(1)))
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
         # get secondary structure
