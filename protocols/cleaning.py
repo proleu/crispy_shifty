@@ -90,7 +90,7 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
             rosetta_idx_n_term  = str(dssp.find("LH")+1)
             # setup trimming mover
             trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
-            trimmer.region(rosetta_idx_n_term, str(trimmed_pose.chain_end(1)))
+            trimmer.region(str(trimmed_pose.chain_begin(1)), rosetta_idx_n_term)
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
         # get secondary structure
