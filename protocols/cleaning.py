@@ -60,8 +60,7 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.scoring.dssp import Dssp
 
-    # TODO import crispy shifty module
-    sys.path.append("/mnt/home/pleung/projects/crispy_shifty")
+    sys.path.append("/projects/crispy_shifty/crispy_shifty")
     from protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
@@ -139,8 +138,7 @@ def redesign_disulfides(packed_pose_in=None, **kwargs):
     )
     import sys
 
-    # TODO import crispy shifty module
-    sys.path.append("/mnt/home/pleung/projects/crispy_shifty")
+    sys.path.append("/projects/crispy_shifty/crispy_shifty")
     from protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
