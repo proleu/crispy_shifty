@@ -5,4 +5,6 @@ add submodules:
 	pompd?
 
 should design subdirs be submodules too or is that too wacky
+TODO: refold the resultant no_cys variants to check that they're ok?  
+TODO: install conda into the crispy env?
 
