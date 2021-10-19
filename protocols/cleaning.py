@@ -118,7 +118,9 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
         for key, value in metadata.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, key, str(value))
         final_pposes.append(io.to_packed(trimmed_pose))
-    return final_pposes
+
+    for ppose in final_pposes:
+        yield ppose
 
 def redesign_disulfides(packed_pose_in=None, **kwargs):
     """
@@ -263,4 +265,5 @@ def redesign_disulfides(packed_pose_in=None, **kwargs):
             )  # store values as strings for safety
         designed_ppose = io.to_packed(pose)
         final_pposes.append(designed_ppose)
-    return final_pposes
+    for ppose in final_pposes:
+        yield ppose
