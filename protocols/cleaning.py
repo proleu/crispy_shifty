@@ -49,7 +49,9 @@ def path_to_pose_or_ppose(
 
 
 @requires_init
-def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
+def remove_terminal_loops(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Generator[PackedPose, PackedPose, None]:
     """
     Use DSSP and delete region mover to idealize inputs. Add metadata.
     Assumes a monomer. Must provide either a packed_pose_in or "pdb_path" kwarg.
@@ -60,8 +62,8 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.scoring.dssp import Dssp
 
-    sys.path.append("/projects/crispy_shifty/crispy_shifty")
-    from protocols.cleaning import path_to_pose_or_ppose
+    sys.path.insert(0, "/projects/crispy_shifty/crispy_shifty/protocols")
+    from cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -121,7 +123,9 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
     for ppose in final_pposes:
         yield ppose
 
-def redesign_disulfides(packed_pose_in=None, **kwargs):
+def redesign_disulfides(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Generator[PackedPose, PackedPose, None]:
     """
     fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
     Requires the following init flags:
@@ -131,15 +135,15 @@ def redesign_disulfides(packed_pose_in=None, **kwargs):
     -indexed_structure_store:fragment_store /home/bcov/sc/scaffold_comparison/data/ss_grouped_vall_all.h5
     """
 
+    import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed.tasks.rosetta_scripts import (
         SingleoutputRosettaScriptsTask,
     )
-    import sys
 
-    sys.path.append("/projects/crispy_shifty/crispy_shifty")
-    from protocols.cleaning import path_to_pose_or_ppose
+    sys.path.insert(0, "/projects/crispy_shifty/crispy_shifty/protocols")
+    from cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
