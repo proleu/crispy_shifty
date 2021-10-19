@@ -76,12 +76,15 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
         # setup rechain mover to sanitize the trimmed pose
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
         rechain.chain_order("1")
-        # get secondary structure
-        Dssp(pose).insert_ss_into_pose(pose, True)
-        dssp = pose.secstruct()
-        # get leading loop from ss
         trimmed_pose = pose.clone()
+        rechain.apply(trimmed_pose)
+        # get secondary structure
+        Dssp(pose).insert_ss_into_pose(trimmed_pose, True)
+        dssp = trimmed_pose.secstruct()
+        # get leading loop from ss
         if dssp[0] == "H":  # in case no leading loop is detected
+            pass
+        elif dssp[0:2] == "LH": # leave it alone if it has a short terminal loop
             pass
         else:  # get beginning index of first occurrence of LH in dssp
             rosetta_idx_n_term  = str(dssp.find("LH")+1)
@@ -91,10 +94,13 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
             trimmer.end(str(pose.chain_end(1)))
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
-        # get trailing loop from ss
-        Dssp(trimmed_pose).insert_ss_into_pose(pose, True)
+        # get secondary structure
+        Dssp(trimmed_pose).insert_ss_into_pose(trimmed_pose, True)
         dssp = trimmed_pose.secstruct()
+        # get trailing loop from ss
         if dssp[-1] == "H":  # in case no trailing loop is detected
+            pass
+        elif dssp[-2:] == "HL":
             pass
         else:  # get ending index of last occurrence of HL in dssp
             rosetta_idx_c_term = str(dssp.rfind("HL")+2)
@@ -111,8 +117,8 @@ def remove_terminal_loops(packed_pose_in=None, **kwargs) -> List[PackedPose]:
             metadata = {}
         metadata["trimmed_length"] = str(trimmed_length)
         for key, value in metadata.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
-        final_pposes.append(io.to_packed(pose))
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, key, str(value))
+        final_pposes.append(io.to_packed(trimmed_pose))
     return final_pposes
 
 def redesign_disulfides(packed_pose_in=None, **kwargs):
