@@ -126,6 +126,11 @@ def remove_terminal_loops(
         yield ppose
 
 def break_all_disulfides(pose:Pose) -> Pose:
+    """
+    Quickly break all disulfides in a pose
+    """
+    import pyrosetta
+
 
     seq = pose.sequence()
     all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
@@ -255,19 +260,19 @@ def redesign_disulfides(
     </MOVERS>
     <PROTOCOLS>
         <Add mover="fast_design"/>
-        #Add filter_name="buns_parent" />
-        #Add filter_name="exposed_hydrophobics_parent" />
-        #Add filter_name="geometry_parent" />
-        #Add filter_name="holes_core_parent"/>
-        #Add filter_name="holes_all_parent"/>
-        #Add filter_name="mismatch_probability_parent" />
-        #Add filter_name="packstat_parent"/>
-        #Add filter_name="sc_hlx_parent" />
-        #Add filter_name="sc_all_parent" />
-        #Add filter_name="score_per_res_parent" />
-        #Add filter_name="wnm_hlx_parent"/>
-        #Add filter_name="wnm_all_parent"/>
-        #Add filter_name="9mer_parent"/>
+        <Add filter_name="buns_parent" />
+        <Add filter_name="exposed_hydrophobics_parent" />
+        <Add filter_name="geometry_parent" />
+        <Add filter_name="holes_core_parent"/>
+        <Add filter_name="holes_all_parent"/>
+        <Add filter_name="mismatch_probability_parent" />
+        <Add filter_name="packstat_parent"/>
+        <Add filter_name="sc_hlx_parent" />
+        <Add filter_name="sc_all_parent" />
+        <Add filter_name="score_per_res_parent" />
+        <Add filter_name="wnm_hlx_parent"/>
+        <Add filter_name="wnm_all_parent"/>
+        <Add filter_name="9mer_parent"/>
     </PROTOCOLS>
     </ROSETTASCRIPTS>
     """
