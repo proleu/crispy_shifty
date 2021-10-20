@@ -161,7 +161,7 @@ def redesign_disulfides(
         <ScoreFunction name="sfxn" weights="beta_nov16" symmetric="0"/>
     </SCOREFXNS>
     <RESIDUE_SELECTORS>
-        <ResidueName name="cys" residue_name3="CYS"/>
+        <ResidueName name="cys" residue_name3="CYS,CYS:disulfide"/>
         <Not name="not_cys" selector="cys"/>
         <Neighborhood name="around_cys" selector="cys"/>
         <Or name="cys_or_around_cys" selectors="cys,around_cys"/>
@@ -239,19 +239,19 @@ def redesign_disulfides(
     </MOVERS>
     <PROTOCOLS>
         <Add mover="fast_design"/>
-        <Add filter_name="buns_parent" />
-        <Add filter_name="exposed_hydrophobics_parent" />
-        <Add filter_name="geometry_parent" />
-        <Add filter_name="holes_core_parent"/>
-        <Add filter_name="holes_all_parent"/>
-        <Add filter_name="mismatch_probability_parent" />
-        <Add filter_name="packstat_parent"/>
-        <Add filter_name="sc_hlx_parent" />
-        <Add filter_name="sc_all_parent" />
-        <Add filter_name="score_per_res_parent" />
-        <Add filter_name="wnm_hlx_parent"/>
-        <Add filter_name="wnm_all_parent"/>
-        <Add filter_name="9mer_parent"/>
+        #Add filter_name="buns_parent" />
+        #Add filter_name="exposed_hydrophobics_parent" />
+        #Add filter_name="geometry_parent" />
+        #Add filter_name="holes_core_parent"/>
+        #Add filter_name="holes_all_parent"/>
+        #Add filter_name="mismatch_probability_parent" />
+        #Add filter_name="packstat_parent"/>
+        #Add filter_name="sc_hlx_parent" />
+        #Add filter_name="sc_all_parent" />
+        #Add filter_name="score_per_res_parent" />
+        #Add filter_name="wnm_hlx_parent"/>
+        #Add filter_name="wnm_all_parent"/>
+        #Add filter_name="9mer_parent"/>
     </PROTOCOLS>
     </ROSETTASCRIPTS>
     """
