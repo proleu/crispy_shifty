@@ -241,7 +241,6 @@ def redesign_disulfides(
         <Holes name="holes_all_parent" threshold="0.0" confidence="0"/>
         <SSPrediction name="mismatch_probability_parent" confidence="0" cmd="/software/psipred4/runpsipred_single" use_probability="1" mismatch_probability="1" use_svm="1" />
         <PackStat name="packstat_parent" threshold="0" chain="0" repeats="5"/>
-        <SSShapeComplementarity name="sc_hlx_parent" verbose="1" loops="0" helices="1" />
         <SSShapeComplementarity name="sc_all_parent" verbose="1" loops="1" helices="1" />
         <ScoreType name="total_score_pose" scorefxn="sfxn" score_type="total_score" threshold="0" confidence="0" />
         <ResidueCount name="count" />
@@ -249,10 +248,10 @@ def redesign_disulfides(
             <Var name="total_score_full" filter="total_score_pose"/>
             <Var name="res" filter="count"/>
         </CalculatorFilter>
-        <worst9mer name="wnm_hlx_parent" rmsd_lookup_threshold="0.4" confidence="0" only_helices="true" />
-        <worst9mer name="wnm_all_parent" rmsd_lookup_threshold="0.4" confidence="0" />
-        <worst9mer name="9mer_parent" rmsd_lookup_threshold="0.4" confidence="0" />
     </FILTERS>
+    <SIMPLE_METRICS>
+        <SapScoreMetric name="sap_parent" />
+    </SIMPLE_METRICS>
     <MOVERS>
         <FastDesign name="fast_design" scorefxn="sfxn" repeats="2" task_operations="design,pack,lock,layer_design,arochi,ex1_ex2">
             <MoveMap name="mm" chi="true" bb="false" jump="false" />
@@ -267,12 +266,9 @@ def redesign_disulfides(
         <Add filter_name="holes_all_parent"/>
         <Add filter_name="mismatch_probability_parent" />
         <Add filter_name="packstat_parent"/>
-        <Add filter_name="sc_hlx_parent" />
         <Add filter_name="sc_all_parent" />
         <Add filter_name="score_per_res_parent" />
-        <Add filter_name="wnm_hlx_parent"/>
-        <Add filter_name="wnm_all_parent"/>
-        <Add filter_name="9mer_parent"/>
+        <Add metrics="sap_parent" labels="sap_parent" />
     </PROTOCOLS>
     </ROSETTASCRIPTS>
     """
