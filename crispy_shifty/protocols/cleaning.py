@@ -125,6 +125,22 @@ def remove_terminal_loops(
     for ppose in final_pposes:
         yield ppose
 
+def break_all_disulfides(pose:Pose) -> Pose:
+
+    seq = pose.sequence()
+    all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
+    for i in all_cys_resi_indexes:
+        for j in all_cys_resi_indexes:
+            if pyrosetta.rosetta.core.conformation.is_disulfide_bond(
+                pose.conformation(), i, j
+            ):
+                pyrosetta.rosetta.core.conformation.break_disulfide(
+                    pose.conformation(), i, j
+                )
+            else:
+                pass
+    return pose
+
 def redesign_disulfides(
     packed_pose_in:Optional[PackedPose] = None, **kwargs
 ) -> Generator[PackedPose, PackedPose, None]:
@@ -145,7 +161,7 @@ def redesign_disulfides(
     import sys
 
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
-    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose, break_all_disulfides
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -161,7 +177,7 @@ def redesign_disulfides(
         <ScoreFunction name="sfxn" weights="beta_nov16" symmetric="0"/>
     </SCOREFXNS>
     <RESIDUE_SELECTORS>
-        <ResidueName name="cys" residue_name3="CYS,CYS:disulfide"/>
+        <ResidueName name="cys" residue_name3="CYS"/>
         <Not name="not_cys" selector="cys"/>
         <Neighborhood name="around_cys" selector="cys"/>
         <Or name="cys_or_around_cys" selectors="cys,around_cys"/>
@@ -260,6 +276,7 @@ def redesign_disulfides(
     final_pposes = []
     for pose in poses:
         scores = dict(pose.scores)
+        pose = break_all_disulfides(pose)
         designed_ppose = design_score(pose.clone())
         pose = io.to_pose(designed_ppose)
         scores.update(dict(pose.scores))
