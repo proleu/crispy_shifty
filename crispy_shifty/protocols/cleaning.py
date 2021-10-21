@@ -21,6 +21,7 @@ def path_to_pose_or_ppose(
     This function can be distributed (best for single inputs) or run on a host process
     """
     import bz2
+    import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed import cluster
 
