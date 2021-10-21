@@ -1,16 +1,18 @@
 # Python standard library
 from typing import *
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
+
 # Custom library imports
 
 
 @requires_init
 def make_bound_states(
-    packed_pose_in:Optional[PackedPose] = None, **kwargs
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Generator[PackedPose, PackedPose, None]:
     """
     Generate alternative helix-bound states from the input PackedPose or pdb path.
@@ -24,17 +26,18 @@ def make_bound_states(
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed.packed_pose.core import PackedPose
     from pyrosetta.rosetta.core.pose import Pose
-    
+    from pyrosetta.rosetta.core.pose import setPoseExtraScore
+
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     def range_CA_align(
-        pose_a:Pose, 
-        pose_b:Pose, 
-        start_a:int,
-        end_a:int,
-        start_b:int, 
-        end_b:int,
+        pose_a: Pose,
+        pose_b: Pose,
+        start_a: int,
+        end_a: int,
+        start_b: int,
+        end_b: int,
     ) -> None:
         """
         Align poses by superimposition of CA given two ranges of indices.
@@ -85,7 +88,6 @@ def make_bound_states(
         """
 
         import pyrosetta
-
 
         # initialize empty sfxn
         sfxn = pyrosetta.rosetta.core.scoring.ScoreFunction()
@@ -138,9 +140,9 @@ def make_bound_states(
         return helix_endpoints
 
     def combine_two_poses(
-        pose_a: Pose, 
+        pose_a: Pose,
         pose_b: Pose,
-        end_a: int, 
+        end_a: int,
         start_b: int,
     ) -> Pose:
         """
@@ -174,8 +176,8 @@ def make_bound_states(
         pose by i residues while maintaining a realistic interface at the pivot helix.
         """
         import pyrosetta
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
-        
         pose = pose.clone()
         copypose = pose.clone()
         # get the start and end residue indices for the pivot_helix
@@ -215,14 +217,11 @@ def make_bound_states(
             for resid in range(starts[helix_to_dock] + 1, ends[helix_to_dock] + 1):
                 dock.append_residue_by_bond(pose_sequence[p].residue(resid))
 
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                dock, "docked_helix", str(helix_to_dock)
-            )
+            setPoseExtraScore(dock, "docked_helix", str(helix_to_dock))
             shifts.append(dock)
 
         shifts = tuple(shifts)
         return shifts
-
 
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -234,9 +233,14 @@ def make_bound_states(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-    final_pposes = []
 
+    if "clash_cutoff" in kwargs:
+        clash_cutoff = kwargs["clash_cutoff"]
+    else:
+        clash_cutoff = 999999
+    final_pposes = []
     for pose in poses:
+        scores = dict(pose.scores)
         if not "name" in kwargs:
             original_name = pose.pdb_info().name()
         else:
@@ -260,34 +264,31 @@ def make_bound_states(
                     )
                     for shift in shifts:
                         bb_clash = clash_check(shift)
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                            shift, "bb_clash", float(bb_clash)
-                        )
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                            shift, "parent", original_name
-                        )
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                            shift, "parent_length", str(parent_length)
-                        )
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                            shift, "pivot_helix", str(pivot_helix)
-                        )
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        if bb_clash > clash_cutoff:
+                            continue
+                        else:
+                            pass
+
+                        for key, value in scores.items():
+                            setPoseExtraScore(shift, key, str(value))
+                        setPoseExtraScore(shift, "bb_clash", float(bb_clash))
+                        setPoseExtraScore(shift, "parent", original_name)
+                        setPoseExtraScore(shift, "parent_length", str(parent_length))
+                        setPoseExtraScore(shift, "pivot_helix", str(pivot_helix))
+                        setPoseExtraScore(
                             shift, "pre_break_helix", str(pre_break_helix)
                         )
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                            shift, "shift", str(i)
-                        )
+                        setPoseExtraScore(shift, "shift", str(i))
                         docked_helix = shift.scores["docked_helix"]
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                            shift, 
-                            "state", 
-                            f"{original_name}_p_{str(pivot_helix)}_s_{str(shift)}_d_{docked_helix}",
+                        setPoseExtraScore(
+                            shift,
+                            "state",
+                            f"{original_name}_p_{str(pivot_helix)}_s_{str(i)}_d_{docked_helix}",
                         )
                         ppose = io.to_packed(shift)
                         states.append(ppose)
                 except:  # for cases where there isn't enough to align against
                     continue
         final_pposes += states
-    for ppose in final_pposes: 
+    for ppose in final_pposes:
         yield ppose
