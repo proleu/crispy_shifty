@@ -8,3 +8,15 @@ should design subdirs be submodules too or is that too wacky
 TODO: refold the resultant no_cys variants to check that they're ok?  
 TODO: install conda into the crispy env?
 
+PAPER TODOS
+
+copper DEER test ff74 single sites -> order chimeras -> Maxx
+ff129 DEER -> Maxx
+clonal genes for cs_1-120 -> SEC binding, fluo polarization
+DEER genes for cs_1-120 -> Maxx # maybe copper?
+xtal attempts for cs_1-120
+
+What will fig. 4 be? 
+
+FRET? NMR? photoswitching? negative cooperativity? 
+crowdsource cool tricks, maybe ask some synbio people
