@@ -102,6 +102,41 @@ def make_bound_states(
         )
         score = sfxn(all_gly)
         return score
+    
+
+    def count_interface_check(pose: Pose, int_cutoff: float) -> bool:
+        """
+        Given a state that has a helix bound, check that both halves have interfacial
+        contacts with the bound helix. Return true if so, return false if not.
+        int_cutoff determines how asymmetric the interfaces are allowed to be. If it is
+        set very low, one interface is allowed to have many more residues than the 
+        other.
+        """
+
+        import pyrosetta
+        from pyrosetta.rosetta.core.select.residue_selector import (
+            ChainSelector,
+            InterGroupInterfaceByVectorSelector,
+        )
+
+        A = ChainSelector("A")
+        B = ChainSelector("B")
+        C = ChainSelector("C")
+
+        AC_int = InterGroupInterfaceByVectorSelector(A, C)
+        BC_int = InterGroupInterfaceByVectorSelector(B, C)
+
+        AC_int_count = sum(list(AC_int.apply(pose)))
+        BC_int_count = sum(list(BC_int.apply(pose)))
+
+        if AC_int_count == 0 or BC_int_count == 0:
+            return False
+        elif AC_int_count/BC_int_count < int_cutoff:
+            return False
+        elif BC_int_count/AC_int_count < int_cutoff:
+            return False
+        else:
+            return True
 
     def helix_dict_maker(pose: Pose) -> dict:
         """
@@ -238,6 +273,13 @@ def make_bound_states(
         clash_cutoff = kwargs["clash_cutoff"]
     else:
         clash_cutoff = 999999
+    if "int_cutoff" in kwargs:
+        int_cutoff = kwargs["int_cutoff"]
+    else:
+        int_cutoff = 0.000001
+        
+    rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    rechain.chain_order("123")
     final_pposes = []
     for pose in poses:
         scores = dict(pose.scores)
@@ -263,12 +305,17 @@ def make_bound_states(
                         pose, i, starts, ends, pivot_helix, pre_break_helix
                     )
                     for shift in shifts:
+                        rechain.apply(shift)
+                        # mini filtering block
                         bb_clash = clash_check(shift)
+                        # check if clash is too high
                         if bb_clash > clash_cutoff:
                             continue
+                        # check if interface residue counts are acceptable
+                        # elif not count_interface_check(shift, int_cutoff):
+                        #     continue
                         else:
                             pass
-
                         for key, value in scores.items():
                             setPoseExtraScore(shift, key, str(value))
                         setPoseExtraScore(shift, "bb_clash", float(bb_clash))
