@@ -129,7 +129,8 @@ def make_bound_states(
         AC_int_count = sum(list(AC_int.apply(pose)))
         BC_int_count = sum(list(BC_int.apply(pose)))
 
-        if AC_int_count == 0 or BC_int_count == 0:
+        # interfaces need atleast 10 residues
+        if AC_int_count < 11 or BC_int_count < 11:
             return False
         elif AC_int_count/BC_int_count < int_cutoff:
             return False
@@ -305,6 +306,7 @@ def make_bound_states(
                         pose, i, starts, ends, pivot_helix, pre_break_helix
                     )
                     for shift in shifts:
+                        docked_helix = shift.scores["docked_helix"]
                         rechain.apply(shift)
                         # mini filtering block
                         bb_clash = clash_check(shift)
@@ -312,8 +314,8 @@ def make_bound_states(
                         if bb_clash > clash_cutoff:
                             continue
                         # check if interface residue counts are acceptable
-                        # elif not count_interface_check(shift, int_cutoff):
-                        #     continue
+                        elif not count_interface_check(shift, int_cutoff):
+                            continue
                         else:
                             pass
                         for key, value in scores.items():
@@ -326,7 +328,6 @@ def make_bound_states(
                             shift, "pre_break_helix", str(pre_break_helix)
                         )
                         setPoseExtraScore(shift, "shift", str(i))
-                        docked_helix = shift.scores["docked_helix"]
                         setPoseExtraScore(
                             shift,
                             "state",
@@ -334,7 +335,8 @@ def make_bound_states(
                         )
                         ppose = io.to_packed(shift)
                         states.append(ppose)
-                except:  # for cases where there isn't enough to align against
+                # for cases where there isn't enough to align against
+                except:
                     continue
         final_pposes += states
     for ppose in final_pposes:
