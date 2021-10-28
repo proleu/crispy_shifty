@@ -26,6 +26,8 @@ figs
 *.cmds
 *.list
 *.out
+*.log
+*.err
 ._*
 .DS_Store
 testing*
