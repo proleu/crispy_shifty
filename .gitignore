@@ -28,6 +28,7 @@ figs
 *.out
 *.log
 *.err
+*.json
 ._*
 .DS_Store
 testing*
