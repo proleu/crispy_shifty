@@ -12,4 +12,27 @@ __pycache__
 *.png
 *.pse
 
+00*/*
+01*/*
+02*/*
+03*/*
+04*/*
+05*/*
+06*/*
+07*/*
+examples
+figs
+*-Copy1*
+*.cmds
+*.list
+*.out
+*.log
+*.err
+*.json
+._*
+.DS_Store
+testing*
+old*
+
 scaffolds
+.gitignore
