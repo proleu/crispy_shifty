@@ -200,6 +200,48 @@ def combine_two_poses(
         newpose.append_residue_by_bond(pose_b.residue(i))
     return newpose
 
+def shift_pose_by_i(
+    pose: Pose,
+    i: int,
+    starts: dict,
+    ends: dict,
+    pivot_helix: int,
+    full_helix:bool=False
+) -> Pose:
+
+    pose = pose.clone()
+    shifted_pose = pose.clone()
+    start = starts[pivot_helix]
+    end = ends[pivot_helix]
+    if full_helix:
+        if (i >= 0) and (end-start >= i+7): # ensures there is at least a heptad aligned (prevents formation of states with no side domain contact)
+            start_a = start
+            start_b = start + i
+            end_a = end - i
+            end_b = end
+        elif (i < 0) and (start-end <= i-7): # ensures there is at least a heptad aligned (prevents formation of states with no side domain contact)
+            start_a = start - i
+            start_b = start
+            end_a = end
+            end_b = end + i
+        else:
+            raise RuntimeError("insufficient overlap for alignment")
+    else:
+        starts_tup = tuple(start for start in 4 * [start])
+        ends_tup = tuple(end for end in 4 * [end])
+        # make sure there's enough helix to align against going forwards
+        if (i >= 0) and ((start + 10 + i) <= end):
+            offsets = 3, 10, 3 + i, 10 + i
+            start_a, end_a, start_b, end_b = tuple(map(sum, zip(starts_tup, offsets)))
+        # make sure there's enough helix to align against going backwards
+        elif (i <= 0) and ((end - 10 + i) >= start):
+            offsets = -10, -3, -10 + i, -3 + i
+            start_a, end_a, start_b, end_b = tuple(map(sum, zip(ends_tup, offsets)))
+        else:
+            raise RuntimeError("insufficient overlap for alignment")
+    range_CA_align(shifted_pose, pose, start_a, end_a, start_b, end_b)
+    return shifted_pose
+
 @requires_init
 def make_bound_states(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -216,69 +258,6 @@ def make_bound_states(
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.pose import Pose
     from pyrosetta.rosetta.core.pose import setPoseExtraScore
-
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
-    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-
-    def shift_chB_by_i(
-        pose: Pose,
-        i: int,
-        starts: dict,
-        ends: dict,
-        pivot_helix: int,
-        pre_break_helix: int,
-    ) -> tuple:
-        """
-        Use alignment-based docking on CA atoms of a pivot helix to shift a half of a
-        pose by i residues while maintaining a realistic interface at the pivot helix.
-        """
-        import pyrosetta
-        from pyrosetta.rosetta.core.pose import setPoseExtraScore
-
-        pose = pose.clone()
-        copypose = pose.clone()
-        # get the start and end residue indices for the pivot_helix
-        start = starts[pivot_helix]
-        end = ends[pivot_helix]
-        starts_tup = tuple(start for start in 4 * [start])
-        ends_tup = tuple(end for end in 4 * [end])
-        # make sure there's enough helix to align against going forwards
-        if (i >= 0) and ((start + 10 + i) <= end):
-            offsets = 3, 10, 3 + i, 10 + i
-            start_a, end_a, start_b, end_b = tuple(map(sum, zip(starts_tup, offsets)))
-        # make sure there's enough helix to align against going backwards
-        elif (i <= 0) and ((end - 10 + i) >= start):
-            offsets = -10, -3, -10 + i, -3 + i
-            start_a, end_a, start_b, end_b = tuple(map(sum, zip(ends_tup, offsets)))
-        else:
-            raise RuntimeError("not enough overlap to align")
-        # dock by aligning along the pivot helix with an offset of i
-        range_CA_align(copypose, pose, start_a, end_a, start_b, end_b)
-        end_pose_a, start_pose_b = ends[pre_break_helix], starts[pre_break_helix + 1]
-        # stitch the pose together after alignment-based docking
-        shifted_pose = combine_two_poses(pose, copypose, end_pose_a, start_pose_b)
-        # add in the bound helix
-        shifts = []
-        # reuse the poses from before
-        pose_sequence = copypose, pose
-        helices_to_dock = (pivot_helix - 1, pivot_helix + 1)
-        for p, helix_to_dock in enumerate(helices_to_dock):
-            dock = shifted_pose.clone()
-            dock.append_residue_by_jump(
-                pose_sequence[p].residue(starts[helix_to_dock]),
-                dock.chain_end(1),
-                "CA",
-                "CA",
-                1,
-            )
-            for resid in range(starts[helix_to_dock] + 1, ends[helix_to_dock] + 1):
-                dock.append_residue_by_bond(pose_sequence[p].residue(resid))
-
-            setPoseExtraScore(dock, "docked_helix", str(helix_to_dock))
-            shifts.append(dock)
-
-        shifts = tuple(shifts)
-        return shifts
 
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -323,38 +302,57 @@ def make_bound_states(
             # first do the pre break side, then do the post break side
             for pivot_helix in [pre_break_helix, post_break_helix]:
                 try:
-                    shifts = shift_chB_by_i(
-                        pose, i, starts, ends, pivot_helix, pre_break_helix
+                    shifted_pose = shift_pose_by_i(
+                        pose, i, starts, ends, pivot_helix, False
                     )
-                    for shift in shifts:
-                        docked_helix = shift.scores["docked_helix"]
-                        rechain.apply(shift)
+                    end_pose_a, start_pose_b = ends[pre_break_helix], starts[post_break_helix]
+                    # stitch the pose together after alignment-based docking
+                    combined_pose = combine_two_poses(pose, shifted_pose, end_pose_a, start_pose_b)
+                    # add in the bound helix
+                    # reuse the poses from before
+                    pose_sequence = shifted_pose, pose
+                    helices_to_dock = (pivot_helix - 1, pivot_helix + 1)
+                    for p, docked_helix in enumerate(helices_to_dock):
+                        dock = combined_pose.clone()
+                        dock.append_residue_by_jump(
+                            pose_sequence[p].residue(starts[docked_helix]),
+                            dock.chain_end(1),
+                            "CA",
+                            "CA",
+                            1,
+                        )
+                        for resid in range(starts[docked_helix] + 1, ends[docked_helix] + 1):
+                            dock.append_residue_by_bond(pose_sequence[p].residue(resid))
+
+                        setPoseExtraScore(dock, "docked_helix", str(docked_helix))
+                        
+                        rechain.apply(dock)
                         # mini filtering block
-                        bb_clash = clash_check(shift)
+                        bb_clash = clash_check(dock)
                         # check if clash is too high
                         if bb_clash > clash_cutoff:
                             continue
                         # check if interface residue counts are acceptable
-                        elif not count_interface_check(shift, int_cutoff):
+                        elif not count_interface_check(dock, int_cutoff):
                             continue
                         else:
                             pass
                         for key, value in scores.items():
-                            setPoseExtraScore(shift, key, str(value))
-                        setPoseExtraScore(shift, "bb_clash", float(bb_clash))
-                        setPoseExtraScore(shift, "parent", original_name)
-                        setPoseExtraScore(shift, "parent_length", str(parent_length))
-                        setPoseExtraScore(shift, "pivot_helix", str(pivot_helix))
+                            setPoseExtraScore(dock, key, str(value))
+                        setPoseExtraScore(dock, "bb_clash", float(bb_clash))
+                        setPoseExtraScore(dock, "parent", original_name)
+                        setPoseExtraScore(dock, "parent_length", str(parent_length))
+                        setPoseExtraScore(dock, "pivot_helix", str(pivot_helix))
                         setPoseExtraScore(
-                            shift, "pre_break_helix", str(pre_break_helix)
+                            dock, "pre_break_helix", str(pre_break_helix)
                         )
-                        setPoseExtraScore(shift, "shift", str(i))
+                        setPoseExtraScore(dock, "shift", str(i))
                         setPoseExtraScore(
-                            shift,
+                            dock,
                             "state",
                             f"{original_name}_p_{str(pivot_helix)}_s_{str(i)}_d_{docked_helix}",
                         )
-                        ppose = io.to_packed(shift)
+                        ppose = io.to_packed(dock)
                         states.append(ppose)
                 # for cases where there isn't enough to align against
                 except:
@@ -392,55 +390,6 @@ def make_dimer_states(
         print(f'{time_min:.2f} min: {print_str}', end=end)
         for arg in args:
             print(arg)
-
-    def shift_chB_by_i(
-        pose: Pose,
-        i: int,
-        starts: dict,
-        ends: dict,
-        pivot_helix: int,
-        pre_break_helix: int,
-        full_helix=False
-    ) -> Pose:
-
-        pose = pose.clone()
-        copypose = pose.clone()
-        start = starts[pivot_helix]
-        end = ends[pivot_helix]
-        if full_helix:
-            if (i >= 0) and (end-start >= i+7): # ensures there is at least a heptad aligned (prevents formation of states with no side domain contact)
-                start_a = start
-                start_b = start + i
-                end_a = end - i
-                end_b = end
-            elif (i < 0) and (start-end <= i-7): # ensures there is at least a heptad aligned (prevents formation of states with no side domain contact)
-                start_a = start - i
-                start_b = start
-                end_a = end
-                end_b = end + i
-            else:
-                raise RuntimeError("insufficient overlap for alignment")
-        else:
-            starts_tup = tuple(start for start in 4 * [start])
-            ends_tup = tuple(end for end in 4 * [end])
-            # make sure there's enough helix to align against going forwards
-            if (i >= 0) and ((start + 10 + i) <= end):
-                offsets = 3, 10, 3 + i, 10 + i
-                start_a, end_a, start_b, end_b = tuple(map(sum, zip(starts_tup, offsets)))
-            # make sure there's enough helix to align against going backwards
-            elif (i <= 0) and ((end - 10 + i) >= start):
-                offsets = -10, -3, -10 + i, -3 + i
-                start_a, end_a, start_b, end_b = tuple(map(sum, zip(ends_tup, offsets)))
-            else:
-                raise RuntimeError("insufficient overlap for alignment")
-        range_CA_align(copypose, pose, start_a, end_a, start_b, end_b)
-        end_pose_a, start_pose_b = ends[pre_break_helix], starts[pre_break_helix + 1]
-        # Combines ensuring the domain containing the pivot helix remains aligned to the parent DHR
-        if pivot_helix == pre_break_helix:
-            shifted_pose = combine_two_poses(pose, copypose, end_pose_a, start_pose_b)
-        else:
-            shifted_pose = combine_two_poses(copypose, pose, end_pose_a, start_pose_b)
-        return shifted_pose
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -503,31 +452,37 @@ def make_dimer_states(
                 for full_helix in [0, 1]:
                     print_timestamp(f'Generating state {protomer} {i} {full_helix}...', end='')
                     try:
-                        shift = shift_chB_by_i(
-                            pose, i, starts, ends, pivot_helix, pre_break_helix, full_helix
+                        shifted_pose = shift_pose_by_i(
+                            pose, i, starts, ends, pivot_helix, full_helix
                         )
-                        loop_dist = measure_CA_dist(shift, ends[pre_break_helix], ends[pre_break_helix]+1)
+                        end_pose_a, start_pose_b = ends[pre_break_helix], starts[post_break_helix]
+                        # Combines ensuring the domain containing the pivot helix remains aligned to the parent DHR
+                        if pivot_helix == pre_break_helix:
+                            combined_pose = combine_two_poses(pose, shifted_pose, end_pose_a, start_pose_b)
+                        else:
+                            combined_pose = combine_two_poses(shifted_pose, pose, end_pose_a, start_pose_b)
+                        loop_dist = measure_CA_dist(combined_pose, ends[pre_break_helix], ends[pre_break_helix]+1)
                         # print(loop_dist)
                         if abs(loop_dist-parent_loop_dist) > loop_dist_cutoff:
                             print('failed due to difference in loop length.')
                             continue
-                        bb_clash = clash_check(shift)
+                        bb_clash = clash_check(combined_pose)
                         if bb_clash > bb_clash_cutoff:
                             print('failed due to backbone clashes.')
                             continue
 
                         # Rebuild PDBInfo
-                        pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(shift)
-                        shift.pdb_info(pdb_info)
-                        shift.pdb_info().name(f"{original_name}_{protomer}_{i}_{full_helix}")
+                        pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(combined_pose)
+                        combined_pose.pdb_info(pdb_info)
+                        combined_pose.pdb_info().name(f"{original_name}_{protomer}_{i}_{full_helix}")
                         
                         # setPoseExtraScore(shift, f'state_{protomer}', f"{original_name}_{protomer}_{i}_{full_helix}")
-                        setPoseExtraScore(shift, f"bb_clash_{protomer}", bb_clash)
-                        setPoseExtraScore(shift, f"loop_dist_{protomer}", loop_dist)
-                        setPoseExtraScore(shift, f"pivot_helix_{protomer}", pivot_helix)
-                        setPoseExtraScore(shift, f"shift_{protomer}", i)
+                        setPoseExtraScore(combined_pose, f"bb_clash_{protomer}", bb_clash)
+                        setPoseExtraScore(combined_pose, f"loop_dist_{protomer}", loop_dist)
+                        setPoseExtraScore(combined_pose, f"pivot_helix_{protomer}", pivot_helix)
+                        setPoseExtraScore(combined_pose, f"shift_{protomer}", i)
                         print('success.')
-                        states.append(shift)
+                        states.append(combined_pose)
                     except RuntimeError as e:  # for cases where there isn't enough to align against
                         print(f'failed due to {e}.')
                         continue
