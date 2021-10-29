@@ -38,3 +38,12 @@ def parse_scorefile_linear(scores:str) -> pd.DataFrame:
             dfs.append(pd.read_json(line).T)
     tabulated_scores = pd.concat(dfs)
     return tabulated_scores
+
+from pyrosetta.rosetta.core.pose import Pose
+from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
+def pymol_selection(pose:Pose, selector:ResidueSelector, name:str=None):
+    import pyrosetta
+    pymol_metric = pyrosetta.rosetta.core.simple_metrics.metrics.SelectedResiduesPyMOLMetric(selector)
+    if name is not None:
+        pymol_metric.set_custom_type(name)
+    return pymol_metric.calculate(pose)
