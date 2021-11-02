@@ -5,36 +5,6 @@ import socket
 import sys
 
 # 3rd party library imports
-import dask
-import matplotlib.pyplot as plt
-import pandas as pd
-import pyrosetta
-import numpy as np
-import scipy
-import seaborn as sns
-from tqdm.auto import tqdm  # jupyter compatible progress bar
-
-tqdm.pandas()  # link tqdm to pandas
-print(f"running in directory: {os.getcwd()}")  # where are we?
-print(f"running on node: {socket.gethostname()}")  # what node are we on?
-
-os.chdir("/home/broerman/projects/crispy_shifty")
-
-def create_tasks(selected, options):
-    with open(selected, "r") as f:
-        for line in f:
-            tasks = {"options": "-corrections::beta_nov16 true"}
-            tasks["extra_options"] = options
-            tasks["pdb_path"] = line.rstrip()
-            yield tasks
-
-# Python standard library
-import os
-import pwd
-import socket
-import sys
-
-# 3rd party library imports
 from dask.distributed import Client
 from dask_jobqueue import SLURMCluster
 
@@ -45,7 +15,19 @@ from pyrosetta.distributed.cluster.core import PyRosettaCluster
 sys.path.insert(0, os.getcwd())
 from crispy_shifty.protocols.design import one_state_design_unlooped_dimer  # the functions we will distribute
 
-print(f"View dashboard at http://{socket.gethostname()}:8787")
+os.chdir("/home/broerman/projects/crispy_shifty")
+
+print(f"running in directory: {os.getcwd()}")  # where are we?
+print(f"running on node: {socket.gethostname()}")  # what node are we on?
+print(f"view dashboard at http://{socket.gethostname()}:8787")
+
+def create_tasks(selected, options):
+    with open(selected, "r") as f:
+        for line in f:
+            tasks = {"options": "-corrections::beta_nov16 true"}
+            tasks["extra_options"] = options
+            tasks["pdb_path"] = line.rstrip()
+            yield tasks
 
 selected = os.path.join(os.getcwd(), "projects/crispy_shifty_dimers/01_make_states/states.list")
 
@@ -65,13 +47,13 @@ if __name__ == "__main__":
         cores=1,
         processes=1,
         job_cpu=1,
-        memory="12GB",
-        queue="medium",
-        walltime="23:30:00",
+        memory="10GB",
+        queue="backfill",
+        walltime="11:30:00",
         death_timeout=120,
         local_directory="$TMPDIR",  # spill worker litter on local node temp storage
         log_directory=os.path.join(output_path, "slurm_logs"),
-        extra=["--lifetime", "23h", "--lifetime-stagger", "5m"],
+        extra=["--lifetime", "11h", "--lifetime-stagger", "5m"],
     ) as cluster:
         print(cluster.job_script())
         # scale between 1-300 workers,
@@ -96,7 +78,7 @@ if __name__ == "__main__":
                 scratch_dir=output_path,
                 simulation_name="02_design_filter",
                 tasks=create_tasks(selected, options),
-                nstruct=5,
+                nstruct=10,
             ).distribute(protocols=[one_state_design_unlooped_dimer])
             client.close()
         cluster.scale(0)
