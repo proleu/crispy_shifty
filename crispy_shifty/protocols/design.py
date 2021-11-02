@@ -509,7 +509,7 @@ def one_state_design_unlooped_dimer(
     import pyrosetta
     import pyrosetta.distributed.io as io
 
-    # sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    sys.path.insert(0, "/mnt/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     start_time = time()
@@ -564,7 +564,6 @@ def one_state_design_unlooped_dimer(
 
         # testing
         from crispy_shifty.utils.io import pymol_selection
-
         print(pymol_selection(pose, design_sel, "design_sel"))
 
         print_timestamp("Generating structure profile...", end="")

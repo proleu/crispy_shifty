@@ -79,6 +79,7 @@ if __name__ == "__main__":
                 simulation_name="02_design_filter",
                 tasks=create_tasks(selected, options),
                 nstruct=10,
+                ignore_errors=True # for large runs so that the head process doesn't die due to a rare segfault in one of its children
             ).distribute(protocols=[one_state_design_unlooped_dimer])
             client.close()
         cluster.scale(0)
