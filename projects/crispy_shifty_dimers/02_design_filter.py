@@ -12,10 +12,9 @@ from dask_jobqueue import SLURMCluster
 from pyrosetta.distributed.cluster.core import PyRosettaCluster
 
 # Custom library imports
+os.chdir("/home/broerman/projects/crispy_shifty")
 sys.path.insert(0, os.getcwd())
 from crispy_shifty.protocols.design import one_state_design_unlooped_dimer  # the functions we will distribute
-
-os.chdir("/home/broerman/projects/crispy_shifty")
 
 print(f"running in directory: {os.getcwd()}")  # where are we?
 print(f"running on node: {socket.gethostname()}")  # what node are we on?
