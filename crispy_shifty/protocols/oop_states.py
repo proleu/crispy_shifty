@@ -105,41 +105,62 @@ class StateMaker(ABC):
         return score
 
     @staticmethod
-    def count_interface_check(self, pose: Pose, int_cutoff: float) -> bool:
+    def check_pairwise_interfaces(self, pose: Pose, int_count_cutoff: int, int_ratio_cutoff: float, pairs: Optional[List[tuple]]) -> bool:
         """
-        Given a state that has a helix bound, check that both halves have interfacial
-        contacts with the bound helix. Return true if so, return false if not.
-        int_cutoff determines how asymmetric the interfaces are allowed to be. If it is
-        set very low, one interface is allowed to have many more residues than the
-        other.
+        Check for interfaces between all pairs of chains in the pose.
+        Given cutoffs for counts of interfacial residues and ratio of interfacial 
+        between all pairs of chains, return True if the pose passes the cutoffs.
+        :param pose: Pose to check for interfaces.
+        :param int_count_cutoff: Minimum number of residues in all interfaces.
+        :param int_ratio_cutoff: Minimum ratio of counts between all interfaces.
+        :param pairs: List of pairs of chains to check for interfaces.
+        :return: True if the pose passes the cutoffs.
         TODO: This function is not generalizable to other StateMakers.
         """
 
+        from itertools import combinations
         import pyrosetta
         from pyrosetta.rosetta.core.select.residue_selector import (
             ChainSelector,
             InterGroupInterfaceByVectorSelector,
         )
 
-        A = ChainSelector("A")
-        B = ChainSelector("B")
-        C = ChainSelector("C")
+        # make a dict mapping of chain indices to chain letters
 
-        AC_int = InterGroupInterfaceByVectorSelector(A, C)
-        BC_int = InterGroupInterfaceByVectorSelector(B, C)
+        max_chains = list(string.ascii_uppercase)
+        index_to_letter_dict = dict(zip(range(1, len(max_chains) + 1), max_chains))
 
-        AC_int_count = sum(list(AC_int.apply(pose)))
-        BC_int_count = sum(list(BC_int.apply(pose)))
+        pose_chains = [index_to_letter_dict[i] for i in range(1, pose.num_chains() + 1)]
 
-        # interfaces need atleast 10 residues
-        if AC_int_count < 11 or BC_int_count < 11:
-            return False
-        elif AC_int_count / BC_int_count < int_cutoff:
-            return False
-        elif BC_int_count / AC_int_count < int_cutoff:
-            return False
+        if pairs is not None:
+            # if pairs are given, use those
+            chain_pairs = pairs
         else:
-            return True
+            # otherwise, use all combinations of chains
+            chain_pairs = list(combinations(pose_chains, 2))
+
+        # make a dict of all interface counts and check all counts
+        interface_counts = {}
+        for pair in chain_pairs:
+            interface_name = "".join(pair)
+            pair_a, pair_b = ChainSelector(pair[0]), ChainSelector(pair[1])
+            interface = InterGroupInterfaceByVectorSelector(pair_a, pair_b)
+            interface_count = sum(list(interface.apply(pose)))
+            if interface_count < int_count_cutoff:
+                return False
+            else:
+                pass
+            interface_counts[interface_name] = interface_count
+
+        # check all possible ratios
+        for count_pair in combinations(interface_counts.values(), 2):
+            if interface_counts[count_pair[0]] / interface_counts[count_pair[1]] < int_ratio_cutoff:
+                return False
+
+            else:
+                pass
+        return True
+
 
     @staticmethod
     def count_interface(pose: Pose, sel_a, sel_b) -> int:
@@ -305,13 +326,16 @@ class FreeStateMaker(StateMaker):
             self.clash_cutoff = kwargs["clash_cutoff"]
         else:
             self.clash_cutoff = 999999
-        if "int_cutoff" in kwargs:
-            self.int_cutoff = kwargs["int_cutoff"]
+        if "int_count_cutoff" in kwargs:
+            self.int_count_cutoff = kwargs["int_count_cutoff"]
         else:
-            self.int_cutoff = 0.000001
+            self.int_ratio_cutoff = 11
+        if "int_ratio_cutoff" in kwargs:
+            self.int_ratio_cutoff = kwargs["int_ratio_cutoff"]
+        else:
+            self.int_ratio_cutoff = 0.000001
 
         self.parent_length = len(self.input_pose.residues)
-        print(vars(self)) # TODO: remove this
 
     def generate_states(self) -> Iterator[PackedPose]:
         """
@@ -361,7 +385,7 @@ class FreeStateMaker(StateMaker):
                     continue
                 # check if interface residue counts are acceptable
                 # TODO: uncomment this once it works
-                # elif not self.count_interface_check(combined_pose, self.int_cutoff):
+                # elif not self.count_interface_check(combined_pose, self.int_ratio_cutoff):
                 #     continue
                 else:
                     pass
