@@ -1,6 +1,6 @@
 # Python standard library
 from abc import ABC, abstractmethod
-from typing import Generator, Iterator, Optional, Union
+from typing import Generator, Iterator, List, Optional, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -43,6 +43,13 @@ class StateMaker(ABC):
         Align poses by superimposition of CA given two ranges of indices.
         Pose 1 is moved. Alignment is applied to the input poses themselves.
         Modified from @apmoyer.
+        :param pose_a: Pose 1
+        :param pose_b: Pose 2
+        :param start_a: start index of range 1
+        :param end_a: end index of range 1
+        :param start_b: start index of range 2
+        :param end_b: end index of range 2
+
         """
         import pyrosetta
 
@@ -105,20 +112,26 @@ class StateMaker(ABC):
         return score
 
     @staticmethod
-    def check_pairwise_interfaces(self, pose: Pose, int_count_cutoff: int, int_ratio_cutoff: float, pairs: Optional[List[tuple]]) -> bool:
+    def check_pairwise_interfaces(
+        pose: Pose,
+        int_count_cutoff: int,
+        int_ratio_cutoff: float,
+        pairs: Optional[List[tuple]] = None,
+    ) -> bool:
         """
         Check for interfaces between all pairs of chains in the pose.
-        Given cutoffs for counts of interfacial residues and ratio of interfacial 
+        Given cutoffs for counts of interfacial residues and ratio of interfacial
         between all pairs of chains, return True if the pose passes the cutoffs.
         :param pose: Pose to check for interfaces.
         :param int_count_cutoff: Minimum number of residues in all interfaces.
         :param int_ratio_cutoff: Minimum ratio of counts between all interfaces.
         :param pairs: List of pairs of chains to check for interfaces.
         :return: True if the pose passes the cutoffs.
-        TODO: This function is not generalizable to other StateMakers.
+        TODO: This function is not working yet.
         """
 
         from itertools import combinations
+        import string
         import pyrosetta
         from pyrosetta.rosetta.core.select.residue_selector import (
             ChainSelector,
@@ -126,19 +139,16 @@ class StateMaker(ABC):
         )
 
         # make a dict mapping of chain indices to chain letters
-
         max_chains = list(string.ascii_uppercase)
         index_to_letter_dict = dict(zip(range(1, len(max_chains) + 1), max_chains))
-
+        # use the dict to get the chain letters for each chain in the pose
         pose_chains = [index_to_letter_dict[i] for i in range(1, pose.num_chains() + 1)]
-
         if pairs is not None:
             # if pairs are given, use those
             chain_pairs = pairs
         else:
             # otherwise, use all combinations of chains
             chain_pairs = list(combinations(pose_chains, 2))
-
         # make a dict of all interface counts and check all counts
         interface_counts = {}
         for pair in chain_pairs:
@@ -151,16 +161,16 @@ class StateMaker(ABC):
             else:
                 pass
             interface_counts[interface_name] = interface_count
-
-        # check all possible ratios
+        # check all possible ratios using the dict of all interface counts
         for count_pair in combinations(interface_counts.values(), 2):
-            if interface_counts[count_pair[0]] / interface_counts[count_pair[1]] < int_ratio_cutoff:
+            if (
+                interface_counts[count_pair[0]] / interface_counts[count_pair[1]]
+                < int_ratio_cutoff
+            ):
                 return False
-
             else:
                 pass
         return True
-
 
     @staticmethod
     def count_interface(pose: Pose, sel_a, sel_b) -> int:
@@ -315,8 +325,6 @@ class FreeStateMaker(StateMaker):
     A class for generating free states, AKA shifty crispies.
     """
 
-
-
     def __init__(self, *args, **kwargs):
         """
         initialize the parent class then modify attributes with additional kwargs
@@ -329,7 +337,7 @@ class FreeStateMaker(StateMaker):
         if "int_count_cutoff" in kwargs:
             self.int_count_cutoff = kwargs["int_count_cutoff"]
         else:
-            self.int_ratio_cutoff = 11
+            self.int_count_cutoff = 11
         if "int_ratio_cutoff" in kwargs:
             self.int_ratio_cutoff = kwargs["int_ratio_cutoff"]
         else:
@@ -385,8 +393,12 @@ class FreeStateMaker(StateMaker):
                     continue
                 # check if interface residue counts are acceptable
                 # TODO: uncomment this once it works
-                # elif not self.count_interface_check(combined_pose, self.int_ratio_cutoff):
-                #     continue
+                elif not self.check_pairwise_interfaces(
+                    pose=combined_pose, 
+                    int_count_cutoff=self.int_count_cutoff, 
+                    int_ratio_cutoff=self.int_ratio_cutoff,
+                ):
+                    continue
                 else:
                     pass
                 for key, value in self.scores.items():
@@ -412,10 +424,13 @@ class FreeStateMaker(StateMaker):
         for ppose in states:
             yield ppose
 
+
 @requires_init
-def make_free_states(packed_pose_in: Optional[PackedPose] = None, **kwargs) -> Iterator[PackedPose]:
+def make_free_states(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
     """
-    Wrapper for FreeStateMaker.
+    Wrapper for distributing FreeStateMaker.
     :param packed_pose_in: The input pose.
     :param kwargs: The keyword arguments to pass to FreeStateMaker.
     :return: An iterator of PackedPoses.
@@ -441,9 +456,3 @@ def make_free_states(packed_pose_in: Optional[PackedPose] = None, **kwargs) -> I
         # generate states
         for ppose in state_maker.generate_states():
             yield ppose
-
-
-
-
-
-
