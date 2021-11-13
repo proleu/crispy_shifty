@@ -5,6 +5,7 @@ import socket
 import sys
 
 # 3rd party library imports
+import dask
 from dask.distributed import Client
 from dask_jobqueue import SLURMCluster
 
@@ -19,6 +20,12 @@ from crispy_shifty.protocols.design import one_state_design_unlooped_dimer  # th
 print(f"running in directory: {os.getcwd()}")  # where are we?
 print(f"running on node: {socket.gethostname()}")  # what node are we on?
 print(f"view dashboard at http://{socket.gethostname()}:8787")
+
+# testing to ensure TMPDIR is set correctly to /scratch to avoid some jobs not using any CPU. Not sure if this passes to child processes...
+# so, also added os.environ['TMPDIR'] = '/scratch' temporarily to the design function
+# tmpdir = '/scratch'
+# dask.config.set(temporary_directory=tmpdir)
+# print(f"temporary directory set to: {tmpdir}")
 
 def create_tasks(selected, options):
     with open(selected, "r") as f:
@@ -71,7 +78,7 @@ if __name__ == "__main__":
             )  # upload the script that contains the functions to distribute
             PyRosettaCluster(
                 client=client,
-                logging_level="WARNING",
+                logging_level="ERROR",
                 output_path=output_path,
                 project_name="crispy_shifty_dimers",
                 scratch_dir=output_path,
