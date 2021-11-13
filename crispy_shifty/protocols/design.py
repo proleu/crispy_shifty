@@ -63,7 +63,7 @@ def interface_among_chains(chain_list: list, vector_mode: bool = False):
     return int_sel
 
 
-def gen_hth_layer_design(layer_aas_list: list = None):
+def gen_std_layer_design(layer_aas_list: list = None):
     from itertools import product
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
@@ -377,13 +377,16 @@ def score_on_chain_subset(pose: Pose, filter: Filter, chain_list: list):
 
 
 def score_cms(
-    pose: Pose, sel_1: ResidueSelector, sel_2: ResidueSelector, name: str = "cms"
+    pose: Pose, sel_1: ResidueSelector, sel_2: ResidueSelector, name: str = "cms",
+    filtered_area: float = 250.0, distance_weight: float = 1.0, quick: bool = False, use_rosetta_radii: bool = False # default values for the filter
 ):
+    # requires pyrosetta >= 2021.44
     import pyrosetta
 
     cms_filter = (
         pyrosetta.rosetta.protocols.simple_filters.ContactMolecularSurfaceFilter(
-            selector1=sel_1, selector2=sel_2
+            filtered_area=filtered_area, distance_weight=distance_weight, quick=quick, verbose=False, # constructor requires these arguments
+            selector1=sel_1, selector2=sel_2, use_rosetta_radii=use_rosetta_radii
         )
     )
     cms_filter.set_user_defined_name(name)
@@ -437,13 +440,14 @@ def score_wnm(pose: Pose, sel: ResidueSelector = None, name: str = "wnm"):
     wnm_filter = objs.get_filter("wnm")
     wnm_filter.set_user_defined_name(name)
     if sel is not None:
+        # this seems to be broken, I get "AttributeError: 'pyrosetta.rosetta.protocols.filters.StochasticFilt' object has no attribute 'set_residue_selector'"
         wnm_filter.set_residue_selector(sel)
     wnm = wnm_filter.report_sm(pose)
     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, wnm)
     return wnm
 
 
-def score_wnm_all(pose: Pose, name: str = "wnm_all"):
+def score_wnm_all(pose: Pose, name: str = "wnm"):
     # loading the database takes 4.5 minutes, but once loaded, remains for the rest of the python session
     # could instead call score_wnm inside this function, but that would require parsing the xml multiple times. Faster to just parse it once and change the residue selector.
     import pyrosetta
@@ -453,13 +457,20 @@ def score_wnm_all(pose: Pose, name: str = "wnm_all"):
     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
         """
         <FILTERS>
-            <Worst9mer name="wnm_all" rmsd_lookup_threshold="0.4" confidence="0" />
+            <Worst9mer name="wnm" rmsd_lookup_threshold="0.4" confidence="0" />
         </FILTERS>
         """
     )
-    wnm_filter = objs.get_filter("wnm_all")
+    wnm_filter = objs.get_filter("wnm")
+    wnm_filter.set_user_defined_name(name)
+    # use this method since having trouble with the set_residue_selector method
+    wnms = []
+    for chain_num in range(1, pose.num_chains() + 1):
+        wnm = score_on_chain_subset(pose, wnm_filter, [chain_num])
+        wnms.append(wnm)
+    return wnms
 
-    # wnm_filter.set_user_defined_name(name)
+    # wnm_filter.set_user_defined_name(name) # change name above to be wnm_all
     # wnms = []
     # for chain_num in range(1, pose.num_chains() + 1):
     #     chain_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(chain_num)
@@ -470,56 +481,13 @@ def score_wnm_all(pose: Pose, name: str = "wnm_all"):
     # pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, wnm_all)
     # return wnm_all
 
-    for chain_num in range(1, pose.num_chains() + 1):
-        chain_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(chain_num)
-        name_chain = name + '_' + str(chain_num)
-        wnm_filter.set_user_defined_name(name_chain)
-        wnm_filter.set_residue_selector(chain_sel)
-        wnm = wnm_filter.report_sm(pose)
-        pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name_chain, wnm)
-
-
-# def score_wnm_all(pose: Pose, name: str = "wnm_all"):
-#     # loading the database takes 4.5 minutes, but once loaded, remains for the rest of the python session
-#     import pyrosetta
-
-#     # using an xml to create the worst9mer filter because I couldn't figure out how to use pyrosetta without completely crashing python
-#     # this is probably because there are many internal variables in the filter which only get set when parsing an xml
-#     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
-#         """
-#         <FILTERS>
-#             <Worst9mer name="wnm_all" rmsd_lookup_threshold="0.4" confidence="0" />
-#         </FILTERS>
-#         """
-#     )
-#     wnm_filter = objs.get_filter("wnm_all")
-#     wnm_filter.set_user_defined_name(name)
-#     wnms = []
-#     for chain_num in range(1, pose.num_chains() + 1):
-#         wnm = score_on_chain_subset(pose, wnm_filter, [chain_num])
-#         wnms.append(wnm)
-#     return wnms
-
-#     # for chain_num in range(1, pose.num_chains() + 1):
-#     #     chain_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(chain_num)
-#     #     wnm_filter.set_user_defined_name(name + '_' + str(chain_num))
-#     #     wnm_filter.set_residue_selector(chain_sel)
-#     #     wnm = wnm_filter.report_sm(pose)
-#     #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name + '_' + str(chain_num), wnm)
-
-#     # wnms = []
-#     # for chain_num in range(1, pose.num_chains() + 1):
-#     #     chain_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(chain_num)
-#     #     wnm_filter.set_user_defined_name(name + '_' + str(chain_num))
-#     #     wnm_filter.set_residue_selector(chain_sel)
-#     #     wnm = wnm_filter.report_sm(pose)
-#     #     wnms.append(wnm)
-#     # wnm = max(wnms)
-#     # pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name + '_' + str(chain_num), wnm)
-#     # return wnm
-
-#     # ask Phil which of these is better
-#     # Also, should I report all, or only the worst of all the chains?
+    # for chain_num in range(1, pose.num_chains() + 1):
+    #     chain_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(chain_num)
+    #     name_chain = name + '_' + str(chain_num)
+    #     wnm_filter.set_user_defined_name(name_chain)
+    #     wnm_filter.set_residue_selector(chain_sel)
+    #     wnm = wnm_filter.report_sm(pose)
+    #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name_chain, wnm)
 
 
 def score_wnm_helix(pose: Pose, name: str = "wnm_hlx"):
@@ -554,6 +522,26 @@ def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score"):
     return score, score_pr
 
 
+def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
+    import pyrosetta
+    import sys
+    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    from crispy_shifty.protocols.states import measure_CA_dist
+    dist = measure_CA_dist(pose, resi_1, resi_2)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, dist)
+    return dist
+
+
+def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist"):
+    import sys
+    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    from crispy_shifty.protocols.states import get_helix_endpoints
+    ends = get_helix_endpoints(pose, n_terminal=False)
+    end = ends[pre_break_helix]
+    loop_dist = score_CA_dist(pose, end, end+1, name)
+    return loop_dist
+
+
 @requires_init
 def one_state_design_unlooped_dimer(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -582,7 +570,7 @@ def one_state_design_unlooped_dimer(
     design_sel = interface_among_chains(chain_list=[1, 2, 3, 4], vector_mode=True)
     print_timestamp("Generated interface selector")
 
-    layer_design = gen_hth_layer_design()
+    layer_design = gen_std_layer_design()
     task_factory = gen_task_factory(
         design_sel=design_sel,
         pack_nbhd=False,
@@ -640,6 +628,10 @@ def one_state_design_unlooped_dimer(
         clear_constraints(pose)
         print("complete.")
 
+        print_timestamp("Scoring loop distance...", end="")
+        score_loop_dist(pose, pose.scores['pre_break_helix'])
+        print("complete.")
+
         print_timestamp(
             "Scoring contact molecular surface and shape complementarity...", end=""
         )
@@ -679,39 +671,6 @@ def one_state_design_unlooped_dimer(
         for chain_list in chain_lists:
             score_on_chain_subset(pose, score_filter, chain_list)
         print("complete.")
-
-        # For now, use this annoying rosettascript to calculate contact molecular surface. Later, uncomment the line above.
-        # from pyrosetta.distributed.tasks.rosetta_scripts import (
-        #     SingleoutputRosettaScriptsTask,
-        # )
-        # cms_rs = SingleoutputRosettaScriptsTask(
-        #     """
-        #     <ROSETTASCRIPTS>
-        #         <RESIDUE_SELECTORS>
-        #             <Chain name="chAN" chains="A"/>
-        #             <Chain name="chAC" chains="B"/>
-        #             <Chain name="chBN" chains="C"/>
-        #             <Chain name="chBC" chains="D"/>
-        #             <Or name="recon_DHR" selectors="chAN,chBC" />
-        #         </RESIDUE_SELECTORS>
-        #         <FILTERS>
-        #             <ContactMolecularSurface name="cms_dhr" target_selector="chAN" binder_selector="chAC" confidence="0" />
-        #             <ContactMolecularSurface name="cms_dhr_ac" target_selector="recon_DHR" binder_selector="chAC" confidence="0" />
-        #             <ContactMolecularSurface name="cms_dhr_bn" target_selector="recon_DHR" binder_selector="chBN" confidence="0" />
-        #             <ContactMolecularSurface name="cms_ac_bn" target_selector="chAC" binder_selector="chBN" confidence="0" />
-        #         </FILTERS>
-        #         <PROTOCOLS>
-        #             <Add filter_name="cms_dhr" />
-        #             <Add filter_name="cms_dhr_ac" />
-        #             <Add filter_name="cms_dhr_bn" />
-        #             <Add filter_name="cms_ac_bn" />
-        #         </PROTOCOLS>
-        #     </ROSETTASCRIPTS>
-        #     """
-        # )
-        # print_timestamp("Scoring contact molecular surface...", end="")
-        # pose = io.to_pose(cms_rs(pose))
-        # print("complete.")
 
         ppose = io.to_packed(pose)
         yield ppose
