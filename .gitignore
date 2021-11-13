@@ -29,6 +29,7 @@ figs
 *.log
 *.err
 *.json
+*.yml
 ._*
 .DS_Store
 testing*
