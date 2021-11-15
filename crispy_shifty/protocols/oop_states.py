@@ -314,10 +314,8 @@ class StateMaker(ABC):
     def generate_states(self) -> None:
         """
         This function needs to be implemented by the child class of StateMaker.
-        :param state_name: The name of the state.
-        :return: The state.
         """
-        return None
+        pass
 
 
 class FreeStateMaker(StateMaker):
@@ -348,12 +346,14 @@ class FreeStateMaker(StateMaker):
     def generate_states(self) -> Iterator[PackedPose]:
         """
         Generate all free states that pass default or supplied cutoffs.
+        TODO: Rebuild PDBInfo for the combined pose?
         """
         import pyrosetta
         import pyrosetta.distributed.io as io
         from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        # we expect 2 chains in the resulting poses after states are generated
         rechain.chain_order("12")
         starts = self.get_helix_endpoints(self.input_pose, n_terminal=True)
         ends = self.get_helix_endpoints(self.input_pose, n_terminal=False)
@@ -375,6 +375,7 @@ class FreeStateMaker(StateMaker):
                     starts[self.post_break_helix],
                 )
                 # stitch the pose together after alignment-based docking
+                # maintain the original position of the side that was not moved
                 if pivot_helix == self.pre_break_helix:
                     combined_pose = self.combine_two_poses(
                         self.input_pose, shifted_pose, end_pose_a, start_pose_b
@@ -383,8 +384,7 @@ class FreeStateMaker(StateMaker):
                     combined_pose = self.combine_two_poses(
                         shifted_pose, self.input_pose, end_pose_a, start_pose_b
                     )
-                """TODO: Rebuild PDBInfo for the combined pose?"""
-                # fix PDBInfo and numbering
+                # fix PDBInfo and chain numbering
                 rechain.apply(combined_pose)
                 # mini filtering block
                 bb_clash = self.clash_check(combined_pose)
@@ -392,7 +392,6 @@ class FreeStateMaker(StateMaker):
                 if bb_clash > self.clash_cutoff:
                     continue
                 # check if interface residue counts are acceptable
-                # TODO: uncomment this once it works
                 elif not self.check_pairwise_interfaces(
                     pose=combined_pose, 
                     int_count_cutoff=self.int_count_cutoff, 
@@ -401,6 +400,7 @@ class FreeStateMaker(StateMaker):
                     continue
                 else:
                     pass
+                # set and update the scores of the combined pose
                 for key, value in self.scores.items():
                     setPoseExtraScore(combined_pose, key, str(value))
                 setPoseExtraScore(combined_pose, "bb_clash", float(bb_clash))
