@@ -537,7 +537,7 @@ def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist"):
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
     from crispy_shifty.protocols.states import get_helix_endpoints
     ends = get_helix_endpoints(pose, n_terminal=False)
-    end = ends[pre_break_helix]
+    end = ends[pre_break_helix] + 1 # now plus 1 since the helix ends one residue earlier due to the new chainbreak
     loop_dist = score_CA_dist(pose, end, end+1, name)
     return loop_dist
 
@@ -629,7 +629,9 @@ def one_state_design_unlooped_dimer(
         print("complete.")
 
         print_timestamp("Scoring loop distance...", end="")
-        score_loop_dist(pose, pose.scores['pre_break_helix'])
+        pre_break_helix = int(float(pose.scores["pre_break_helix"]))
+        score_loop_dist(pose, pre_break_helix, name="loop_dist_A")
+        score_loop_dist(pose, 3*pre_break_helix, name="loop_dist_B")
         print("complete.")
 
         print_timestamp(
