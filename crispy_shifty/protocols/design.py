@@ -524,8 +524,7 @@ def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score"):
 
 def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
     import pyrosetta
-    import sys
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+
     from crispy_shifty.protocols.states import measure_CA_dist
     dist = measure_CA_dist(pose, resi_1, resi_2)
     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, dist)
@@ -533,8 +532,7 @@ def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
 
 
 def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist"):
-    import sys
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    
     from crispy_shifty.protocols.states import get_helix_endpoints
     ends = get_helix_endpoints(pose, n_terminal=False)
     end = ends[pre_break_helix] + 1 # now plus 1 since the helix ends one residue earlier due to the new chainbreak
@@ -552,12 +550,13 @@ def one_state_design_unlooped_dimer(
     import pyrosetta
     import pyrosetta.distributed.io as io
 
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # testing to properly set the TMPDIR on distributed jobs
-    # import os
+    import os
     # os.environ['TMPDIR'] = '/scratch'
+    print(os.environ['TMPDIR'])
 
     start_time = time()
 
