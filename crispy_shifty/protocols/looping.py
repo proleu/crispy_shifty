@@ -32,11 +32,9 @@ def loop_match(pose: Pose, length: int):
     return closure_type
 
 
-
-
-def strict_remodel(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
+def strict_remodel(pose: Pose, length: int):
     """
-    Remodel a new loop using Blueprint Builder
+    Remodel a new loop using Blueprint Builder. Expects a pose with two chains.
     DSSP and SS agnostic in principle but in practice more or less matches.
     """
     import os
@@ -102,29 +100,34 @@ def strict_remodel(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
             torsions.append((phi, psi, omega))
         return torsions
 
-    def strict_remodel_helper(packed_pose_in: PackedPose, loop_length: int) -> str:
+    def strict_remodel_helper(pose: Pose, loop_length: int) -> str:
         import binascii, os
         import pyrosetta
-        from pyrosetta.rosetta.core.pose import Pose
-
-        pose = packed_pose_in.pose.clone()
+        
         tors = get_torsions(pose)
         abego_str = abego_string(tors)
         dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(pose)
         # name blueprint a random 32 long hex string
-        filename = str(binascii.b2a_hex(os.urandom(16)).decode("utf-8")) + ".bp"
+        if 'TMPDIR' in os.environ:
+            tmp_path = os.environ['TMPDIR']
+        else:
+            tmp_path = os.getcwd()
+        filename = os.path.join(
+            tmp_path,
+            str(binascii.b2a_hex(os.urandom(16)).decode("utf-8")) + ".bp"
+        )
         # write a temporary blueprint file
         with open(filename, "w+") as f:
             end1, begin2 = (
-                packed_pose_in.pose.chain_end(1),
-                packed_pose_in.pose.chain_begin(2),
+                pose.chain_end(1),
+                pose.chain_begin(2),
             )
-            end3 = packed_pose_in.pose.chain_end(3)
+            end2 = pose.chain_end(2)
             for i in range(1, end1 + 1):
                 if i == end1:
                     print(
                         str(i),
-                        packed_pose_in.pose.residue(i).name1(),
+                        pose.residue(i).name1(),
                         dssp[i - 1] + "X",
                         "R",
                         file=f,
@@ -132,7 +135,7 @@ def strict_remodel(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
                 else:
                     print(
                         str(i),
-                        packed_pose_in.pose.residue(i).name1(),
+                        pose.residue(i).name1(),
                         dssp[i - 1] + abego_str[i - 1],
                         ".",
                         file=f,
@@ -141,11 +144,11 @@ def strict_remodel(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
                 print(
                     "0", "V", "LX", "R", file=f
                 )  # DX is bad, causes rare error sometimes
-            for i in range(begin2, end3 + 1):
+            for i in range(begin2, end2 + 1):
                 if i == begin2:
                     print(
                         str(i),
-                        packed_pose_in.pose.residue(i).name1(),
+                        pose.residue(i).name1(),
                         dssp[i - 1] + "X",
                         "R",
                         file=f,
@@ -153,7 +156,7 @@ def strict_remodel(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
                 else:
                     print(
                         str(i),
-                        packed_pose_in.pose.residue(i).name1(),
+                        pose.residue(i).name1(),
                         dssp[i - 1] + abego_str[i - 1],
                         ".",
                         file=f,
@@ -191,78 +194,78 @@ def strict_remodel(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
             newpose.append_residue_by_bond(pose_b.residue(i))
         return newpose
 
-    # ensure pose still needs to be closed, skip to scoring and labeling if it has
-    if packed_pose_in.pose.num_chains() == 2:
-        maybe_closed_pose = packed_pose_in.pose.clone()
-    else:
-        scores = packed_pose_in.pose.scores
-        # get parent from packed_pose_in, get loop length from parent length - packed_pose_in length
-        parent_length = int(scores["parent_length"])
-        length = int(parent_length - packed_pose_in.pose.chain_end(2))
-        bp = strict_remodel_helper(packed_pose_in, length)
-        xml = """
-        <ROSETTASCRIPTS>
-            <SCOREFXNS>
-                <ScoreFunction name="sfxn1" weights="fldsgn_cen">
-                    <Reweight scoretype="hbond_sr_bb" weight="1.0" />
-                    <Reweight scoretype="hbond_lr_bb" weight="1.0" />
-                    <Reweight scoretype="atom_pair_constraint" weight="1.0" />
-                    <Reweight scoretype="angle_constraint" weight="1.0" />
-                    <Reweight scoretype="dihedral_constraint" weight="1.0" />
-                </ScoreFunction>
-            </SCOREFXNS>
-            <RESIDUE_SELECTORS>          
-            </RESIDUE_SELECTORS>
-            <TASKOPERATIONS>
-            </TASKOPERATIONS>
-            <SIMPLE_METRICS>
-            </SIMPLE_METRICS>
-            <MOVERS>
-                <BluePrintBDR name="bdr" 
-                blueprint="{bp}" 
-                use_abego_bias="0" 
-                use_sequence_bias="0" 
-                rmdl_attempts="20"
-                scorefxn="sfxn1"/>
-            </MOVERS>
-            <FILTERS>
-            </FILTERS>
-            <PROTOCOLS>
-                <Add mover_name="bdr"/>
-            </PROTOCOLS>
-        </ROSETTASCRIPTS>
-        """.format(
-            bp=bp
-        )
-        strict_remodel = SingleoutputRosettaScriptsTask(xml)
-        maybe_closed_ppose = None
-        for i in range(10):
-            print(f"attempt: {i}")
-            if maybe_closed_ppose is not None:  # check if it worked
-                break  # stop retrying if it did
-            else:  # try again if it didn't. returns None if fail
-                maybe_closed_ppose = strict_remodel(packed_pose_in.pose.clone())
-        os.remove(bp)  # cleanup tree
-        if maybe_closed_ppose is not None:
-            closure_type = "strict_remodel"
-            # hacky rechain
-            maybe_closed_pose = append_b_to_a(
-                pose_a=maybe_closed_ppose.pose.clone(),
-                pose_b=packed_pose_in.pose.clone(),
-                end_a=packed_pose_in.pose.chain_end(2),
-                start_b=packed_pose_in.pose.chain_begin(3),
-            )
-            for key, value in scores.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                    maybe_closed_pose, key, str(value)
-                )
-            # update closure_type
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                maybe_closed_pose, "closure_type", closure_type
-            )
+    bp = strict_remodel_helper(pose, length)
 
-        else:  # return the original input if BlueprintBDR still didn't close
-            maybe_closed_pose = packed_pose_in.pose.clone()
+    bp_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.hbond_sr_bb, 1.0)
+    bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.hbond_lr_bb, 1.0)
+    bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.atom_pair_constraint, 1.0)
+    bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.angle_constraint, 1.0)
+    bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.dihedral_constraint, 1.0)
+
+    xml = """
+    <ROSETTASCRIPTS>
+        <SCOREFXNS>
+            <ScoreFunction name="sfxn1" weights="fldsgn_cen">
+                <Reweight scoretype="hbond_sr_bb" weight="1.0" />
+                <Reweight scoretype="hbond_lr_bb" weight="1.0" />
+                <Reweight scoretype="atom_pair_constraint" weight="1.0" />
+                <Reweight scoretype="angle_constraint" weight="1.0" />
+                <Reweight scoretype="dihedral_constraint" weight="1.0" />
+            </ScoreFunction>
+        </SCOREFXNS>
+        <RESIDUE_SELECTORS>          
+        </RESIDUE_SELECTORS>
+        <TASKOPERATIONS>
+        </TASKOPERATIONS>
+        <SIMPLE_METRICS>
+        </SIMPLE_METRICS>
+        <MOVERS>
+            <BluePrintBDR name="bdr" 
+            blueprint="{bp}" 
+            use_abego_bias="0" 
+            use_sequence_bias="0" 
+            rmdl_attempts="20"
+            scorefxn="sfxn1"/>
+        </MOVERS>
+        <FILTERS>
+        </FILTERS>
+        <PROTOCOLS>
+            <Add mover_name="bdr"/>
+        </PROTOCOLS>
+    </ROSETTASCRIPTS>
+    """.format(
+        bp=bp
+    )
+    strict_remodel = SingleoutputRosettaScriptsTask(xml)
+    maybe_closed_ppose = None
+    for i in range(10):
+        print(f"attempt: {i}")
+        if maybe_closed_ppose is not None:  # check if it worked
+            break  # stop retrying if it did
+        else:  # try again if it didn't. returns None if fail
+            maybe_closed_ppose = strict_remodel(packed_pose_in.pose.clone())
+    os.remove(bp)  # cleanup tree
+    if maybe_closed_ppose is not None:
+        closure_type = "strict_remodel"
+        # hacky rechain
+        maybe_closed_pose = append_b_to_a(
+            pose_a=maybe_closed_ppose.pose.clone(),
+            pose_b=packed_pose_in.pose.clone(),
+            end_a=packed_pose_in.pose.chain_end(2),
+            start_b=packed_pose_in.pose.chain_begin(3),
+        )
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                maybe_closed_pose, key, str(value)
+            )
+        # update closure_type
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+            maybe_closed_pose, "closure_type", closure_type
+        )
+
+    else:  # return the original input if BlueprintBDR still didn't close
+        maybe_closed_pose = packed_pose_in.pose.clone()
 
 
 @requires_init
