@@ -554,9 +554,9 @@ def one_state_design_unlooped_dimer(
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # testing to properly set the TMPDIR on distributed jobs
-    import os
+    # import os
     # os.environ['TMPDIR'] = '/scratch'
-    print(os.environ['TMPDIR'])
+    # print(os.environ['TMPDIR'])
 
     start_time = time()
 
