@@ -240,7 +240,8 @@ class StateMaker(ABC):
         """
         Make a new pose, containing pose_a up to end_a, then pose_b starting from start_b
         Assumes pose_a has only one chain.
-        TODO: this is a hack, fix it to be more safe and general
+        Not sure what is going on? Then you should probably use the 
+        pyrosetta.rosetta.core.pose.append_pose_to_pose() method instead of this.
         TODO: maybe this shouldn't be a static method?
         """
         import pyrosetta
@@ -352,6 +353,7 @@ class FreeStateMaker(StateMaker):
         import pyrosetta.distributed.io as io
         from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
+        # setup the rechain mover
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
         # we expect 2 chains in the resulting poses after states are generated
         rechain.chain_order("12")
@@ -374,7 +376,7 @@ class FreeStateMaker(StateMaker):
                     ends[self.pre_break_helix],
                     starts[self.post_break_helix],
                 )
-                # stitch the pose together after alignment-based docking
+                # stitch the hinge pose together after alignment-based docking
                 # maintain the original position of the side that was not moved
                 if pivot_helix == self.pre_break_helix:
                     combined_pose = self.combine_two_poses(
@@ -420,7 +422,138 @@ class FreeStateMaker(StateMaker):
                 )
                 ppose = io.to_packed(combined_pose)
                 states.append(ppose)
+        # yield all packed poses that were generated 
+        for ppose in states:
+            yield ppose
 
+
+class BoundStateMaker(FreeStateMaker):
+    """
+    A class for generating bound states, AKA canonical crispy shifties.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        initialize the parent class then modify attributes with additional kwargs
+        """
+        super(StateMaker, self).__init__(*args, **kwargs)
+        if "clash_cutoff" in kwargs:
+            self.clash_cutoff = kwargs["clash_cutoff"]
+        else:
+            self.clash_cutoff = 999999
+        if "int_count_cutoff" in kwargs:
+            self.int_count_cutoff = kwargs["int_count_cutoff"]
+        else:
+            self.int_count_cutoff = 11
+        if "int_ratio_cutoff" in kwargs:
+            self.int_ratio_cutoff = kwargs["int_ratio_cutoff"]
+        else:
+            self.int_ratio_cutoff = 0.000001
+
+        self.parent_length = len(self.input_pose.residues)
+
+    def generate_states(self) -> Iterator[PackedPose]:
+        """
+        Generate all bound states that pass default or supplied cutoffs.
+        TODO: Rebuild PDBInfo for the combined pose?
+        """
+
+        import pyrosetta
+        import pyrosetta.distributed.io as io
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
+
+        # first run the superclass method to generate free states
+        packed_free_states = super(BoundStateMaker, self).generate_states()
+
+
+        # setup the rechain mover
+        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        # we expect 3 chains in the resulting poses after states are generated
+        rechain.chain_order("123")
+        starts = self.get_helix_endpoints(self.input_pose, n_terminal=True)
+        ends = self.get_helix_endpoints(self.input_pose, n_terminal=False)
+        states = []
+        # scan 1 heptad forwards and backwards
+        for i in range(-7, 8):
+            # first do the pre break side, then do the post break side
+            for pivot_helix in [self.pre_break_helix, self.post_break_helix]:
+                shifted_pose = self.shift_pose_by_i(
+                    self.input_pose, i, starts, ends, pivot_helix, False
+                )
+                # handle situations where the shift is not possible
+                if shifted_pose is None:
+                    continue
+                else:
+                    pass
+                end_pose_a, start_pose_b = (
+                    ends[self.pre_break_helix],
+                    starts[self.post_break_helix],
+                )
+                # stitch the hinge pose together after alignment-based docking
+                # maintain the original position of the side that was not moved
+                if pivot_helix == self.pre_break_helix:
+                    combined_pose = self.combine_two_poses(
+                        self.input_pose, shifted_pose, end_pose_a, start_pose_b
+                    )
+                else:
+                    combined_pose = self.combine_two_poses(
+                        shifted_pose, self.input_pose, end_pose_a, start_pose_b
+                    )
+                # setup the order for docking helices into the combined pose
+                docking_order = [shifted_pose, self.input_pose]
+                # we want to dock the helices before and after the pivot helix
+                helices_to_dock = [pivot_helix-1, pivot_helix+1]
+                # dock the bound helix into the hinge pose
+                for hinge_pose, helix_to_dock in zip(docking_order, helices_to_dock):
+                    # reuse the combined pose as the docking target
+                    dock = combined_pose.clone()
+                    # add the first residue of the helix to dock to the target
+                    dock.append_residue_by_jump(
+                        hinge_pose.residue(starts[docked_helix]),
+                        dock.chain_end(1),
+                        "CA",
+                        "CA",
+                        1,
+                    )
+                    # add the rest of the residues of the helix to dock to the target
+                    for resid in range(
+                        starts[docked_helix]+1, ends[docked_helix]+1
+                    ):
+                        dock.append_residue_by_bond(hinge_pose.residue(resid))
+                
+                    # fix PDBInfo and chain numbering
+                    rechain.apply(dock)
+                    # mini filtering block
+                    bb_clash = self.clash_check(docked_pose)
+                    # check if clash is too high
+                    if bb_clash > self.clash_cutoff:
+                        continue
+                    # check if interface residue counts are acceptable
+                    elif not self.check_pairwise_interfaces(
+                        pose=docked_pose, 
+                        int_count_cutoff=self.int_count_cutoff, 
+                        int_ratio_cutoff=self.int_ratio_cutoff,
+                    ):
+                        continue
+                    else:
+                        pass
+                    # set and update the scores of the combined pose
+                    for key, value in self.scores.items():
+                        setPoseExtraScore(dock, key, str(value))
+                    setPoseExtraScore(dock, "bb_clash", float(bb_clash))
+                    setPoseExtraScore(dock, "docked_helix", str(docked_helix))
+                    setPoseExtraScore(dock, "parent", self.original_name)
+                    setPoseExtraScore(dock, "parent_length", str(self.parent_length))
+                    setPoseExtraScore(dock, "pivot_helix", str(pivot_helix))
+                    setPoseExtraScore(dock, "shift", str(i))
+                    setPoseExtraScore(
+                        dock,
+                        "state",
+                        f"{self.original_name}_p_{str(pivot_helix)}_s_{str(i)}_d_{docked_helix}",
+                    )
+                    ppose = io.to_packed(dock)
+                    states.append(ppose)
+        # yield all the packed poses that were generated
         for ppose in states:
             yield ppose
 
@@ -453,6 +586,38 @@ def make_free_states(
     for pose in poses:
         # make a new FreeStateMaker for each pose
         state_maker = FreeStateMaker(pose, **kwargs)
+        # generate states
+        for ppose in state_maker.generate_states():
+            yield ppose
+
+@requires_init
+def make_bound_states(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    Wrapper for distributing BoundStateMaker.
+    :param packed_pose_in: The input pose.
+    :param kwargs: The keyword arguments to pass to BoundStateMaker.
+    :return: An iterator of PackedPoses.
+    """
+    import sys
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
+        )
+    final_pposes = []
+    for pose in poses:
+        # make a new BoundStateMaker for each pose
+        state_maker = BoundStateMaker(pose, **kwargs)
         # generate states
         for ppose in state_maker.generate_states():
             yield ppose
