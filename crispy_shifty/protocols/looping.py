@@ -32,21 +32,21 @@ def loop_match(pose: Pose, length: int):
     return closure_type
 
 
-def strict_remodel(pose: Pose, length: int):
+def strict_remodel(
+    pose: Pose, length: int,
+    attempts: int = 10,
+    remodel_before_loop: int = 1, 
+    remodel_after_loop: int = 1,
+    compute_optimal_remodel_lengths: bool = False
+    ):
     """
     Remodel a new loop using Blueprint Builder. Expects a pose with two chains.
     DSSP and SS agnostic in principle but in practice more or less matches.
     """
+    import numpy as np
     import os
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
-    import pyrosetta.distributed.io as io
-    from pyrosetta.distributed.packed_pose.core import PackedPose
-    from pyrosetta.distributed.tasks.rosetta_scripts import (
-        SingleoutputRosettaScriptsTask,
-    )
-    from pyrosetta.rosetta.core.select import get_residues_from_subset
-    from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
 
     def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
         """
@@ -100,7 +100,7 @@ def strict_remodel(pose: Pose, length: int):
             torsions.append((phi, psi, omega))
         return torsions
 
-    def strict_remodel_helper(pose: Pose, loop_length: int) -> str:
+    def remodel_helper(pose: Pose, loop_length: int, remodel_before_loop: int = 1, remodel_after_loop: int = 1) -> str:
         import binascii, os
         import pyrosetta
         
@@ -124,7 +124,7 @@ def strict_remodel(pose: Pose, length: int):
             )
             end2 = pose.chain_end(2)
             for i in range(1, end1 + 1):
-                if i == end1:
+                if i >= end1 - (remodel_before_loop - 1):
                     print(
                         str(i),
                         pose.residue(i).name1(),
@@ -145,7 +145,7 @@ def strict_remodel(pose: Pose, length: int):
                     "0", "V", "LX", "R", file=f
                 )  # DX is bad, causes rare error sometimes
             for i in range(begin2, end2 + 1):
-                if i == begin2:
+                if i <= begin2 + (remodel_after_loop - 1):
                     print(
                         str(i),
                         pose.residue(i).name1(),
@@ -164,108 +164,62 @@ def strict_remodel(pose: Pose, length: int):
 
         return filename
 
-    def find_vv(seq):
-        indices = []
-        seq_minus_one = seq[:-1]
-        for i, char in enumerate(seq_minus_one):
-            if (char == seq[i + 1]) and (char == "V"):
-                indices.append(i + 1)
-            else:
-                pass
-        # rosetta sequence indexes begin at 1
-        true_indices = [str(x + 1) for x in indices]
-        return true_indices
+    # computes the number of residues to remodel before and after the loop by finding which residue-residue vectors point towards the helix to loop to
+    # probably works best for building a loop between two helices
+    if compute_optimal_remodel_lengths:
+        end1, begin2 = (pose.chain_end(1), pose.chain_begin(2))
+        max_dot_1 = 0
+        max_dot_2 = 0
+        vec_12 = pose.residue(begin2).xyz("CA") - pose.residue(end1).xyz("CA")
+        print(vec_12)
+        for i in range(3):
+            vec_1 = pose.residue(end1-i).xyz("CA") - pose.residue(end1-i-1).xyz("CA")
+            dot_1 = vec_12.dot(vec_1)
+            if dot_1 > max_dot_1:
+                max_dot_1 = dot_1
+                remodel_before_loop = i + 1
+            vec_2 = pose.residue(begin2+i+1).xyz("CA") - pose.residue(begin2+i).xyz("CA")
+            dot_2 = vec_12.dot(vec_2)
+            if dot_2 > max_dot_2:
+                max_dot_2 = dot_2
+                remodel_after_loop = i + 1
 
-    def append_b_to_a(pose_a: Pose, pose_b: Pose, end_a: int, start_b: int) -> Pose:
-        """
-        Make a new pose, containing pose_a up to end_a, then pose_b starting from start_b
-        Assumes pose_a has only one chain.
-        """
-        import pyrosetta
-        from pyrosetta.rosetta.core.pose import Pose
+    bp_file = remodel_helper(pose, length, remodel_before_loop, remodel_after_loop)
 
-        newpose = Pose()
-        for i in range(1, end_a + 1):
-            newpose.append_residue_by_bond(pose_a.residue(i))
-        newpose.append_residue_by_jump(
-            pose_b.residue(start_b), newpose.chain_end(1), "CA", "CA", 1
-        )
-        for i in range(start_b + 1, len(pose_b.residues) + 1):
-            newpose.append_residue_by_bond(pose_b.residue(i))
-        return newpose
-
-    bp = strict_remodel_helper(pose, length)
-
-    bp_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    bp_sfxn = pyrosetta.create_score_function("fldsgn_cen.wts")
     bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.hbond_sr_bb, 1.0)
     bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.hbond_lr_bb, 1.0)
     bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.atom_pair_constraint, 1.0)
     bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.angle_constraint, 1.0)
     bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.dihedral_constraint, 1.0)
 
-    xml = """
-    <ROSETTASCRIPTS>
-        <SCOREFXNS>
-            <ScoreFunction name="sfxn1" weights="fldsgn_cen">
-                <Reweight scoretype="hbond_sr_bb" weight="1.0" />
-                <Reweight scoretype="hbond_lr_bb" weight="1.0" />
-                <Reweight scoretype="atom_pair_constraint" weight="1.0" />
-                <Reweight scoretype="angle_constraint" weight="1.0" />
-                <Reweight scoretype="dihedral_constraint" weight="1.0" />
-            </ScoreFunction>
-        </SCOREFXNS>
-        <RESIDUE_SELECTORS>          
-        </RESIDUE_SELECTORS>
-        <TASKOPERATIONS>
-        </TASKOPERATIONS>
-        <SIMPLE_METRICS>
-        </SIMPLE_METRICS>
+    objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
+        f"""
         <MOVERS>
-            <BluePrintBDR name="bdr" 
-            blueprint="{bp}" 
+            <BluePrintBDR name="blueprintbdr" 
+            blueprint="{bp_file}" 
             use_abego_bias="0" 
             use_sequence_bias="0" 
-            rmdl_attempts="20"
-            scorefxn="sfxn1"/>
+            rmdl_attempts="20"/>
         </MOVERS>
-        <FILTERS>
-        </FILTERS>
-        <PROTOCOLS>
-            <Add mover_name="bdr"/>
-        </PROTOCOLS>
-    </ROSETTASCRIPTS>
-    """.format(
-        bp=bp
+        """
     )
-    strict_remodel = SingleoutputRosettaScriptsTask(xml)
-    maybe_closed_ppose = None
-    for i in range(10):
-        print(f"attempt: {i}")
-        if maybe_closed_ppose is not None:  # check if it worked
-            break  # stop retrying if it did
-        else:  # try again if it didn't. returns None if fail
-            maybe_closed_ppose = strict_remodel(packed_pose_in.pose.clone())
-    os.remove(bp)  # cleanup tree
-    if maybe_closed_ppose is not None:
-        closure_type = "strict_remodel"
-        # hacky rechain
-        maybe_closed_pose = append_b_to_a(
-            pose_a=maybe_closed_ppose.pose.clone(),
-            pose_b=packed_pose_in.pose.clone(),
-            end_a=packed_pose_in.pose.chain_end(2),
-            start_b=packed_pose_in.pose.chain_begin(3),
-        )
-        for key, value in scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                maybe_closed_pose, key, str(value)
-            )
-        # update closure_type
-        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-            maybe_closed_pose, "closure_type", closure_type
-        )
+    bp_mover = objs.get_mover("blueprintbdr")
+    bp_mover.scorefunction(bp_sfxn)
 
-    else:  # return the original input if BlueprintBDR still didn't close
-        maybe_closed_pose = packed_pose_in.pose.clone()
+    closure_type = 'not_closed'
+    for _ in range(attempts):
+        bp_mover.apply(pose)
+        if pose.num_chains() == 1:
+            closure_type = 'remodel'
+            break
+
+    os.remove(bp_file)
+    
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+        pose, "closure_type", closure_type
+    )
+    return closure_type
 
 
 @requires_init
@@ -362,7 +316,7 @@ def loop_match(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
     return final_ppose
 
 
-def strict_remodel(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
+def strict_remodel_old(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
     """
     DSSP and SS agnostic in principle but in practice more or less matches.
     """
