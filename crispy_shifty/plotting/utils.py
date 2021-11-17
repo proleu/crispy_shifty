@@ -1,9 +1,7 @@
 # Python standard library
 from typing import *
 
-def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int, str] = 'auto', discrete: bool = False, hue: str = None, hue_order: List[str] = None):
-    import matplotlib.pyplot as plt
-    import numpy as np
+def apply_standard_globals():
     import seaborn as sns
 
     sns.set(
@@ -13,9 +11,9 @@ def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int
         palette="colorblind",  # a color palette that is colorblind friendly!
     )
 
-    # Gets square(ish) dimensions for the number of subplots to make
-    # Still knows to, for example, generate a 1x2 grid for 2 plots, rather than a 2x2 grid
-    num_plots = len(cols)
+def get_aspect_ratio(num_plots: int, aspect_ratio: str = 'wide') -> Tuple[int, int]:
+    import numpy as np
+
     subplot_cols = int(np.ceil(np.sqrt(num_plots)))
     subplot_rows = int(np.ceil(num_plots / subplot_cols))
 
@@ -37,9 +35,34 @@ def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int
         else:
             raise ValueError('Must provide a valid aspect ratio')
 
+    return subplot_rows, subplot_cols
+
+def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int, str] = 'auto', discrete: bool = False, hue: str = None, hue_order: List[str] = None):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import seaborn as sns
+
+    # Gets square(ish) dimensions for the number of subplots to make
+    # Still knows to, for example, generate a 1x2 grid for 2 plots, rather than a 2x2 grid
+    num_plots = len(cols)
+    subplot_rows, subplot_cols = get_aspect_ratio(num_plots, aspect_ratio)
+
     fig, axs = plt.subplots(subplot_rows, subplot_cols, figsize=(subplot_cols*4, subplot_rows*4))
 
     for ax, col in zip(axs.flatten(),cols):
         sns.histplot(data=df, x=col, ax=ax, bins=bins, discrete=discrete, hue=hue, hue_order=hue_order)
 
     fig.tight_layout()
+
+def pairplot_df(df, cols: List[str], hue: str = None, hue_order: List[str] = None):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    # Gets square(ish) dimensions for the number of subplots to make
+    # Still knows to, for example, generate a 1x2 grid for 2 plots, rather than a 2x2 grid
+    num_cols = len(cols)
+
+    fig = plt.figure(figsize=(num_cols*4, num_cols*4))
+    sns.pairplot(data=df, vars=cols, hue=hue, hue_order=hue_order, corner=True)
+
+    # fig.tight_layout()
