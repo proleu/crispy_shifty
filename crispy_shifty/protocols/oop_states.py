@@ -127,7 +127,6 @@ class StateMaker(ABC):
         :param int_ratio_cutoff: Minimum ratio of counts between all interfaces.
         :param pairs: List of pairs of chains to check for interfaces.
         :return: True if the pose passes the cutoffs.
-        TODO: This function is not working yet.
         """
 
         from itertools import combinations
@@ -143,6 +142,7 @@ class StateMaker(ABC):
         index_to_letter_dict = dict(zip(range(1, len(max_chains) + 1), max_chains))
         # use the dict to get the chain letters for each chain in the pose
         pose_chains = [index_to_letter_dict[i] for i in range(1, pose.num_chains() + 1)]
+
         if pairs is not None:
             # if pairs are given, use those
             chain_pairs = pairs
@@ -161,8 +161,7 @@ class StateMaker(ABC):
             else:
                 pass
             interface_counts[interface_name] = interface_count
-        # check all possible ratios using the dict of all interface counts
-        for count_pair in combinations(interface_counts.values(), 2):
+        for count_pair in combinations(interface_counts.keys(), 2):
             if (
                 interface_counts[count_pair[0]] / interface_counts[count_pair[1]]
                 < int_ratio_cutoff
@@ -347,7 +346,6 @@ class FreeStateMaker(StateMaker):
     def generate_states(self) -> Iterator[PackedPose]:
         """
         Generate all free states that pass default or supplied cutoffs.
-        TODO: Rebuild PDBInfo for the combined pose?
         """
         import pyrosetta
         import pyrosetta.distributed.io as io
@@ -427,7 +425,7 @@ class FreeStateMaker(StateMaker):
             yield ppose
 
 
-class BoundStateMaker(FreeStateMaker):
+class BoundStateMaker(StateMaker):
     """
     A class for generating bound states, AKA canonical crispy shifties.
     """
@@ -436,7 +434,7 @@ class BoundStateMaker(FreeStateMaker):
         """
         initialize the parent class then modify attributes with additional kwargs
         """
-        super(StateMaker, self).__init__(*args, **kwargs)
+        super(BoundStateMaker, self).__init__(*args, **kwargs)
         if "clash_cutoff" in kwargs:
             self.clash_cutoff = kwargs["clash_cutoff"]
         else:
@@ -455,16 +453,11 @@ class BoundStateMaker(FreeStateMaker):
     def generate_states(self) -> Iterator[PackedPose]:
         """
         Generate all bound states that pass default or supplied cutoffs.
-        TODO: Rebuild PDBInfo for the combined pose?
         """
 
         import pyrosetta
         import pyrosetta.distributed.io as io
         from pyrosetta.rosetta.core.pose import setPoseExtraScore
-
-        # first run the superclass method to generate free states
-        packed_free_states = super(BoundStateMaker, self).generate_states()
-
 
         # setup the rechain mover
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
@@ -495,12 +488,14 @@ class BoundStateMaker(FreeStateMaker):
                     combined_pose = self.combine_two_poses(
                         self.input_pose, shifted_pose, end_pose_a, start_pose_b
                     )
+                    # setup the order for docking helices into the combined pose
+                    docking_order = [shifted_pose, self.input_pose]
                 else:
                     combined_pose = self.combine_two_poses(
                         shifted_pose, self.input_pose, end_pose_a, start_pose_b
                     )
-                # setup the order for docking helices into the combined pose
-                docking_order = [shifted_pose, self.input_pose]
+                    # setup the order for docking helices into the combined pose
+                    docking_order = [self.input_pose, shifted_pose]
                 # we want to dock the helices before and after the pivot helix
                 helices_to_dock = [pivot_helix-1, pivot_helix+1]
                 # dock the bound helix into the hinge pose
@@ -509,7 +504,7 @@ class BoundStateMaker(FreeStateMaker):
                     dock = combined_pose.clone()
                     # add the first residue of the helix to dock to the target
                     dock.append_residue_by_jump(
-                        hinge_pose.residue(starts[docked_helix]),
+                        hinge_pose.residue(starts[helix_to_dock]),
                         dock.chain_end(1),
                         "CA",
                         "CA",
@@ -517,20 +512,20 @@ class BoundStateMaker(FreeStateMaker):
                     )
                     # add the rest of the residues of the helix to dock to the target
                     for resid in range(
-                        starts[docked_helix]+1, ends[docked_helix]+1
+                        starts[helix_to_dock]+1, ends[helix_to_dock]+1
                     ):
                         dock.append_residue_by_bond(hinge_pose.residue(resid))
                 
                     # fix PDBInfo and chain numbering
                     rechain.apply(dock)
                     # mini filtering block
-                    bb_clash = self.clash_check(docked_pose)
+                    bb_clash = self.clash_check(dock)
                     # check if clash is too high
                     if bb_clash > self.clash_cutoff:
                         continue
                     # check if interface residue counts are acceptable
                     elif not self.check_pairwise_interfaces(
-                        pose=docked_pose, 
+                        pose=dock, 
                         int_count_cutoff=self.int_count_cutoff, 
                         int_ratio_cutoff=self.int_ratio_cutoff,
                     ):
@@ -541,7 +536,7 @@ class BoundStateMaker(FreeStateMaker):
                     for key, value in self.scores.items():
                         setPoseExtraScore(dock, key, str(value))
                     setPoseExtraScore(dock, "bb_clash", float(bb_clash))
-                    setPoseExtraScore(dock, "docked_helix", str(docked_helix))
+                    setPoseExtraScore(dock, "docked_helix", str(helix_to_dock))
                     setPoseExtraScore(dock, "parent", self.original_name)
                     setPoseExtraScore(dock, "parent_length", str(self.parent_length))
                     setPoseExtraScore(dock, "pivot_helix", str(pivot_helix))
@@ -549,7 +544,7 @@ class BoundStateMaker(FreeStateMaker):
                     setPoseExtraScore(
                         dock,
                         "state",
-                        f"{self.original_name}_p_{str(pivot_helix)}_s_{str(i)}_d_{docked_helix}",
+                        f"{self.original_name}_p_{str(pivot_helix)}_s_{str(i)}_d_{helix_to_dock}",
                     )
                     ppose = io.to_packed(dock)
                     states.append(ppose)
