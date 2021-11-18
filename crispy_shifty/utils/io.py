@@ -49,6 +49,8 @@ def pymol_selection(pose:Pose, selector:ResidueSelector, name:str=None):
     return pymol_metric.calculate(pose)
 
 
+# Much of the following is extensively borrowed from pyrosetta.distributed.cluster.io
+
 try:
     import toolz
 except ImportError:
@@ -74,38 +76,33 @@ from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.distributed.cluster.exceptions import OutputError
 from pyrosetta.distributed.packed_pose.core import PackedPose
 
-"""Input/Output methods for PyRosettaCluster."""
-
-DATETIME_FORMAT: str = "%Y-%m-%d %H:%M:%S.%f"
-REMARK_FORMAT: str = "REMARK PyRosettaCluster: "
-
-# TODO finish transitioning this function
-# this will need to be done in conjunction with your wrapper functions for arrayjobs, since
-# then you'll decide what kwargs to keep track of
 def _get_instance_and_metadata(
-    self, kwargs: Dict[Any, Any]
+    kwargs: Dict[Any, Any]
 ) -> Tuple[Dict[Any, Any], Dict[Any, Any]]:
     """
     Get the current state of the PyRosettaCluster instance, and split the
     kwargs into the PyRosettaCluster instance kwargs and ancillary metadata.
     """
+    import pyrosetta
 
-    instance_state = dict(zip(self.__slots__, self.__getstate__()))
-    instance_state.pop("client", None)
-    instance_kwargs = copy.deepcopy(instance_state)
-    for i in self.__attrs_attrs__:
-        if not i.init:
-            instance_kwargs.pop(i.name)
-        if i.name == "input_packed_pose":
-            instance_kwargs.pop(i.name, None)
+    # Deleted a bunch of instance stuff from the original function here. Could add back in if helpful later, particularly if returning this to object-oriented structure.
+    instance_kwargs = {}
+    # tracking with kwargs instead of class attributes
+    instance_kwargs["compressed"] = kwargs.pop("compressed")
+    instance_kwargs["decoy_dir_name"] = kwargs.pop("decoy_dir_name")
+    instance_kwargs["environment"] = kwargs.pop("environment")
+    instance_kwargs["output_path"] = kwargs.pop("output_path")
+    instance_kwargs["score_dir_name"] = kwargs.pop("score_dir_name")
+    instance_kwargs["simulation_name"] = kwargs.pop("simulation_name")
+    instance_kwargs["simulation_records_in_scorefile"] = kwargs.pop("simulation_records_in_scorefile")
+
     instance_kwargs["tasks"] = kwargs.pop("task")
     for option in ["extra_options", "options"]:
         if option in instance_kwargs["tasks"]:
             instance_kwargs["tasks"][option] = pyrosetta.distributed._normflags(
                 instance_kwargs["tasks"][option]
             )
-    instance_kwargs["seeds"] = kwargs.pop("seeds")
-    instance_kwargs["decoy_ids"] = kwargs.pop("decoy_ids")
+    # instance_kwargs["seeds"] = kwargs.pop("seeds") # add this back in when you figure out how to get the pyrosetta seed...
 
     return instance_kwargs, kwargs
 
@@ -114,11 +111,14 @@ def _get_output_dir(decoy_dir: str) -> str:
     
     zfill_value = 4
     max_dir_depth = 1000
-    decoy_dir_list = os.listdir(decoy_dir)
+    try:
+        decoy_dir_list = os.listdir(decoy_dir)
+    except FileNotFoundError:
+        decoy_dir_list = []
     if not decoy_dir_list:
         new_dir = str(0).zfill(zfill_value)
         output_dir = os.path.join(decoy_dir, new_dir)
-        os.mkdir(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
     else:
         top_dir = list(reversed(sorted(decoy_dir_list)))[0]
         if len(os.listdir(os.path.join(decoy_dir, top_dir))) < max_dir_depth:
@@ -126,7 +126,7 @@ def _get_output_dir(decoy_dir: str) -> str:
         else:
             new_dir = str(int(top_dir) + 1).zfill(zfill_value)
             output_dir = os.path.join(decoy_dir, new_dir)
-            os.mkdir(output_dir)
+            os.makedirs(output_dir, exist_ok=True)
 
     return output_dir
 
@@ -175,23 +175,30 @@ def _parse_results(
 
     return out
 
-def save_results(results: Any, kwargs: Dict[Any, Any], decoy_path: str, environment_file: str,
-                 simulation_name: str = '', compressed: bool = True, simulation_records_in_scorefile: bool = False
-) -> None:
+def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
     """Write results and kwargs to disk."""
 
     DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
-    REMARK_FORMAT = "REMARK Crispy Shifty: "
+    REMARK_FORMAT = "REMARK CrispyShifty: "
+
+    compressed = kwargs['compressed']
+    decoy_dir_name = kwargs['decoy_dir_name']
+    environment_file = kwargs['environment']
+    output_path = kwargs['output_path']
+    score_dir_name = kwargs['score_dir_name']
+    simulation_name = kwargs['simulation_name']
+    simulation_records_in_scorefile = kwargs['simulation_records_in_scorefile']
 
     # Parse and save results
     for pdbstring, scores in _parse_results(results):
         # kwargs = _process_kwargs(kwargs)
-        output_dir = _get_output_dir(decoy_dir=decoy_path)
+        output_dir = _get_output_dir(decoy_dir=os.path.join(output_path, decoy_dir_name))
         decoy_name = "_".join([simulation_name, uuid.uuid4().hex])
         output_file = os.path.join(output_dir, decoy_name + ".pdb")
-        output_scorefile = os.path.join(output_dir, decoy_name + ".json")
         if compressed:
             output_file += ".bz2"
+        score_dir = _get_output_dir(decoy_dir=os.path.join(output_path, score_dir_name))
+        score_file = os.path.join(score_dir, decoy_name + ".json")
         extra_kwargs = {
             "crispy_shifty_decoy_name": decoy_name,
             "crispy_shifty_output_file": output_file,
@@ -219,7 +226,7 @@ def save_results(results: Any, kwargs: Dict[Any, Any], decoy_path: str, environm
             )
         instance, metadata = _get_instance_and_metadata(
             toolz.dicttoolz.keymap(
-                lambda k: k.split("PyRosettaCluster_")[-1],
+                lambda k: k.split("crispy_shifty_")[-1],
                 toolz.dicttoolz.merge(extra_kwargs, kwargs),
             )
         )
@@ -249,7 +256,7 @@ def save_results(results: Any, kwargs: Dict[Any, Any], decoy_path: str, environm
                 }
             )
         # Write data to new scorefile per decoy
-        with open(output_scorefile, "w") as f:
+        with open(score_file, "w") as f:
             f.write(scorefile_data)
 
 
@@ -327,3 +334,156 @@ def save_results(results: Any, kwargs: Dict[Any, Any], decoy_path: str, environm
 #         # Write data to new scorefile per decoy
 #         with open(output_scorefile, "w") as f:
 #             f.write(scorefile_data)
+
+
+def wrapper_for_array_tasks(func, args):
+    
+    import argparse
+    import pyrosetta
+    import sys
+
+    datetime_start = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+    parser = argparse.ArgumentParser(description="Parses arguments passed to the minimal run.py")
+    # required task arguments
+    parser.add_argument("-pdb_path", type=str, default="", required=True)
+    # optional task arguments
+    parser.add_argument("-options", type=str, default="", nargs='*', required=False)
+    parser.add_argument("-extra_options", type=str, default="", nargs='*', required=False)
+    parser.add_argument("-extra_kwargs", type=str, default="", nargs='*', required=False)
+    # arguments tracked by pyrosettacluster. could add some of the others below in save_kwargs
+    parser.add_argument("-output_path", type=str, default="", required=True)
+    
+    args = parser.parse_args(sys.argv[1:])
+    print("Design will proceed with the following options:")
+    print(args)
+    
+    # Get kwargs to pass to the function from the extra kwargs
+    func_kwargs = {args.extra_kwargs[i]: args.extra_kwargs[i+1] for i in range(0, len(args.extra_kwargs), 2)}
+    # Add the required kwargs
+    func_kwargs["pdb_path"] = args.pdb_path
+    print(func_kwargs)
+
+    # The options strings are passed without the leading "-" so that argparse doesn't interpret them as arguments. Read them in,
+    # assuming they are a list of key-value pairs where odd-indexed elements are keys and even-indexed elements are values. Add
+    # in the leading "-" and pass them to pyrosetta.
+    pyro_kwargs = {"options": {'-'+args.options[i]: args.options[i+1] for i in range(0, len(args.options), 2)}, 
+                   "extra_options": {'-'+args.extra_options[i]: args.extra_options[i+1] for i in range(0, len(args.extra_options), 2)}
+                   }
+    print(pyro_kwargs)
+    pyrosetta.distributed.maybe_init(**pyro_kwargs)
+    
+    pposes = func(**func_kwargs)
+    
+    # task_kwargs is everything that would be passed in a task in pyrosetta distributed.
+    # This isn't a perfect way of figuring out which are which, but it's the best I can do here easily
+    # without deviating too far.
+    task_kwargs = func_kwargs
+    task_kwargs.update(pyro_kwargs)
+    save_kwargs = {'compressed': True,
+                   'decoy_dir_name': 'decoys',
+                   'score_dir_name': 'scores',
+                   'environment': '',
+                   'task': task_kwargs,
+                   'output_path': args.output_path,
+                   'simulation_name': '',
+                   'simulation_records_in_scorefile': False,
+                   'crispy_shifty_datetime_start': datetime_start
+                   }
+    print(save_kwargs)
+    
+    save_results(pposes, save_kwargs)
+    
+def gen_array_tasks(
+    distribute_func: str, 
+    design_list_file: str, 
+    output_path: str, 
+    queue: str, 
+    memory: str = '4G', 
+    nstruct: int = 1, 
+    options: str = '', # options for pyrosetta initialization
+    simulation_name: str = 'crispy_shifty',
+    extra_kwargs: dict = {} # kwargs to pass to crispy_shifty_func. keys and values must be strings containing no spaces
+    ):
+    import os, stat
+
+    os.makedirs(output_path, exist_ok=True)
+
+    def create_tasks(design_list_file, options):
+        with open(design_list_file, "r") as f:
+            for line in f:
+                tasks = {"-options": "corrections::beta_nov16 true"} # no dash in from of corrections- this is not a typo
+                tasks["-extra_options"] = options
+                tasks["-pdb_path"] = line.rstrip()
+                yield tasks
+
+    jid = "{SLURM_JOB_ID%;*}"
+    sid = "{SLURM_ARRAY_TASK_ID}p"
+
+    slurm_dir = os.path.join(output_path, 'slurm_logs')
+    os.makedirs(slurm_dir, exist_ok=True)
+
+    tasklist = os.path.join(output_path, 'tasks.cmds')
+    # run_sh = """#!/usr/bin/env bash \n#SBATCH -J crispy_shifty \n#SBATCH -e {slurm_dir}/crispy_shifty-%J.err \n#SBATCH -o {slurm_dir}/crispy_shifty-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${c}" | bash""".format(
+    #     slurm_dir=slurm_dir, queue=queue, memory=memory, jid=jid, sid=sid, tasklist=tasklist, c="{CMD}"
+    # )
+    run_sh = f"""#!/usr/bin/env bash \n#SBATCH -J {simulation_name} \n#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${{CMD}}" | bash"""
+    run_sh_file = os.path.join(output_path, 'run.sh')
+    with open(run_sh_file, "w+") as f:
+        print(run_sh, file=f)
+    st = os.stat(run_sh_file)
+    os.chmod(run_sh_file, st.st_mode | stat.S_IEXEC)
+
+    func_split = distribute_func.split('.')
+    func_name = func_split[-1]
+    run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/home/broerman/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
+    run_py_file = os.path.join(output_path, 'run.py')
+    with open(run_py_file, "w+") as f:
+        print(run_py, file=f)
+    st = os.stat(run_py_file)
+    os.chmod(run_py_file, st.st_mode | stat.S_IEXEC)
+    
+    output_path_str = "-output_path " + output_path
+    extra_kwargs_str = "-extra_kwargs " + " ".join([" ".join([k, str(v)]) for k, v in extra_kwargs.items()])
+
+    with open(tasklist, "w+") as f:
+        for i in range(0, nstruct):
+            for tasks in create_tasks(design_list_file, options):
+                task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
+                cmd = f"{run_py_file} {task_str} {output_path_str} {extra_kwargs_str}"
+                print(cmd, file=f)
+
+    # Let's go
+    print("Run the following command with your desired environment active:")
+    print(f"sbatch -a 1-$(cat {tasklist} | wc -l) {run_sh_file}")
+
+from pyrosetta.distributed import requires_init
+@requires_init
+def test_func(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Generator[PackedPose, PackedPose, None]:
+
+    # test env
+    import pycorn
+
+    import sys
+    import pyrosetta.distributed.io as io
+
+    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        )
+
+    for pose in poses:
+        print('hi!')
+
+        ppose = io.to_packed(pose)
+        yield ppose
