@@ -1,16 +1,6 @@
 # Python standard library
 from typing import *
 
-def apply_standard_globals():
-    import seaborn as sns
-
-    sns.set(
-        context="talk",
-        font_scale=1,  # make the font larger; default is pretty small
-        style="ticks",  # make the background white with black lines
-        palette="colorblind",  # a color palette that is colorblind friendly!
-    )
-
 def get_aspect_ratio(num_plots: int, aspect_ratio: str = 'wide') -> Tuple[int, int]:
     import numpy as np
 
@@ -54,12 +44,11 @@ def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int
 
     fig.tight_layout()
 
+# This probably doesn't work well; at some point need to test and refine
 def pairplot_df(df, cols: List[str], hue: str = None, hue_order: List[str] = None):
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    # Gets square(ish) dimensions for the number of subplots to make
-    # Still knows to, for example, generate a 1x2 grid for 2 plots, rather than a 2x2 grid
     num_cols = len(cols)
 
     fig = plt.figure(figsize=(num_cols*4, num_cols*4))
