@@ -48,6 +48,13 @@ def pymol_selection(pose:Pose, selector:ResidueSelector, name:str=None):
         pymol_metric.set_custom_type(name)
     return pymol_metric.calculate(pose)
 
+def print_timestamp(print_str, end="\n", *args):
+    from time import time
+    time_min = (time() - start_time) / 60
+    print(f"{time_min:.2f} min: {print_str}", end=end)
+    for arg in args:
+        print(arg, end=end)
+
 
 # Much of the following is extensively borrowed from pyrosetta.distributed.cluster.io
 
@@ -65,7 +72,6 @@ except ImportError:
 
 import bz2
 import collections
-import copy
 import json
 import os
 import pyrosetta.distributed.io as io
