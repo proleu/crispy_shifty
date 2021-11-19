@@ -48,7 +48,7 @@ def pymol_selection(pose:Pose, selector:ResidueSelector, name:str=None):
         pymol_metric.set_custom_type(name)
     return pymol_metric.calculate(pose)
 
-def print_timestamp(print_str, end="\n", *args):
+def print_timestamp(print_str, start_time, end="\n", *args):
     from time import time
     time_min = (time() - start_time) / 60
     print(f"{time_min:.2f} min: {print_str}", end=end)
@@ -348,11 +348,9 @@ def wrapper_for_array_tasks(func, args):
     import pyrosetta
     import sys
 
-    datetime_start = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-
     parser = argparse.ArgumentParser(description="Parses arguments passed to the minimal run.py")
     # required task arguments
-    parser.add_argument("-pdb_path", type=str, default="", required=True)
+    parser.add_argument("-pdb_path", type=str, default="", nargs='*', required=True)
     # optional task arguments
     parser.add_argument("-options", type=str, default="", nargs='*', required=False)
     parser.add_argument("-extra_options", type=str, default="", nargs='*', required=False)
@@ -363,42 +361,47 @@ def wrapper_for_array_tasks(func, args):
     args = parser.parse_args(sys.argv[1:])
     print("Design will proceed with the following options:")
     print(args)
-    
-    # Get kwargs to pass to the function from the extra kwargs
-    func_kwargs = {args.extra_kwargs[i]: args.extra_kwargs[i+1] for i in range(0, len(args.extra_kwargs), 2)}
-    # Add the required kwargs
-    func_kwargs["pdb_path"] = args.pdb_path
-    print(func_kwargs)
 
     # The options strings are passed without the leading "-" so that argparse doesn't interpret them as arguments. Read them in,
     # assuming they are a list of key-value pairs where odd-indexed elements are keys and even-indexed elements are values. Add
     # in the leading "-" and pass them to pyrosetta.
     pyro_kwargs = {"options": {'-'+args.options[i]: args.options[i+1] for i in range(0, len(args.options), 2)}, 
-                   "extra_options": {'-'+args.extra_options[i]: args.extra_options[i+1] for i in range(0, len(args.extra_options), 2)}
-                   }
-    print(pyro_kwargs)
+                "extra_options": {'-'+args.extra_options[i]: args.extra_options[i+1] for i in range(0, len(args.extra_options), 2)}
+                }
+    # print(pyro_kwargs)
     pyrosetta.distributed.maybe_init(**pyro_kwargs)
-    
-    pposes = func(**func_kwargs)
-    
-    # task_kwargs is everything that would be passed in a task in pyrosetta distributed.
-    # This isn't a perfect way of figuring out which are which, but it's the best I can do here easily
-    # without deviating too far.
-    task_kwargs = func_kwargs
-    task_kwargs.update(pyro_kwargs)
-    save_kwargs = {'compressed': True,
-                   'decoy_dir_name': 'decoys',
-                   'score_dir_name': 'scores',
-                   'environment': '',
-                   'task': task_kwargs,
-                   'output_path': args.output_path,
-                   'simulation_name': '',
-                   'simulation_records_in_scorefile': False,
-                   'crispy_shifty_datetime_start': datetime_start
-                   }
-    print(save_kwargs)
-    
-    save_results(pposes, save_kwargs)
+
+    # Get kwargs to pass to the function from the extra kwargs
+    func_kwargs = {args.extra_kwargs[i]: args.extra_kwargs[i+1] for i in range(0, len(args.extra_kwargs), 2)}
+
+    for pdb_path in args.pdb_path:
+        # Add the required kwargs
+        func_kwargs["pdb_path"] = pdb_path
+        # print(func_kwargs)
+
+        datetime_start = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        
+        # Run the function
+        pposes = func(**func_kwargs)
+        
+        # task_kwargs is everything that would be passed in a task in pyrosetta distributed.
+        # This isn't a perfect way of figuring out which are which, but it's the best I can do here easily
+        # without deviating too far.
+        task_kwargs = func_kwargs
+        task_kwargs.update(pyro_kwargs)
+        save_kwargs = {'compressed': True,
+                    'decoy_dir_name': 'decoys',
+                    'score_dir_name': 'scores',
+                    'environment': '',
+                    'task': task_kwargs,
+                    'output_path': args.output_path,
+                    'simulation_name': '',
+                    'simulation_records_in_scorefile': False,
+                    'crispy_shifty_datetime_start': datetime_start
+                    }
+        # print(save_kwargs)
+        
+        save_results(pposes, save_kwargs)
     
 def gen_array_tasks(
     distribute_func: str, 
@@ -406,21 +409,33 @@ def gen_array_tasks(
     output_path: str, 
     queue: str, 
     memory: str = '4G', 
-    nstruct: int = 1, 
+    nstruct: int = 1,
+    nstruct_per_task: int = 1,
     options: str = '', # options for pyrosetta initialization
     simulation_name: str = 'crispy_shifty',
     extra_kwargs: dict = {} # kwargs to pass to crispy_shifty_func. keys and values must be strings containing no spaces
     ):
     import os, stat
+    from more_itertools import ichunked
 
     os.makedirs(output_path, exist_ok=True)
 
-    def create_tasks(design_list_file, options):
+    # def create_tasks(design_list_file, options):
+    #     with open(design_list_file, "r") as f:
+    #         for line in f:
+    #             tasks = {"-options": "corrections::beta_nov16 true"} # no dash in from of corrections- this is not a typo
+    #             tasks["-extra_options"] = options
+    #             tasks["-pdb_path"] = line.rstrip()
+    #             yield tasks
+    
+    def create_tasks(design_list_file, options, nstruct_per_task):
         with open(design_list_file, "r") as f:
-            for line in f:
+            # returns an iteratable with nstruct_per_task elements: lines of design_list_file
+            for lines in ichunked(f, nstruct_per_task):
                 tasks = {"-options": "corrections::beta_nov16 true"} # no dash in from of corrections- this is not a typo
                 tasks["-extra_options"] = options
-                tasks["-pdb_path"] = line.rstrip()
+                 # join the lines of design_list_file with spaces, removing trailing newlines
+                tasks["-pdb_path"] = ' '.join(line.rstrip() for line in lines)
                 yield tasks
 
     jid = "{SLURM_JOB_ID%;*}"
@@ -454,7 +469,7 @@ def gen_array_tasks(
 
     with open(tasklist, "w+") as f:
         for i in range(0, nstruct):
-            for tasks in create_tasks(design_list_file, options):
+            for tasks in create_tasks(design_list_file, options, nstruct_per_task):
                 task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
                 cmd = f"{run_py_file} {task_str} {output_path_str} {extra_kwargs_str}"
                 print(cmd, file=f)
@@ -462,6 +477,16 @@ def gen_array_tasks(
     # Let's go
     print("Run the following command with your desired environment active:")
     print(f"sbatch -a 1-$(cat {tasklist} | wc -l) {run_sh_file}")
+
+def collect_score_file(output_path: str, score_dir_name: str = 'scores'):
+    import os
+    from glob import iglob
+    score_dir = os.path.join(output_path, score_dir_name)
+    with open(os.path.join(output_path, 'scores.json'), 'w') as scores_file:
+        for score_file in iglob(os.path.join(score_dir, '*', '*.json')):
+            with open(score_file, 'r') as f:
+                scores_file.write(f.read() + '\n')
+        
 
 from pyrosetta.distributed import requires_init
 @requires_init
