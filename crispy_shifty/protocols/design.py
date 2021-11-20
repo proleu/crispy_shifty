@@ -281,7 +281,6 @@ def fastdesign(
 ):
     """
     Runs FastDesign with the given task factory and score function.
-    Setting flexbb to False prevents backbone movement for all chains
     """
     # took ~37 minutes to run with fixbb and one repeat on test case X23_3_20_3_ct7_fc.pdb
     import pyrosetta
@@ -303,6 +302,22 @@ def fastdesign(
     fdes_mover.set_scorefxn(scorefxn)
     fdes_mover.set_movemap(movemap)
     fdes_mover.apply(pose)
+
+
+def packrotamers(
+    pose: Pose,
+    task_factory: TaskFactory,
+    scorefxn: ScoreFunction
+):
+    """
+    Runs PackRotamers with the given task factory and score function.
+    """
+    import pyrosetta
+
+    pack_mover = pyrosetta.rosetta.protocols.minimization_packing.PackRotamersMover()
+    pack_mover.task_factory(task_factory)
+    pack_mover.score_function(scorefxn)
+    pack_mover.apply(pose)
 
 
 def struct_profile(pose: Pose, design_sel: ResidueSelector):
