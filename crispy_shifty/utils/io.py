@@ -356,7 +356,7 @@ def wrapper_for_array_tasks(func, args):
     parser.add_argument("-extra_options", type=str, default="", nargs='*', required=False)
     parser.add_argument("-extra_kwargs", type=str, default="", nargs='*', required=False)
     # arguments tracked by pyrosettacluster. could add some of the others below in save_kwargs
-    parser.add_argument("-output_path", type=str, default="", required=True)
+    parser.add_argument("-instance", type=str, default="", nargs='*', required=True)
     
     args = parser.parse_args(sys.argv[1:])
     print("Design will proceed with the following options:")
@@ -373,6 +373,7 @@ def wrapper_for_array_tasks(func, args):
 
     # Get kwargs to pass to the function from the extra kwargs
     func_kwargs = {args.extra_kwargs[i]: args.extra_kwargs[i+1] for i in range(0, len(args.extra_kwargs), 2)}
+    instance_kwargs = {args.instance[i]: args.instance[i+1] for i in range(0, len(args.instance), 2)}
 
     for pdb_path in args.pdb_path:
         # Add the required kwargs
@@ -394,12 +395,13 @@ def wrapper_for_array_tasks(func, args):
                     'score_dir_name': 'scores',
                     'environment': '',
                     'task': task_kwargs,
-                    'output_path': args.output_path,
+                    'output_path': '~',
                     'simulation_name': '',
                     'simulation_records_in_scorefile': False,
                     'crispy_shifty_datetime_start': datetime_start
                     }
-        # print(save_kwargs)
+        save_kwargs.update(instance_kwargs)
+        print(save_kwargs)
         
         save_results(pposes, save_kwargs)
     
@@ -464,14 +466,18 @@ def gen_array_tasks(
     st = os.stat(run_py_file)
     os.chmod(run_py_file, st.st_mode | stat.S_IEXEC)
     
-    output_path_str = "-output_path " + output_path
+    instance_dict = {'output_path': output_path,
+                     'simulation_name': simulation_name
+                     }
+
+    instance_str = "-instance " + " ".join([" ".join([k, str(v)]) for k, v in instance_dict.items()])
     extra_kwargs_str = "-extra_kwargs " + " ".join([" ".join([k, str(v)]) for k, v in extra_kwargs.items()])
 
     with open(tasklist, "w+") as f:
         for i in range(0, nstruct):
             for tasks in create_tasks(design_list_file, options, nstruct_per_task):
                 task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
-                cmd = f"{run_py_file} {task_str} {output_path_str} {extra_kwargs_str}"
+                cmd = f"{run_py_file} {task_str} {extra_kwargs_str} {instance_str}"
                 print(cmd, file=f)
 
     # Let's go
