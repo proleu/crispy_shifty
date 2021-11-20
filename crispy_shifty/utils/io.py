@@ -401,7 +401,7 @@ def wrapper_for_array_tasks(func, args):
                     'crispy_shifty_datetime_start': datetime_start
                     }
         save_kwargs.update(instance_kwargs)
-        print(save_kwargs)
+        #print(save_kwargs)
         
         save_results(pposes, save_kwargs)
     
