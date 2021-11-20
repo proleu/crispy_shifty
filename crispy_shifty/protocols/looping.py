@@ -330,7 +330,7 @@ def loop_dimer(
                 prune_buns=True,
                 upweight_ppi=False,
                 restrict_pro_gly=False,
-                ifcl=False,
+                ifcl=True, # to respect precompute_ig
                 layer_design=layer_design,
             )
             struct_profile(looped_pose, design_sel) # Phil's code used eliminate_background=False...

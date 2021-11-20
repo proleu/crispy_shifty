@@ -593,7 +593,7 @@ def one_state_design_unlooped_dimer(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=False,
+        ifcl=True, # so that it respects precompute_ig
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory")
