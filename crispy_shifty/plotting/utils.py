@@ -31,6 +31,7 @@ def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int
     import matplotlib.pyplot as plt
     import numpy as np
     import seaborn as sns
+    from tqdm import tqdm
 
     # Gets square(ish) dimensions for the number of subplots to make
     # Still knows to, for example, generate a 1x2 grid for 2 plots, rather than a 2x2 grid
@@ -39,7 +40,7 @@ def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int
 
     fig, axs = plt.subplots(subplot_rows, subplot_cols, figsize=(subplot_cols*4, subplot_rows*4))
 
-    for ax, col in zip(axs.flatten(),cols):
+    for ax, col in tqdm(zip(axs.flatten(),cols)):
         sns.histplot(data=df, x=col, ax=ax, bins=bins, discrete=discrete, hue=hue, hue_order=hue_order)
 
     fig.tight_layout()
