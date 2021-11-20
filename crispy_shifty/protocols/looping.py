@@ -120,6 +120,8 @@ def loop_remodel(
             str(binascii.b2a_hex(os.urandom(16)).decode("utf-8")) + ".bp"
         )
         # write a temporary blueprint file
+        if not os.path.exists(tmp_path):
+            os.makedirs(tmp_path, exist_ok=True)
         with open(filename, "w+") as f:
             end1, begin2 = (
                 pose.chain_end(1),
