@@ -1,3 +1,8 @@
+# Python standard library
+from typing import *
+
+# 3rd party library imports
+# Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.distributed import requires_init
@@ -24,20 +29,70 @@ def loop_match(pose: Pose, length: int):
     try:
         cc_mover.apply(pose)
         closure_type = 'loop_match'
-    except RuntimeError:
+    except RuntimeError: # if ConnectChainsMover cannot find a closure
         closure_type = 'not_closed'
     pyrosetta.rosetta.core.pose.setPoseExtraScore(
         pose, "closure_type", closure_type
     )
     return closure_type
 
+def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
+    """
+    From Buwei
+    https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
+    """
+    if psi == None or phi == None:
+        return "X"
+    if omega == None:
+        omega = 180
 
-def strict_remodel(
+    if abs(omega) < 90:
+        return "O"
+    elif phi > 0:
+        if -100.0 <= psi < 100:
+            return "G"
+        else:
+            return "E"
+    else:
+        if -75.0 <= psi < 50:
+            return "A"
+        else:
+            return "B"
+
+def abego_string(phi_psi_omega: list) -> str:
+    """
+    From Buwei
+    https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
+    """
+    out = ""
+    for x in phi_psi_omega:
+        out += phi_psi_omega_to_abego(x[0], x[1], x[2])
+    return out
+
+def get_torsions(pose: Pose) -> list:
+    """
+    From Buwei
+    https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
+    """
+    torsions = []
+    for i in range(1, pose.total_residue() + 1):
+        phi = pose.phi(i)
+        psi = pose.psi(i)
+        omega = pose.omega(i)
+        if i == 1:
+            phi = None
+        if i == pose.total_residue():
+            psi = None
+            omega = None
+        torsions.append((phi, psi, omega))
+    return torsions
+
+def loop_remodel(
     pose: Pose, length: int,
     attempts: int = 10,
     remodel_before_loop: int = 1, 
     remodel_after_loop: int = 1,
-    compute_optimal_remodel_lengths: bool = False
+    remodel_lengths_by_vector: bool = False
     ):
     """
     Remodel a new loop using Blueprint Builder. Expects a pose with two chains.
@@ -47,58 +102,6 @@ def strict_remodel(
     import os
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
-
-    def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
-        """
-        From Buwei
-        https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
-        """
-        if psi == None or phi == None:
-            return "X"
-        if omega == None:
-            omega = 180
-
-        if abs(omega) < 90:
-            return "O"
-        elif phi > 0:
-            if -100.0 <= psi < 100:
-                return "G"
-            else:
-                return "E"
-        else:
-            if -75.0 <= psi < 50:
-                return "A"
-            else:
-                return "B"
-        return "X"
-
-    def abego_string(phi_psi_omega: list) -> str:
-        """
-        From Buwei
-        https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
-        """
-        out = ""
-        for x in phi_psi_omega:
-            out += phi_psi_omega_to_abego(x[0], x[1], x[2])
-        return out
-
-    def get_torsions(pose: Pose) -> list:
-        """
-        From Buwei
-        https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
-        """
-        torsions = []
-        for i in range(1, pose.total_residue() + 1):
-            phi = pose.phi(i)
-            psi = pose.psi(i)
-            omega = pose.omega(i)
-            if i == 1:
-                phi = None
-            if i == pose.total_residue():
-                psi = None
-                omega = None
-            torsions.append((phi, psi, omega))
-        return torsions
 
     def remodel_helper(pose: Pose, loop_length: int, remodel_before_loop: int = 1, remodel_after_loop: int = 1) -> str:
         import binascii, os
@@ -166,20 +169,20 @@ def strict_remodel(
 
     # computes the number of residues to remodel before and after the loop by finding which residue-residue vectors point towards the helix to loop to
     # probably works best for building a loop between two helices
-    if compute_optimal_remodel_lengths:
+    # still uses the default lengths to remodel if none of the vectors are good (dot>0)
+    if remodel_lengths_by_vector:
         end1, begin2 = (pose.chain_end(1), pose.chain_begin(2))
         max_dot_1 = 0
         max_dot_2 = 0
         vec_12 = pose.residue(begin2).xyz("CA") - pose.residue(end1).xyz("CA")
-        print(vec_12)
         for i in range(3):
             vec_1 = pose.residue(end1-i).xyz("CA") - pose.residue(end1-i-1).xyz("CA")
-            dot_1 = vec_12.dot(vec_1)
+            dot_1 = vec_12.dot(vec_1.normalize()) # normalization accounts for slight differences in Ca-Ca distances dependent on secondary structure
             if dot_1 > max_dot_1:
                 max_dot_1 = dot_1
                 remodel_before_loop = i + 1
             vec_2 = pose.residue(begin2+i+1).xyz("CA") - pose.residue(begin2+i).xyz("CA")
-            dot_2 = vec_12.dot(vec_2)
+            dot_2 = vec_12.dot(vec_2.normalize())
             if dot_2 > max_dot_2:
                 max_dot_2 = dot_2
                 remodel_after_loop = i + 1
@@ -211,408 +214,125 @@ def strict_remodel(
     for _ in range(attempts):
         bp_mover.apply(pose)
         if pose.num_chains() == 1:
-            closure_type = 'remodel'
+            closure_type = 'loop_remodel'
             break
 
     os.remove(bp_file)
     
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(
-        pose, "closure_type", closure_type
-    )
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "closure_type", closure_type)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "remodel_before_loop", str(remodel_before_loop))
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "remodel_after_loop", str(remodel_after_loop))
     return closure_type
 
 
 @requires_init
-def loop_match(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
-    """
-    Match loop length, total length and DSSP with parent. Strictest method of closure.
-    """
-    import bz2
+def loop_dimer(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Generator[PackedPose, PackedPose, None]:
+
+    from copy import deepcopy
+    from time import time
+    import sys
     import pyrosetta
-    from pyrosetta.rosetta.core.pose import Pose
     import pyrosetta.distributed.io as io
-    from pyrosetta.distributed.tasks.rosetta_scripts import (
-        SingleoutputRosettaScriptsTask,
-    )
 
-    def append_b_to_a(pose_a: Pose, pose_b: Pose, end_a: int, start_b: int) -> Pose:
-        """
-        Make a new pose, containing pose_a up to end_a, then pose_b starting from start_b
-        Assumes pose_a has only one chain.
-        """
-        import pyrosetta
-        from pyrosetta.rosetta.core.pose import Pose
+    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.utils.io import print_timestamp
+    from crispy_shifty.protocols.design import score_wnm, score_ss_sc
 
-        newpose = Pose()
-        for i in range(1, end_a + 1):
-            newpose.append_residue_by_bond(pose_a.residue(i))
-        newpose.append_residue_by_jump(
-            pose_b.residue(start_b), newpose.chain_end(1), "CA", "CA", 1
-        )
-        for i in range(start_b + 1, len(pose_b.residues) + 1):
-            newpose.append_residue_by_bond(pose_b.residue(i))
-        return newpose
+    # testing to properly set the TMPDIR on distributed jobs
+    # import os
+    # os.environ['TMPDIR'] = '/scratch'
+    # print(os.environ['TMPDIR'])
 
-    if packed_pose_in == None:
-        file = kwargs["-s"]
-        with open(file, "rb") as f:
-            packed_pose_in = io.pose_from_pdbstring(bz2.decompress(f.read()).decode())
-        scores = pyrosetta.distributed.cluster.get_scores_dict(file)["scores"]
+    start_time = time()
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
     else:
-        raise RuntimeError("Need to supply an input")
-    # get parent from packed_pose_in, get loop length from parent length - packed_pose_in length
-    parent_length = int(scores["parent_length"])
-    length = int(parent_length - packed_pose_in.pose.chain_end(2))
-    xml = """
-    <ROSETTASCRIPTS>
-        <SCOREFXNS>
-            <ScoreFunction name="sfxn" weights="beta_nov16" /> 
-        </SCOREFXNS>
-        <RESIDUE_SELECTORS>          
-        </RESIDUE_SELECTORS>
-        <TASKOPERATIONS>
-        </TASKOPERATIONS>
-        <SIMPLE_METRICS>
-        </SIMPLE_METRICS>
-        <MOVERS>
-            <ConnectChainsMover name="closer" 
-                chain_connections="[A+B]" 
-                loopLengthRange="{length},{length}" 
-                resAdjustmentRangeSide1="0,0" 
-                resAdjustmentRangeSide2="0,0" 
-                RMSthreshold="1.0"/>
-        </MOVERS>
-        <FILTERS>
-        </FILTERS>
-        <PROTOCOLS>
-            <Add mover_name="closer"/>
-        </PROTOCOLS>
-    </ROSETTASCRIPTS>
-    """.format(
-        length=length
-    )
-    closer = SingleoutputRosettaScriptsTask(xml)
-    try:
-        maybe_closed_ppose = closer(packed_pose_in.pose.clone())
-        # hacky rechain
-        maybe_closed_pose = append_b_to_a(
-            pose_a=maybe_closed_ppose.pose.clone(),
-            pose_b=packed_pose_in.pose.clone(),
-            end_a=packed_pose_in.pose.chain_end(2),
-            start_b=packed_pose_in.pose.chain_begin(3),
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
         )
-        closure_type = "loop_match"
-    except RuntimeError:
-        maybe_closed_pose = io.to_pose(packed_pose_in.pose.clone())
-        closure_type = "not_closed"
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(
-        maybe_closed_pose, "closure_type", closure_type
-    )
-    for key, value in scores.items():
-        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-            maybe_closed_pose, key, str(value)
-        )
-    final_ppose = io.to_packed(maybe_closed_pose)
-    return final_ppose
 
+    for pose in poses:
+        scores = dict(pose.scores)
+        pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
+        # get parent length from the score
+        parent_length = int(float(scores["parent_length"]))
 
-def strict_remodel_old(packed_pose_in: PackedPose, **kwargs) -> PackedPose:
-    """
-    DSSP and SS agnostic in principle but in practice more or less matches.
-    """
-    import os
-    import pyrosetta
-    from pyrosetta.rosetta.core.pose import Pose
-    import pyrosetta.distributed.io as io
-    from pyrosetta.distributed.packed_pose.core import PackedPose
-    from pyrosetta.distributed.tasks.rosetta_scripts import (
-        SingleoutputRosettaScriptsTask,
-    )
-    from pyrosetta.rosetta.core.select import get_residues_from_subset
-    from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
+        looped_poses = []
+        sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        for chains_to_loop in ['12', '34']:
+            sw.chain_order(chains_to_loop)
+            pose_to_loop = deepcopy(pose)
+            sw.apply(pose_to_loop)
 
-    def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
-        """
-        From Buwei
-        https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
-        """
-        if psi == None or phi == None:
-            return "X"
-        if omega == None:
-            omega = 180
+            loop_length = int(parent_length - pose_to_loop.chain_end(2))
 
-        if abs(omega) < 90:
-            return "O"
-        elif phi > 0:
-            if -100.0 <= psi < 100:
-                return "G"
-            else:
-                return "E"
-        else:
-            if -75.0 <= psi < 50:
-                return "A"
-            else:
-                return "B"
-        return "X"
-
-    def abego_string(phi_psi_omega: list) -> str:
-        """
-        From Buwei
-        https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
-        """
-        out = ""
-        for x in phi_psi_omega:
-            out += phi_psi_omega_to_abego(x[0], x[1], x[2])
-        return out
-
-    def get_torsions(pose: Pose) -> list:
-        """
-        From Buwei
-        https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
-        """
-        torsions = []
-        for i in range(1, pose.total_residue() + 1):
-            phi = pose.phi(i)
-            psi = pose.psi(i)
-            omega = pose.omega(i)
-            if i == 1:
-                phi = None
-            if i == pose.total_residue():
-                psi = None
-                omega = None
-            torsions.append((phi, psi, omega))
-        return torsions
-
-    def strict_remodel_helper(packed_pose_in: PackedPose, loop_length: int) -> str:
-        import binascii, os
-        import pyrosetta
-        from pyrosetta.rosetta.core.pose import Pose
-
-        pose = packed_pose_in.pose.clone()
-        tors = get_torsions(pose)
-        abego_str = abego_string(tors)
-        dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(pose)
-        # name blueprint a random 32 long hex string
-        filename = str(binascii.b2a_hex(os.urandom(16)).decode("utf-8")) + ".bp"
-        # write a temporary blueprint file
-        with open(filename, "w+") as f:
-            end1, begin2 = (
-                packed_pose_in.pose.chain_end(1),
-                packed_pose_in.pose.chain_begin(2),
-            )
-            end3 = packed_pose_in.pose.chain_end(3)
-            for i in range(1, end1 + 1):
-                if i == end1:
-                    print(
-                        str(i),
-                        packed_pose_in.pose.residue(i).name1(),
-                        dssp[i - 1] + "X",
-                        "R",
-                        file=f,
-                    )
-                else:
-                    print(
-                        str(i),
-                        packed_pose_in.pose.residue(i).name1(),
-                        dssp[i - 1] + abego_str[i - 1],
-                        ".",
-                        file=f,
-                    )
-            for i in range(loop_length):
-                print(
-                    "0", "V", "LX", "R", file=f
-                )  # DX is bad, causes rare error sometimes
-            for i in range(begin2, end3 + 1):
-                if i == begin2:
-                    print(
-                        str(i),
-                        packed_pose_in.pose.residue(i).name1(),
-                        dssp[i - 1] + "X",
-                        "R",
-                        file=f,
-                    )
-                else:
-                    print(
-                        str(i),
-                        packed_pose_in.pose.residue(i).name1(),
-                        dssp[i - 1] + abego_str[i - 1],
-                        ".",
-                        file=f,
-                    )
-
-        return filename
-
-    def find_vv(seq):
-        indices = []
-        seq_minus_one = seq[:-1]
-        for i, char in enumerate(seq_minus_one):
-            if (char == seq[i + 1]) and (char == "V"):
-                indices.append(i + 1)
-            else:
-                pass
-        # rosetta sequence indexes begin at 1
-        true_indices = [str(x + 1) for x in indices]
-        return true_indices
-
-    def append_b_to_a(pose_a: Pose, pose_b: Pose, end_a: int, start_b: int) -> Pose:
-        """
-        Make a new pose, containing pose_a up to end_a, then pose_b starting from start_b
-        Assumes pose_a has only one chain.
-        """
-        import pyrosetta
-        from pyrosetta.rosetta.core.pose import Pose
-
-        newpose = Pose()
-        for i in range(1, end_a + 1):
-            newpose.append_residue_by_bond(pose_a.residue(i))
-        newpose.append_residue_by_jump(
-            pose_b.residue(start_b), newpose.chain_end(1), "CA", "CA", 1
-        )
-        for i in range(start_b + 1, len(pose_b.residues) + 1):
-            newpose.append_residue_by_bond(pose_b.residue(i))
-        return newpose
-
-    # ensure pose still needs to be closed, skip to scoring and labeling if it has
-    if packed_pose_in.pose.num_chains() == 2:
-        maybe_closed_pose = packed_pose_in.pose.clone()
-    else:
-        scores = packed_pose_in.pose.scores
-        # get parent from packed_pose_in, get loop length from parent length - packed_pose_in length
-        parent_length = int(scores["parent_length"])
-        length = int(parent_length - packed_pose_in.pose.chain_end(2))
-        bp = strict_remodel_helper(packed_pose_in, length)
-        xml = """
-        <ROSETTASCRIPTS>
-            <SCOREFXNS>
-                <ScoreFunction name="sfxn1" weights="fldsgn_cen">
-                    <Reweight scoretype="hbond_sr_bb" weight="1.0" />
-                    <Reweight scoretype="hbond_lr_bb" weight="1.0" />
-                    <Reweight scoretype="atom_pair_constraint" weight="1.0" />
-                    <Reweight scoretype="angle_constraint" weight="1.0" />
-                    <Reweight scoretype="dihedral_constraint" weight="1.0" />
-                </ScoreFunction>
-            </SCOREFXNS>
-            <RESIDUE_SELECTORS>          
-            </RESIDUE_SELECTORS>
-            <TASKOPERATIONS>
-            </TASKOPERATIONS>
-            <SIMPLE_METRICS>
-            </SIMPLE_METRICS>
-            <MOVERS>
-                <BluePrintBDR name="bdr" 
-                blueprint="{bp}" 
-                use_abego_bias="0" 
-                use_sequence_bias="0" 
-                rmdl_attempts="20"
-                scorefxn="sfxn1"/>
-            </MOVERS>
-            <FILTERS>
-            </FILTERS>
-            <PROTOCOLS>
-                <Add mover_name="bdr"/>
-            </PROTOCOLS>
-        </ROSETTASCRIPTS>
-        """.format(
-            bp=bp
-        )
-        strict_remodel = SingleoutputRosettaScriptsTask(xml)
-        maybe_closed_ppose = None
-        for i in range(10):
-            print(f"attempt: {i}")
-            if maybe_closed_ppose is not None:  # check if it worked
-                break  # stop retrying if it did
-            else:  # try again if it didn't. returns None if fail
-                maybe_closed_ppose = strict_remodel(packed_pose_in.pose.clone())
-        os.remove(bp)  # cleanup tree
-        if maybe_closed_ppose is not None:
-            closure_type = "strict_remodel"
-            # hacky rechain
-            maybe_closed_pose = append_b_to_a(
-                pose_a=maybe_closed_ppose.pose.clone(),
-                pose_b=packed_pose_in.pose.clone(),
-                end_a=packed_pose_in.pose.chain_end(2),
-                start_b=packed_pose_in.pose.chain_begin(3),
-            )
-            for key, value in scores.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                    maybe_closed_pose, key, str(value)
-                )
-            # update closure_type
+            # is this naive? Phil did something more complicated with residue selectors, looking at the valines.
+            # Wondering if I'm missing some edge cases for which this approach doesn't work.
+            loop_start = int(pose_to_loop.chain_end(1)) + 1
+            new_loop_str = ",".join(str(resi) for resi in range(loop_start, loop_start + loop_length))
             pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                maybe_closed_pose, "closure_type", closure_type
+                pose_to_loop, "new_loop_resis", new_loop_str
             )
 
-        else:  # return the original input if BlueprintBDR still didn't close
+            print_timestamp("Attempting closure by loop match...", start_time, end="")
+            closure_type = loop_match(pose_to_loop, loop_length)
+            # closure by loop matching was successful, move on to the next dimer or continue to scoring
+            # should I use a check like 'pose_to_loop.num_chains() == 1' to determine if the pose is closed?
+            if closure_type != 'not_closed':
+                print('success.')
+                # continue
+            else:
+                print('failed.')
 
-            maybe_closed_pose = packed_pose_in.pose.clone()
+                print_timestamp("Attempting closure by loop remodel...", start_time, end="")
+                closure_type = loop_remodel(pose_to_loop, loop_length, 10, 1, 1, True)
+                if closure_type != 'not_closed':
+                    print('success.')
+                else:
+                    print('failed. Exiting.')
+                    # couldn't close this monomer; stop trying with the whole dimer
+                    break
 
-    # switch scores to new score dict
-    scores = maybe_closed_pose.scores
-    # ensure pose has been closed, if not don't label new loop
-    if maybe_closed_pose.num_chains() != 2:
-        new_loop_str = "0,0"
-        labeled_pose = maybe_closed_pose.clone()
-    else:
-        seq = str(maybe_closed_pose.sequence())
-        vv_indices = ",".join(find_vv(seq))
-        pre_break_helix = int(scores["pre_break_helix"])
-        # get helix indices for the pre and post break helices. assumes middle loop of chA is the new one
-        lower = pre_break_helix
-        xml = """
-        <ROSETTASCRIPTS>
-            <SCOREFXNS>
-            </SCOREFXNS>
-            <RESIDUE_SELECTORS>
-                <SSElement name="middle" selection="{pre},H,S" to_selection="-{post},H,E" chain="A" reassign_short_terminal_loop="2" />       
-                <Index name="polyval_all" resnums="{vv_indices}" />
-                <And name="polyval" selectors="middle,polyval_all" />
-                <PrimarySequenceNeighborhood name="entire_val" selector="polyval" lower="5" upper="5" />
-                <SecondaryStructure name="loop" overlap="0" minH="3" minE="2" include_terminal_loops="true" use_dssp="true" ss="L"/>
-                <And name="new_loop_center" selectors="entire_val,loop" />
-                <PrimarySequenceNeighborhood name="entire_new_loop_broad" selector="new_loop_center" lower="5" upper="5" />
-                <ResidueName name="isval" residue_name3="VAL" />
-                <And name="entire_new_loop" selectors="entire_new_loop_broad,isval" />
-            </RESIDUE_SELECTORS>
-            <TASKOPERATIONS>
-            </TASKOPERATIONS>
-            <SIMPLE_METRICS>
-            </SIMPLE_METRICS>
-            <MOVERS>
-                <SwitchChainOrder name="rechain" chain_order="12"/>
-            </MOVERS>
-            <FILTERS>
-            </FILTERS>
-            <PROTOCOLS>
-                <Add mover="rechain" />
-            </PROTOCOLS>
-        </ROSETTASCRIPTS>
-        """.format(
-            pre=pre_break_helix, post=pre_break_helix, vv_indices=vv_indices
-        )
-        labeled = SingleoutputRosettaScriptsTask(xml)
-        xml_obj = XmlObjects.create_from_string(xml)
-        entire_new_loop_sel = xml_obj.get_residue_selector("entire_new_loop")
-        labeled_ppose = labeled(maybe_closed_pose.clone())
-        labeled_pose = io.to_pose(labeled_ppose)
-        new_loop_resis = list(
-            get_residues_from_subset(entire_new_loop_sel.apply(labeled_pose))
-        )
-        new_loop_str = ",".join(str(resi) for resi in new_loop_resis)
+            # The code will only reach here if the loop is closed, and then I can score individual loops by accessing the pose_to_loop object
+            print_timestamp("Scoring...", start_time, end="")
+            total_length = len(pose_to_loop.residues)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose_to_loop, "total_length", total_length)
+            dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(pose_to_loop)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose_to_loop, "dssp", dssp)
+            tors = get_torsions(pose_to_loop)
+            abego_str = abego_string(tors)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose_to_loop, "abego_str", abego_str)
 
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(
-        labeled_pose, "new_loop_resis", new_loop_str
-    )
-    total_length = len(labeled_pose.residues)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(
-        labeled_pose, "total_length", total_length
-    )
-    dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(labeled_pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(labeled_pose, "dssp", dssp)
-    tors = get_torsions(labeled_pose)
-    abego_str = abego_string(tors)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(labeled_pose, "abego_str", abego_str)
-    for key, value in scores.items():
-        pyrosetta.rosetta.core.pose.setPoseExtraScore(labeled_pose, key, str(value))
-    final_ppose = io.to_packed(labeled_pose.clone())
+            # score_wnm is fine since it's only one chain
+            # should also be fast since the database is already loaded from CCM
+            score_wnm(pose_to_loop)
+            score_ss_sc(pose_to_loop, False, True, 'loop_sc')
+            print('complete.')
 
-    return final_ppose
+            looped_poses.append(pose_to_loop)
+
+        # if we couldn't close the dimer, continue to the next pose and skip scoring, labeling, and yielding the pose (so nothing is written to disk)
+        if closure_type == 'not_closed':
+            continue
+
+        combined_looped_pose = deepcopy(looped_poses[0])
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(combined_looped_pose, looped_poses[1], True)
+        sw.chain_order('12')
+        sw.apply(combined_looped_pose)
+        pyrosetta.rosetta.core.pose.clearPoseExtraScores(combined_looped_pose)
+
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, key, value)
+        for protomer, looped_pose in zip(['A', 'B'], looped_poses):
+            for key, value in looped_pose.scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, key + '_' + protomer, value)
+
+        ppose = io.to_packed(combined_looped_pose)
+        yield ppose
