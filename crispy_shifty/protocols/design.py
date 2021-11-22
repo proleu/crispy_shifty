@@ -281,7 +281,6 @@ def fastdesign(
 ):
     """
     Runs FastDesign with the given task factory and score function.
-    Setting flexbb to False prevents backbone movement for all chains
     """
     # took ~37 minutes to run with fixbb and one repeat on test case X23_3_20_3_ct7_fc.pdb
     import pyrosetta
@@ -303,6 +302,22 @@ def fastdesign(
     fdes_mover.set_scorefxn(scorefxn)
     fdes_mover.set_movemap(movemap)
     fdes_mover.apply(pose)
+
+
+def packrotamers(
+    pose: Pose,
+    task_factory: TaskFactory,
+    scorefxn: ScoreFunction
+):
+    """
+    Runs PackRotamers with the given task factory and score function.
+    """
+    import pyrosetta
+
+    pack_mover = pyrosetta.rosetta.protocols.minimization_packing.PackRotamersMover()
+    pack_mover.task_factory(task_factory)
+    pack_mover.score_function(scorefxn)
+    pack_mover.apply(pose)
 
 
 def struct_profile(pose: Pose, design_sel: ResidueSelector):
@@ -372,7 +387,7 @@ def score_on_chain_subset(pose: Pose, filter: Filter, chain_list: list):
     mb_filter.set_user_defined_name(name)
     # maybe could use score instead of report_sm, but couldn't figure out how to set scorename_ of the filter so the values are written to the pdb...
     value = mb_filter.report_sm(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, value)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(value))
     return value
 
 
@@ -391,7 +406,7 @@ def score_cms(
     )
     cms_filter.set_user_defined_name(name)
     cms = cms_filter.report_sm(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, cms)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(cms))
     return cms
 
 
@@ -407,7 +422,7 @@ def score_sc(
     sc_filter.write_int_area(True)
     sc_filter.write_median_distance(True)
     sc = sc_filter.report_sm(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, sc)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(sc))
     return sc
 
 
@@ -423,7 +438,7 @@ def score_ss_sc(
     ss_sc_filter.set_calc_loops(loops)
     ss_sc_filter.set_user_defined_name(name)
     ss_sc = ss_sc_filter.report_sm(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, ss_sc)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(ss_sc))
     return ss_sc
 
 
@@ -443,7 +458,7 @@ def score_wnm(pose: Pose, sel: ResidueSelector = None, name: str = "wnm"):
         # this seems to be broken, I get "AttributeError: 'pyrosetta.rosetta.protocols.filters.StochasticFilt' object has no attribute 'set_residue_selector'"
         wnm_filter.set_residue_selector(sel)
     wnm = wnm_filter.report_sm(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, wnm)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(wnm))
     return wnm
 
 
@@ -478,7 +493,7 @@ def score_wnm_all(pose: Pose, name: str = "wnm"):
     #     wnm = wnm_filter.report_sm(pose)
     #     wnms.append(wnm)
     # wnm_all = max(wnms)
-    # pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, wnm_all)
+    # pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(wnm_all))
     # return wnm_all
 
     # for chain_num in range(1, pose.num_chains() + 1):
@@ -487,7 +502,7 @@ def score_wnm_all(pose: Pose, name: str = "wnm"):
     #     wnm_filter.set_user_defined_name(name_chain)
     #     wnm_filter.set_residue_selector(chain_sel)
     #     wnm = wnm_filter.report_sm(pose)
-    #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name_chain, wnm)
+    #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name_chain, str(wnm))
 
 
 def score_wnm_helix(pose: Pose, name: str = "wnm_hlx"):
@@ -505,7 +520,7 @@ def score_wnm_helix(pose: Pose, name: str = "wnm_hlx"):
     wnm_hlx_filter = objs.get_filter("wnm_hlx")
     wnm_hlx_filter.set_user_defined_name(name)
     wnm = wnm_hlx_filter.report_sm(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, wnm)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(wnm))
     return wnm
 
 
@@ -514,30 +529,28 @@ def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score"):
 
     score_filter = gen_score_filter(scorefxn, name)
     score = score_filter.report_sm(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, score)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(score))
     score_pr = score / pose.size()
     pyrosetta.rosetta.core.pose.setPoseExtraScore(
-        pose, name + "_per_res", score_pr
+        pose, name + "_per_res", str(score_pr)
     )
     return score, score_pr
 
 
 def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
     import pyrosetta
-    import sys
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+
     from crispy_shifty.protocols.states import measure_CA_dist
     dist = measure_CA_dist(pose, resi_1, resi_2)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, dist)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(dist))
     return dist
 
 
 def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist"):
-    import sys
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    
     from crispy_shifty.protocols.states import get_helix_endpoints
     ends = get_helix_endpoints(pose, n_terminal=False)
-    end = ends[pre_break_helix]
+    end = ends[pre_break_helix] + 1 # now plus 1 since the helix ends one residue earlier due to the new chainbreak
     loop_dist = score_CA_dist(pose, end, end+1, name)
     return loop_dist
 
@@ -552,12 +565,13 @@ def one_state_design_unlooped_dimer(
     import pyrosetta
     import pyrosetta.distributed.io as io
 
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # testing to properly set the TMPDIR on distributed jobs
     # import os
     # os.environ['TMPDIR'] = '/scratch'
+    # print(os.environ['TMPDIR'])
 
     start_time = time()
 
@@ -579,7 +593,7 @@ def one_state_design_unlooped_dimer(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=False,
+        ifcl=True, # so that it respects precompute_ig
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory")
@@ -629,7 +643,9 @@ def one_state_design_unlooped_dimer(
         print("complete.")
 
         print_timestamp("Scoring loop distance...", end="")
-        score_loop_dist(pose, pose.scores['pre_break_helix'])
+        pre_break_helix = int(float(pose.scores["pre_break_helix"]))
+        score_loop_dist(pose, pre_break_helix, name="loop_dist_A")
+        score_loop_dist(pose, 3*pre_break_helix, name="loop_dist_B")
         print("complete.")
 
         print_timestamp(
