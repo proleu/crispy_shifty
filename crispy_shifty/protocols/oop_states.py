@@ -588,6 +588,9 @@ class BoundStateMaker(StateMaker):
             yield ppose
 
 
+# TODO need to make a general wrapper for the state maker classes instead of seperating them
+# TODO could use Union["free", "bound", ...]
+
 @requires_init
 def make_free_states(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
