@@ -12,14 +12,14 @@ __pycache__
 *.png
 *.pse
 
-00*/*
-01*/*
-02*/*
-03*/*
-04*/*
-05*/*
-06*/*
-07*/*
+projects/*/00*/*
+projects/*/01*/*
+projects/*/02*/*
+projects/*/03*/*
+projects/*/04*/*
+projects/*/05*/*
+projects/*/06*/*
+projects/*/07*/*
 examples
 figs
 *-Copy1*
@@ -30,6 +30,7 @@ figs
 *.err
 *.json
 *.yml
+*.silent
 ._*
 .DS_Store
 testing*
