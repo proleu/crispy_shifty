@@ -1,5 +1,5 @@
 # Python standard library
-from typing import *
+from typing import Iterator, Union
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
@@ -12,8 +12,12 @@ def path_to_pose_or_ppose(
     path = "", 
     cluster_scores: Optional[bool] = False, 
     pack_result: Optional[bool] = False, 
-) -> Generator[str, Union[PackedPose, Pose], None]:
+) -> Iterator[Union[PackedPose, Pose]]:
     """
+    :param path: Path to pdb or silent file
+    :param cluster_scores: If True, yield objects with cluster scores set after reading
+    :param pack_result: If True, yield PackedPose objects instead of Pose objects
+    :return: Iterator of Pose or PackedPose objects
     Generate PackedPose objects given an input path to a file on disk to read in.
     Can do pdb, pdb.bz2, pdb.gz or binary silent file formats.
     To use silents, must initialize Rosetta with "-in:file:silent_struct_type binary".
@@ -54,8 +58,11 @@ def path_to_pose_or_ppose(
 @requires_init
 def remove_terminal_loops(
     packed_pose_in:Optional[PackedPose] = None, **kwargs
-) -> Generator[PackedPose, PackedPose, None]:
+) -> Iterator[PackedPose]:
     """
+    :param packed_pose_in: PackedPose to remove terminal loops from.
+    :param kwargs: kwargs such as "pdb_path" and "metadata".
+    :return: Iterator of PackedPose objects with terminal loops removed.
     Use DSSP and delete region mover to idealize inputs. Add metadata.
     Assumes a monomer. Must provide either a packed_pose_in or "pdb_path" kwarg.
     """
@@ -128,6 +135,8 @@ def remove_terminal_loops(
 
 def break_all_disulfides(pose:Pose) -> Pose:
     """
+    :param pose: Pose to break disulfides in
+    :return: Pose with all disulfides broken
     Quickly break all disulfides in a pose
     """
     import pyrosetta
@@ -149,14 +158,16 @@ def break_all_disulfides(pose:Pose) -> Pose:
 
 def redesign_disulfides(
     packed_pose_in:Optional[PackedPose] = None, **kwargs
-) -> Generator[PackedPose, PackedPose, None]:
+) -> Iterator[PackedPose]:
     """
+    :param packed_pose_in: PackedPose object.
+    :param kwargs: kwargs such as "pdb_path".
+    :return: Iterator of PackedPose objects with disulfides redesigned.
     fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
     Requires the following init flags:
     -corrections::beta_nov16 true
-    -detect_disulf false
-    -holes:dalphaball /home/bcov/ppi/tutorial_build/main/source/external/DAlpahBall/DAlphaBall.gcc
-    -indexed_structure_store:fragment_store /home/bcov/sc/scaffold_comparison/data/ss_grouped_vall_all.h5
+    -detect_disulf false TODO hardcode this
+    -holes:dalphaball /software/rosetta/DAlphaBall.gcc/software/DAlphaBall.gcc
     """
 
     import pyrosetta

@@ -1,5 +1,6 @@
 # Python standard library
-from typing import *
+from abc import ABC, abstractmethod
+from typing import Iterator, List, Optional, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -22,6 +23,13 @@ def range_CA_align(
     Align poses by superimposition of CA given two ranges of indices.
     Pose 1 is moved. Alignment is applied to the input poses themselves.
     Modified from @apmoyer.
+    :param pose_a: Pose 1
+    :param pose_b: Pose 2
+    :param start_a: start index of range 1
+    :param end_a: end index of range 1
+    :param start_b: start index of range 2
+    :param end_b: end index of range 2
+    :return: None
     """
     import pyrosetta
 
@@ -30,8 +38,12 @@ def range_CA_align(
 
     assert len(pose_a_residue_selection) == len(pose_b_residue_selection)
 
-    pose_a_coordinates = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-    pose_b_coordinates = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    pose_a_coordinates = (
+        pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+    pose_b_coordinates = (
+        pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
 
     for pose_a_residue_index, pose_b_residue_index in zip(
         pose_a_residue_selection, pose_b_residue_selection
@@ -56,17 +68,19 @@ def range_CA_align(
     )
     return
 
-
 def clash_check(pose: Pose) -> float:
     """
-    Get fa_rep score for a pose.
+    Get fa_rep score for an all-glycine pose.
     Mutate all residues to glycine then return the score of the mutated pose.
+    :param pose: Pose
+    :return: fa_rep score
     """
 
     import pyrosetta
 
     # initialize empty sfxn
     sfxn = pyrosetta.rosetta.core.scoring.ScoreFunction()
+    # add fa_rep to sfxn only
     sfxn.set_weight(pyrosetta.rosetta.core.scoring.fa_rep, 1)
     # make the pose into a backbone without sidechains
     all_gly = pose.clone()
@@ -79,102 +93,6 @@ def clash_check(pose: Pose) -> float:
     score = sfxn(all_gly)
     return score
 
-
-def count_interface_check(pose: Pose, int_cutoff: float) -> bool:
-    """
-    Given a state that has a helix bound, check that both halves have interfacial
-    contacts with the bound helix. Return true if so, return false if not.
-    int_cutoff determines how asymmetric the interfaces are allowed to be. If it is
-    set very low, one interface is allowed to have many more residues than the
-    other.
-    """
-
-    import pyrosetta
-    from pyrosetta.rosetta.core.select.residue_selector import (
-        ChainSelector,
-        InterGroupInterfaceByVectorSelector,
-    )
-
-    A = ChainSelector("A")
-    B = ChainSelector("B")
-    C = ChainSelector("C")
-
-    AC_int = InterGroupInterfaceByVectorSelector(A, C)
-    BC_int = InterGroupInterfaceByVectorSelector(B, C)
-
-    AC_int_count = sum(list(AC_int.apply(pose)))
-    BC_int_count = sum(list(BC_int.apply(pose)))
-
-    # interfaces need atleast 10 residues
-    if AC_int_count < 11 or BC_int_count < 11:
-        return False
-    elif AC_int_count / BC_int_count < int_cutoff:
-        return False
-    elif BC_int_count / AC_int_count < int_cutoff:
-        return False
-    else:
-        return True
-
-
-def count_interface(pose: Pose, sel_a, sel_b) -> int:
-    """
-    Given a pose and two residue selectors, return the number of
-    residues in the interface between them.
-    """
-
-    import pyrosetta
-
-    int_sel = pyrosetta.rosetta.core.select.residue_selector.InterGroupInterfaceByVectorSelector(
-        sel_a, sel_b
-    )
-    int_sel.nearby_atom_cut(3)
-    int_sel.vector_dist_cut(5)
-    int_sel.cb_dist_cut(7)
-    int_count = sum(list(int_sel.apply(pose)))
-    return int_count
-
-
-def measure_CA_dist(pose: Pose, resi_a: int, resi_b: int) -> float:
-    resi_a_coords = pose.residue(resi_a).xyz("CA")
-    resi_b_coords = pose.residue(resi_b).xyz("CA")
-    dist = resi_a_coords.distance(resi_b_coords)
-    return dist
-
-
-def helix_dict_maker(pose: Pose) -> dict:
-    """
-    Make a dictionary mapping of residue indices to the helix indices.
-    Keys are helix indices, values are lists of residue indices.
-    """
-    import pyrosetta
-
-    ss = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
-    helix_dict = {}
-    n = 1
-    for i in range(1, len(pose.sequence())):
-        if (ss.get_dssp_secstruct(i) == "H") & (ss.get_dssp_secstruct(i - 1) != "H"):
-            helix_dict[n] = [i]
-        if (ss.get_dssp_secstruct(i) == "H") & (ss.get_dssp_secstruct(i + 1) != "H"):
-            helix_dict[n].append(i)
-            n += 1
-    return helix_dict
-
-
-def get_helix_endpoints(pose: Pose, n_terminal: bool) -> dict:
-    """
-    Make a dictionary of the start (n_terminal=True) or end residue indices of each helix
-    """
-    helix_dict = helix_dict_maker(pose)
-    helix_endpoints = {}
-    if n_terminal:
-        index = 0  # helix start residue
-    else:
-        index = -1  # helix end residue
-    for helix, residue_list in helix_dict.items():
-        helix_endpoints[helix] = residue_list[index]
-    return helix_endpoints
-
-
 def combine_two_poses(
     pose_a: Pose,
     pose_b: Pose,
@@ -184,6 +102,13 @@ def combine_two_poses(
     """
     Make a new pose, containing pose_a up to end_a, then pose_b starting from start_b
     Assumes pose_a has only one chain.
+    If you don't know why you are using this function then you should probably use the 
+    pyrosetta.rosetta.core.pose.append_pose_to_pose() method instead.
+    :param pose_a: Pose 1
+    :param pose_b: Pose 2
+    :param end_a: end index of Pose 1
+    :param start_b: start index of Pose 2
+    :return: new Pose
     """
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
@@ -199,68 +124,486 @@ def combine_two_poses(
         newpose.append_residue_by_bond(pose_b.residue(i))
     return newpose
 
-
-def shift_pose_by_i(
+def check_pairwise_interfaces(
     pose: Pose,
-    i: int,
-    starts: dict,
-    ends: dict,
-    pivot_helix: int,
-    full_helix: bool = False,
-) -> Pose:
+    int_count_cutoff: int,
+    int_ratio_cutoff: float,
+    pairs: Optional[List[tuple]] = None,
+) -> bool:
+    """
+    Check for interfaces between all pairs of chains in the pose.
+    Given cutoffs for counts of interfacial residues and ratio of interfacial
+    between all pairs of chains, return True if the pose passes the cutoffs.
+    :param pose: Pose to check for interfaces.
+    :param int_count_cutoff: Minimum number of residues in all interfaces.
+    :param int_ratio_cutoff: Minimum ratio of counts between all interfaces.
+    :param pairs: List of pairs of chains to check for interfaces.
+    :return: True if the pose passes the cutoffs.
+    """
 
-    pose = pose.clone()
-    shifted_pose = pose.clone()
-    start = starts[pivot_helix]
-    end = ends[pivot_helix]
-    if full_helix:
-        # ensures there is at least a heptad aligned (prevents formation of states with no side domain contact)
-        if (i >= 0) and (end - start >= i + 7):
-            start_a = start
-            start_b = start + i
-            end_a = end - i
-            end_b = end
-        # ensures there is at least a heptad aligned (prevents formation of states with no side domain contact)
-        elif (i < 0) and (start - end <= i - 7):
-            start_a = start - i
-            start_b = start
-            end_a = end
-            end_b = end + i
-        else:
-            raise RuntimeError("insufficient overlap for alignment")
+    from itertools import combinations
+    import string
+    import pyrosetta
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        ChainSelector,
+        InterGroupInterfaceByVectorSelector,
+    )
+
+    # make a dict mapping of chain indices to chain letters
+    max_chains = list(string.ascii_uppercase)
+    index_to_letter_dict = dict(zip(range(1, len(max_chains) + 1), max_chains))
+    # use the dict to get the chain letters for each chain in the pose
+    pose_chains = [index_to_letter_dict[i] for i in range(1, pose.num_chains() + 1)]
+
+    if pairs is not None:
+        # if pairs are given, use those
+        chain_pairs = pairs
     else:
-        starts_tup = tuple(start for start in 4 * [start])
-        ends_tup = tuple(end for end in 4 * [end])
-        # make sure there's enough helix to align against going forwards
-        if (i >= 0) and ((start + 10 + i) <= end):
-            offsets = 3, 10, 3 + i, 10 + i
-            start_a, end_a, start_b, end_b = tuple(map(sum, zip(starts_tup, offsets)))
-        # make sure there's enough helix to align against going backwards
-        elif (i <= 0) and ((end - 10 + i) >= start):
-            offsets = -10, -3, -10 + i, -3 + i
-            start_a, end_a, start_b, end_b = tuple(map(sum, zip(ends_tup, offsets)))
+        # otherwise, use all combinations of chains
+        chain_pairs = list(combinations(pose_chains, 2))
+    # make a dict of all interface counts and check all counts
+    interface_counts = {}
+    for pair in chain_pairs:
+        interface_name = "".join(pair)
+        pair_a, pair_b = ChainSelector(pair[0]), ChainSelector(pair[1])
+        interface = InterGroupInterfaceByVectorSelector(pair_a, pair_b)
+        interface_count = sum(list(interface.apply(pose)))
+        if interface_count < int_count_cutoff:
+            return False
         else:
-            raise RuntimeError("insufficient overlap for alignment")
-    range_CA_align(shifted_pose, pose, start_a, end_a, start_b, end_b)
-    return shifted_pose
+            pass
+        interface_counts[interface_name] = interface_count
+    for count_pair in combinations(interface_counts.keys(), 2):
+        if (
+            interface_counts[count_pair[0]] / interface_counts[count_pair[1]]
+            < int_ratio_cutoff
+        ):
+            return False
+        else:
+            pass
+    return True
 
+def count_interface(pose: Pose, sel_a, sel_b) -> int:
+    """
+    Given a pose and two residue selectors, return the number of
+    residues in the interface between them.
+    TODO type hinting
+    TODO selector import
+    :param pose: Pose
+    :param sel_a: ResidueSelector
+    :param sel_b: ResidueSelector
+    :return: int
+    """
+
+    import pyrosetta
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        InterGroupInterfaceByVectorSelector
+    )
+
+    int_sel = InterGroupInterfaceByVectorSelector(
+        sel_a, sel_b
+    )
+    int_sel.nearby_atom_cut(3)
+    int_sel.vector_dist_cut(5)
+    int_sel.cb_dist_cut(7)
+    int_count = sum(list(int_sel.apply(pose)))
+    return int_count
+
+def measure_CA_dist(pose: Pose, resi_a: int, resi_b: int) -> float:
+    """
+    Given a pose and two residue indices, return the distance between the CA atoms of
+    two residues.
+    :param pose: Pose to measure CA distance in.
+    :param resi_a: Residue index of residue A.
+    :param resi_b: Residue index of residue B.
+    :return: Distance between CA atoms of residues A and B, in Angstroms.
+    """
+
+    resi_a_coords = pose.residue(resi_a).xyz("CA")
+    resi_b_coords = pose.residue(resi_b).xyz("CA")
+    dist = resi_a_coords.distance(resi_b_coords)
+    return dist
+
+
+class StateMaker(ABC):
+    """
+    This abstract class is used to derive classes that make states from an input Pose
+    or PackedPose.
+    TODO: imports?
+    TODO: docstring?
+    """
+
+    import pyrosetta.distributed.io as io
+
+    def __init__(self, pose: Union[PackedPose, Pose], pre_break_helix: int, **kwargs):
+
+        self.input_pose = pose
+        self.pre_break_helix = pre_break_helix
+        self.post_break_helix = self.pre_break_helix + 1
+        self.scores = dict(self.input_pose.scores)
+        self.starts = self.get_helix_endpoints(self.input_pose, n_terminal=True)
+        self.ends = self.get_helix_endpoints(self.input_pose, n_terminal=False)
+        if not "name" in kwargs:
+            self.original_name = self.input_pose.pdb_info().name()
+        else:
+            self.original_name = kwargs["name"]
+
+
+
+    @staticmethod
+    def get_helix_endpoints(pose: Pose, n_terminal: bool) -> dict:
+        """
+        Use dssp to get the endpoints of helices.
+        Make a dictionary of the start (n_terminal=True) or end residue indices of 
+        helices in the pose.
+        :param pose: Pose to get endpoints from.
+        :param n_terminal: If True, get the start residue indices of helices.
+        :return: Dictionary of start or end residue indices of helices in the pose.
+        """
+        import pyrosetta
+
+        ss = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
+        # first make a dictionary of all helical residues, indexed by helix number
+        helix_dict = {}
+        n = 1
+        for i in range(1, len(pose.sequence())):
+            if (ss.get_dssp_secstruct(i) == "H") & (
+                ss.get_dssp_secstruct(i - 1) != "H"
+            ):
+                helix_dict[n] = [i]
+            if (ss.get_dssp_secstruct(i) == "H") & (
+                ss.get_dssp_secstruct(i + 1) != "H"
+            ):
+                helix_dict[n].append(i)
+                n += 1
+
+        # now get the start and end residues of each helix from the helix_dict
+        helix_endpoints = {}
+        if n_terminal:
+            index = 0  # helix start residue
+        else:
+            index = -1  # helix end residue
+        for helix, residue_list in helix_dict.items():
+            helix_endpoints[helix] = residue_list[index]
+        return helix_endpoints
+
+
+    def shift_pose_by_i(
+        self,
+        pose: Pose,
+        i: int,
+        starts: dict,
+        ends: dict,
+        pivot_helix: int,
+        full_helix: bool = False,
+    ) -> Union[Pose, None]:
+        """
+        Shift a pose by i residues.
+        If full_helix is true, align along the entire helix, otherwise only align 10
+        residues. If i is positive, shift the pose forward, if negative, shift the pose
+        backward. Returns None if the shift alignment is not sufficient.
+        :param pose: Pose to shift.
+        :param i: Number of residues to shift by.
+        :param starts: Dictionary of start residue indices of helices in the pose.
+        :param ends: Dictionary of end residue indices of helices in the pose.
+        :param pivot_helix: Helix number to pivot the shift around.
+        :param full_helix: If True, align the entire helix. TODO
+        :return: Pose shifted by i residues.
+        """
+
+        pose = pose.clone()
+        shifted_pose = pose.clone()
+        start = starts[pivot_helix]
+        end = ends[pivot_helix]
+        if full_helix:
+            # ensures there is at least a heptad aligned
+            # prevents formation of states with no side domain contact
+            if (i >= 0) and (end - start >= i + 7):
+                start_a = start
+                start_b = start + i
+                end_a = end - i
+                end_b = end
+            elif (i < 0) and (start - end <= i - 7):
+                start_a = start - i
+                start_b = start
+                end_a = end
+                end_b = end + i
+            else:
+                return None
+        else:
+            starts_tup = tuple(start for start in 4 * [start])
+            ends_tup = tuple(end for end in 4 * [end])
+            # make sure there's enough helix to align against going forwards
+            if (i >= 0) and ((start + 10 + i) <= end):
+                offsets = 3, 10, 3 + i, 10 + i
+                start_a, end_a, start_b, end_b = tuple(
+                    map(sum, zip(starts_tup, offsets))
+                )
+            # make sure there's enough helix to align against going backwards
+            elif (i <= 0) and ((end - 10 + i) >= start):
+                offsets = -10, -3, -10 + i, -3 + i
+                start_a, end_a, start_b, end_b = tuple(map(sum, zip(ends_tup, offsets)))
+            else:
+                return None
+        range_CA_align(shifted_pose, pose, start_a, end_a, start_b, end_b)
+        return shifted_pose
+
+    @abstractmethod
+    def generate_states(self) -> None:
+        """
+        This function needs to be implemented by the child class of StateMaker.
+        """
+        pass
+
+
+class FreeStateMaker(StateMaker):
+    """
+    A class for generating free states, AKA shifty crispies.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        initialize the parent class then modify attributes with additional kwargs
+        """
+        super(FreeStateMaker, self).__init__(*args, **kwargs)
+        if "clash_cutoff" in kwargs:
+            self.clash_cutoff = kwargs["clash_cutoff"]
+        else:
+            self.clash_cutoff = 999999
+        if "int_count_cutoff" in kwargs:
+            self.int_count_cutoff = kwargs["int_count_cutoff"]
+        else:
+            self.int_count_cutoff = 11
+        if "int_ratio_cutoff" in kwargs:
+            self.int_ratio_cutoff = kwargs["int_ratio_cutoff"]
+        else:
+            self.int_ratio_cutoff = 0.000001
+
+        self.parent_length = len(self.input_pose.residues)
+
+    def generate_states(self) -> Iterator[PackedPose]:
+        """
+        Generate all free states that pass default or supplied cutoffs.
+        """
+
+        import pyrosetta
+        import pyrosetta.distributed.io as io
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
+
+        # setup the rechain mover
+        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        # we expect 2 chains in the resulting poses after states are generated
+        rechain.chain_order("12")
+        states = []
+        # scan 1 heptad forwards and backwards
+        for i in range(-7, 8):
+            # first do the pre break side, then do the post break side
+            for pivot_helix in [self.pre_break_helix, self.post_break_helix]:
+                shifted_pose = self.shift_pose_by_i(
+                    self.input_pose, i, self.starts, self.ends, pivot_helix, False
+                )
+                # handle situations where the shift is not possible
+                if shifted_pose is None:
+                    continue
+                else:
+                    pass
+                end_pose_a, start_pose_b = (
+                    self.ends[self.pre_break_helix],
+                    self.starts[self.post_break_helix],
+                )
+                # stitch the hinge pose together after alignment-based docking
+                # maintain the original position of the side that was not moved
+                if pivot_helix == self.pre_break_helix:
+                    combined_pose = combine_two_poses(
+                        self.input_pose, shifted_pose, end_pose_a, start_pose_b
+                    )
+                else:
+                    combined_pose = combine_two_poses(
+                        shifted_pose, self.input_pose, end_pose_a, start_pose_b
+                    )
+                # fix PDBInfo and chain numbering
+                rechain.apply(combined_pose)
+                # mini filtering block
+                bb_clash = clash_check(combined_pose)
+                # check if clash is too high
+                if bb_clash > self.clash_cutoff:
+                    continue
+                # check if interface residue counts are acceptable
+                elif not check_pairwise_interfaces(
+                    pose=combined_pose, 
+                    int_count_cutoff=self.int_count_cutoff, 
+                    int_ratio_cutoff=self.int_ratio_cutoff,
+                ):
+                    continue
+                else:
+                    pass
+                # set and update the scores of the combined pose
+                for key, value in self.scores.items():
+                    setPoseExtraScore(combined_pose, key, str(value))
+                setPoseExtraScore(combined_pose, "bb_clash", float(bb_clash))
+                setPoseExtraScore(combined_pose, "parent", self.original_name)
+                setPoseExtraScore(
+                    combined_pose, "parent_length", str(self.parent_length)
+                )
+                setPoseExtraScore(combined_pose, "pivot_helix", str(pivot_helix))
+                setPoseExtraScore(
+                    combined_pose, "pre_break_helix", str(self.pre_break_helix)
+                )
+                setPoseExtraScore(combined_pose, "shift", str(i))
+                setPoseExtraScore(
+                    combined_pose,
+                    "state",
+                    f"{self.original_name}_p_{str(pivot_helix)}_s_{str(i)}",
+                )
+                ppose = io.to_packed(combined_pose)
+                states.append(ppose)
+        # yield all packed poses that were generated 
+        for ppose in states:
+            yield ppose
+
+
+class BoundStateMaker(StateMaker):
+    """
+    A class for generating bound states, AKA canonical crispy shifties.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        initialize the parent class then modify attributes with additional kwargs
+        """
+        super(BoundStateMaker, self).__init__(*args, **kwargs)
+        if "clash_cutoff" in kwargs:
+            self.clash_cutoff = kwargs["clash_cutoff"]
+        else:
+            self.clash_cutoff = 999999
+        if "int_count_cutoff" in kwargs:
+            self.int_count_cutoff = kwargs["int_count_cutoff"]
+        else:
+            self.int_count_cutoff = 11
+        if "int_ratio_cutoff" in kwargs:
+            self.int_ratio_cutoff = kwargs["int_ratio_cutoff"]
+        else:
+            self.int_ratio_cutoff = 0.000001
+
+        self.parent_length = len(self.input_pose.residues)
+
+    def generate_states(self) -> Iterator[PackedPose]:
+        """
+        Generate all bound states that pass default or supplied cutoffs.
+        """
+
+        import pyrosetta
+        import pyrosetta.distributed.io as io
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
+
+        # setup the rechain mover
+        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        # we expect 3 chains in the resulting poses after states are generated
+        rechain.chain_order("123")
+        states = []
+        # scan 1 heptad forwards and backwards
+        for i in range(-7, 8):
+            # first do the pre break side, then do the post break side
+            for pivot_helix in [self.pre_break_helix, self.post_break_helix]:
+                shifted_pose = self.shift_pose_by_i(
+                    self.input_pose, i, self.starts, self.ends, pivot_helix, False
+                )
+                # handle situations where the shift is not possible
+                if shifted_pose is None:
+                    continue
+                else:
+                    pass
+                end_pose_a, start_pose_b = (
+                    self.ends[self.pre_break_helix],
+                    self.starts[self.post_break_helix],
+                )
+                # stitch the hinge pose together after alignment-based docking
+                # maintain the original position of the side that was not moved
+                if pivot_helix == self.pre_break_helix:
+                    combined_pose = combine_two_poses(
+                        self.input_pose, shifted_pose, end_pose_a, start_pose_b
+                    )
+                    # setup the order for docking helices into the combined pose
+                    docking_order = [shifted_pose, self.input_pose]
+                else:
+                    combined_pose = combine_two_poses(
+                        shifted_pose, self.input_pose, end_pose_a, start_pose_b
+                    )
+                    # setup the order for docking helices into the combined pose
+                    docking_order = [self.input_pose, shifted_pose]
+                # we want to dock the helices before and after the pivot helix
+                helices_to_dock = [pivot_helix-1, pivot_helix+1]
+                # dock the bound helix into the hinge pose
+                for hinge_pose, helix_to_dock in zip(docking_order, helices_to_dock):
+                    # reuse the combined pose as the docking target
+                    dock = combined_pose.clone()
+                    # add the first residue of the helix to dock to the target
+                    dock.append_residue_by_jump(
+                        hinge_pose.residue(self.starts[helix_to_dock]),
+                        dock.chain_end(1),
+                        "CA",
+                        "CA",
+                        1,
+                    )
+                    # add the rest of the residues of the helix to dock to the target
+                    for resid in range(
+                        self.starts[helix_to_dock]+1, self.ends[helix_to_dock]+1
+                    ):
+                        dock.append_residue_by_bond(hinge_pose.residue(resid))
+                
+                    # fix PDBInfo and chain numbering
+                    rechain.apply(dock)
+                    # mini filtering block
+                    bb_clash = clash_check(dock)
+                    # check if clash is too high
+                    if bb_clash > self.clash_cutoff:
+                        continue
+                    # check if interface residue counts are acceptable
+                    elif not check_pairwise_interfaces(
+                        pose=dock, 
+                        int_count_cutoff=self.int_count_cutoff, 
+                        int_ratio_cutoff=self.int_ratio_cutoff,
+                    ):
+                        continue
+                    else:
+                        pass
+                    # set and update the scores of the combined pose
+                    for key, value in self.scores.items():
+                        setPoseExtraScore(dock, key, str(value))
+                    setPoseExtraScore(dock, "bb_clash", float(bb_clash))
+                    setPoseExtraScore(dock, "docked_helix", str(helix_to_dock))
+                    setPoseExtraScore(dock, "parent", self.original_name)
+                    setPoseExtraScore(dock, "parent_length", str(self.parent_length))
+                    setPoseExtraScore(dock, "pivot_helix", str(pivot_helix))
+                    setPoseExtraScore(dock, "shift", str(i))
+                    setPoseExtraScore(
+                        dock,
+                        "state",
+                        f"{self.original_name}_p_{str(pivot_helix)}_s_{str(i)}_d_{helix_to_dock}",
+                    )
+                    ppose = io.to_packed(dock)
+                    states.append(ppose)
+        # yield all the packed poses that were generated
+        for ppose in states:
+            yield ppose
+
+
+# TODO need to make a general wrapper for the state maker classes instead of seperating them
+# TODO could use Union["free", "bound", ...]
 
 @requires_init
-def make_bound_states(
+def make_free_states(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
-) -> Generator[PackedPose, PackedPose, None]:
+) -> Iterator[PackedPose]:
     """
-    Generate alternative helix-bound states from the input PackedPose or pdb path.
-    This is done by splitting, superimposing and rotating one full heptad up and one
-    full heptad down for helices before and after the break, defined by the
-    pre_break_helix kwarg, then appending helices that either preceded or followed the
-    pre_break_helix in index.
+    Wrapper for distributing FreeStateMaker.
+    :param packed_pose_in: The input pose.
+    :param kwargs: The keyword arguments to pass to FreeStateMaker.
+    :return: An iterator of PackedPoses.
     """
     import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
-    from pyrosetta.rosetta.core.pose import Pose
-    from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -272,319 +615,42 @@ def make_bound_states(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-
-    if "clash_cutoff" in kwargs:
-        clash_cutoff = kwargs["clash_cutoff"]
-    else:
-        clash_cutoff = 999999
-    if "int_cutoff" in kwargs:
-        int_cutoff = kwargs["int_cutoff"]
-    else:
-        int_cutoff = 0.000001
-
-    rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-    rechain.chain_order("123")
     final_pposes = []
     for pose in poses:
-        scores = dict(pose.scores)
-        if not "name" in kwargs:
-            original_name = pose.pdb_info().name()
-        else:
-            original_name = kwargs["name"]
-        try:
-            pre_break_helix = kwargs["pre_break_helix"]
-        except KeyError:
-            raise RuntimeError("need to supply pre_break_helix")
-        parent_length = len(pose.residues)
-        starts = get_helix_endpoints(pose, n_terminal=True)
-        ends = get_helix_endpoints(pose, n_terminal=False)
-        states = []
-        post_break_helix = pre_break_helix + 1
-        # scan 1 heptad forwards and backwards
-        for i in range(-7, 8):
-            # first do the pre break side, then do the post break side
-            for pivot_helix in [pre_break_helix, post_break_helix]:
-                try:
-                    shifted_pose = shift_pose_by_i(
-                        pose, i, starts, ends, pivot_helix, False
-                    )
-                    end_pose_a, start_pose_b = (
-                        ends[pre_break_helix],
-                        starts[post_break_helix],
-                    )
-                    # stitch the pose together after alignment-based docking
-                    combined_pose = combine_two_poses(
-                        pose, shifted_pose, end_pose_a, start_pose_b
-                    )
-                    # add in the bound helix
-                    # reuse the poses from before
-                    pose_sequence = shifted_pose, pose
-                    helices_to_dock = (pivot_helix - 1, pivot_helix + 1)
-                    for p, docked_helix in enumerate(helices_to_dock):
-                        dock = combined_pose.clone()
-                        dock.append_residue_by_jump(
-                            pose_sequence[p].residue(starts[docked_helix]),
-                            dock.chain_end(1),
-                            "CA",
-                            "CA",
-                            1,
-                        )
-                        for resid in range(
-                            starts[docked_helix] + 1, ends[docked_helix] + 1
-                        ):
-                            dock.append_residue_by_bond(pose_sequence[p].residue(resid))
-
-                        setPoseExtraScore(dock, "docked_helix", str(docked_helix))
-
-                        rechain.apply(dock)
-                        # mini filtering block
-                        bb_clash = clash_check(dock)
-                        # check if clash is too high
-                        if bb_clash > clash_cutoff:
-                            continue
-                        # check if interface residue counts are acceptable
-                        elif not count_interface_check(dock, int_cutoff):
-                            continue
-                        else:
-                            pass
-                        for key, value in scores.items():
-                            setPoseExtraScore(dock, key, str(value))
-                        setPoseExtraScore(dock, "bb_clash", float(bb_clash))
-                        setPoseExtraScore(dock, "parent", original_name)
-                        setPoseExtraScore(dock, "parent_length", str(parent_length))
-                        setPoseExtraScore(dock, "pivot_helix", str(pivot_helix))
-                        setPoseExtraScore(dock, "pre_break_helix", str(pre_break_helix))
-                        setPoseExtraScore(dock, "shift", str(i))
-                        setPoseExtraScore(
-                            dock,
-                            "state",
-                            f"{original_name}_p_{str(pivot_helix)}_s_{str(i)}_d_{docked_helix}",
-                        )
-                        ppose = io.to_packed(dock)
-                        states.append(ppose)
-                # for cases where there isn't enough to align against
-                except:
-                    continue
-        final_pposes += states
-    for ppose in final_pposes:
-        yield ppose
-
+        # make a new FreeStateMaker for each pose
+        state_maker = FreeStateMaker(pose, **kwargs)
+        # generate states
+        for ppose in state_maker.generate_states():
+            yield ppose
 
 @requires_init
-def make_dimer_states(
+def make_bound_states(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
-) -> Generator[PackedPose, PackedPose, None]:
+) -> Iterator[PackedPose]:
     """
-    Generate alternative helix-bound states from the input PackedPose or pdb path.
-    This is done by splitting, superimposing and rotating one full heptad up and one
-    full heptad down for helices before and after the break, defined by the
-    pre_break_helix kwarg, then conbinatorially docking states rotated around opposite
-    helices to form dimer states.
+    Wrapper for distributing BoundStateMaker.
+    :param packed_pose_in: The input pose.
+    :param kwargs: The keyword arguments to pass to BoundStateMaker.
+    :return: An iterator of PackedPoses.
     """
-    from copy import deepcopy
-    import itertools
-    from time import time
     import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
-    from pyrosetta.rosetta.core.pose import Pose
-    from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
-    start_time = time()
-
-    def print_timestamp(print_str, end="\n", *args):
-        time_min = (time() - start_time) / 60
-        print(f"{time_min:.2f} min: {print_str}", end=end)
-        for arg in args:
-            print(arg)
-
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
-        pdb_path = "none"
     else:
-        pdb_path = kwargs["pdb_path"]
         poses = path_to_pose_or_ppose(
-            path=pdb_path, cluster_scores=True, pack_result=False
+            path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-
+    final_pposes = []
     for pose in poses:
-        scores = dict(pose.scores)
-        pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
-
-        if not "name" in kwargs:
-            original_name = pose.pdb_info().name()
-        else:
-            original_name = kwargs["name"]
-        print_timestamp(f"Generating states from {original_name}")
-
-        try:
-            pre_break_helix = kwargs["pre_break_helix"]
-        except KeyError:
-            raise RuntimeError("Need to supply pre_break_helix")
-        try:
-            bb_clash_cutoff = kwargs["bb_clash_cutoff"]
-        except KeyError:
-            raise RuntimeError("Need to supply bb_clash_cutoff")
-        try:
-            loop_dist_cutoff = kwargs["loop_dist_cutoff"]
-        except KeyError:
-            raise RuntimeError("Need to supply loop_dist_cutoff")
-        try:
-            dhr_int_frac_cutoff = kwargs["dhr_int_frac_cutoff"]
-        except KeyError:
-            raise RuntimeError("Need to supply dhr_int_frac_cutoff")
-
-        parent_length = len(pose.residues)
-        starts = get_helix_endpoints(pose, n_terminal=True)
-        ends = get_helix_endpoints(pose, n_terminal=False)
-        states_A = []
-        states_B = []
-        post_break_helix = pre_break_helix + 1
-        parent_loop_dist = measure_CA_dist(
-            pose, ends[pre_break_helix], starts[post_break_helix]
-        )
-        # print(parent_loop_dist)
-
-        sel_a = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector()
-        sel_a.set_index_range(1, ends[pre_break_helix])
-        sel_b = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector()
-        sel_b.set_index_range(starts[post_break_helix], parent_length)
-        dhr_int_count = count_interface(pose, sel_a, sel_b)
-        #     print(f"{dhr_int_count} residues in DHR interface")
-        # DHR interface fraction cutoff is the fraction of the DHR interface size that the side domains must make with the DHR
-        int_cutoff = dhr_int_count * dhr_int_frac_cutoff
-        # scan 1 heptad forwards and backwards
-        for i in range(-7, 8):
-            # first do the pre break side, then do the post break side
-            for pivot_helix, protomer, states in zip(
-                [pre_break_helix, post_break_helix], ["A", "B"], [states_A, states_B]
-            ):
-                for full_helix in [0, 1]:
-                    print_timestamp(
-                        f"Generating state {protomer} {i} {full_helix}...", end=""
-                    )
-                    try:
-                        shifted_pose = shift_pose_by_i(
-                            pose, i, starts, ends, pivot_helix, full_helix
-                        )
-                        end_pose_a, start_pose_b = (
-                            ends[pre_break_helix],
-                            starts[post_break_helix],
-                        )
-                        # Combines ensuring the domain containing the pivot helix remains aligned to the parent DHR
-                        if pivot_helix == pre_break_helix:
-                            combined_pose = combine_two_poses(
-                                pose, shifted_pose, end_pose_a, start_pose_b
-                            )
-                        else:
-                            combined_pose = combine_two_poses(
-                                shifted_pose, pose, end_pose_a, start_pose_b
-                            )
-                        loop_dist = measure_CA_dist(
-                            combined_pose,
-                            ends[pre_break_helix],
-                            ends[pre_break_helix] + 1,
-                        )
-                        # print(loop_dist)
-                        if abs(loop_dist - parent_loop_dist) > loop_dist_cutoff:
-                            print("failed due to difference in loop length.")
-                            continue
-                        bb_clash = clash_check(combined_pose)
-                        if bb_clash > bb_clash_cutoff:
-                            print("failed due to backbone clashes.")
-                            continue
-
-                        # Rebuild PDBInfo
-                        pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(combined_pose)
-                        combined_pose.pdb_info(pdb_info)
-                        combined_pose.pdb_info().name(
-                            f"{original_name}_{protomer}_{i}_{full_helix}"
-                        )
-
-                        # setPoseExtraScore(shift, f'state_{protomer}', f"{original_name}_{protomer}_{i}_{full_helix}")
-                        setPoseExtraScore(
-                            combined_pose, f"bb_clash_{protomer}", bb_clash
-                        )
-                        setPoseExtraScore(
-                            combined_pose, f"loop_dist_{protomer}", loop_dist
-                        )
-                        setPoseExtraScore(
-                            combined_pose, f"pivot_helix_{protomer}", pivot_helix
-                        )
-                        setPoseExtraScore(combined_pose, f"shift_{protomer}", i)
-                        print("success.")
-                        states.append(combined_pose)
-                    except RuntimeError as e:  # for cases where there isn't enough to align against
-                        print(f"failed due to {e}.")
-                        continue
-
-        an_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector("A")
-        ac_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector("B")
-        bn_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector("C")
-        bc_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector("D")
-        dhr_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(
-            an_sel, bc_sel
-        )
-        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-        rechain.chain_order("1234")
-
-        # Combine states from opposite pivots into dimers
-        for state_A, state_B in itertools.product(states_A, states_B):
-            combo_name = state_A.pdb_info().name() + "_" + state_B.pdb_info().name()
-            # combo_name = state_A.scores['state_A'] + '_' + state_B.scores['state_B']
-            print_timestamp(f"Generating state combination {combo_name}...", end="")
-
-            # copy required; each state_A is reused for every state_B
-            combined_state = deepcopy(state_A)
-            # append_pose_to_pose appends as a single chain
-            state_B_A, state_B_B = state_B.split_by_chain()
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                combined_state, state_B_A, True
-            )
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                combined_state, state_B_B, True
-            )
-
-            # Rebuild PDBInfo
-            pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(combined_state)
-            combined_state.pdb_info(pdb_info)
-            rechain.apply(combined_state)
-
-            bb_clash = clash_check(combined_state)
-            if bb_clash > bb_clash_cutoff:
-                print("failed due to backbone clashes.")
-                continue
-
-            # check if interface residue counts are acceptable
-            dhr_ac_int_count = count_interface(combined_state, ac_sel, dhr_sel)
-            # print(f"{dhr_ac_int_count} residues in AC DHR interface") # this print statement was generated by CoPilot- crazy!
-            dhr_bn_int_count = count_interface(combined_state, bn_sel, dhr_sel)
-            # print(f"{dhr_bn_int_count} residues in BN DHR interface")
-            if dhr_ac_int_count < int_cutoff or dhr_bn_int_count < int_cutoff:
-                print("failed due to insufficient interface.")
-                continue
-
-            combined_state.pdb_info().name(combo_name)
-            for key, value in scores.items():
-                setPoseExtraScore(combined_state, key, value)
-            setPoseExtraScore(combined_state, f"parent", original_name)
-            setPoseExtraScore(combined_state, f"parent_path", pdb_path)
-            setPoseExtraScore(combined_state, f"parent_length", parent_length)
-            setPoseExtraScore(combined_state, f"parent_loop_dist", parent_loop_dist)
-            setPoseExtraScore(combined_state, f"pre_break_helix", pre_break_helix)
-            setPoseExtraScore(combined_state, f"dhr_int_count", dhr_int_count)
-            for key, value in state_A.scores.items():
-                setPoseExtraScore(combined_state, key, value)
-            for key, value in state_B.scores.items():
-                setPoseExtraScore(combined_state, key, value)
-            setPoseExtraScore(combined_state, "bb_clash", bb_clash)
-            setPoseExtraScore(combined_state, "dhr_ac_int_count", dhr_ac_int_count)
-            setPoseExtraScore(combined_state, "dhr_bn_int_count", dhr_bn_int_count)
-
-            ppose = io.to_packed(combined_state)
-            print("success.")
+        # make a new BoundStateMaker for each pose
+        state_maker = BoundStateMaker(pose, **kwargs)
+        # generate states
+        for ppose in state_maker.generate_states():
             yield ppose

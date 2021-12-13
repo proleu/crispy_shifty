@@ -1,9 +1,10 @@
 unit tests?
 add submodules:
-	pymatcher?
-	pompd?
-	mpnn?
-	af2?
+	pymatcher? could just rewrite, probably wouldn't hurt
+	pompd? probably not
+	mpnn: Need to ensure that the code is private to the module and not accessible from outside.
+        Should work just fine as a git submodule.
+	af2: ask Nater tot if there are any special considerations
 
 
 how to do better than last round, chA:
@@ -14,8 +15,9 @@ don't over optimize on SAP
 how to do better than last round, chB:
 longer chB, all have 27 except 63 which had 21 (as opposed to 17-25)
 charges? + C term, - N term
-backside hydrophobics and aromatics may break coiled coil propensity, resurfacing to all polars sometimes seemed to cause issues (also sometimes fixed issues like in FF75)
-
+    check results of the chB order4
+backside hydrophobics and aromatics may break coiled coil propensity, resurfacing to all polars sometimes seemed to cause issues (also sometimes fixed issues like in FF75) 
+    check results of the chB order4
 
 
 crispy shifty TODOs
