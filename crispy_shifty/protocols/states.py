@@ -38,12 +38,8 @@ def range_CA_align(
 
     assert len(pose_a_residue_selection) == len(pose_b_residue_selection)
 
-    pose_a_coordinates = (
-        pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-    )
-    pose_b_coordinates = (
-        pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-    )
+    pose_a_coordinates = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    pose_b_coordinates = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
 
     for pose_a_residue_index, pose_b_residue_index in zip(
         pose_a_residue_selection, pose_b_residue_selection
@@ -67,6 +63,7 @@ def range_CA_align(
         pose_a, rotation_matrix, pose_a_center, pose_b_center
     )
     return
+
 
 def clash_check(pose: Pose) -> float:
     """
@@ -93,6 +90,7 @@ def clash_check(pose: Pose) -> float:
     score = sfxn(all_gly)
     return score
 
+
 def combine_two_poses(
     pose_a: Pose,
     pose_b: Pose,
@@ -102,7 +100,7 @@ def combine_two_poses(
     """
     Make a new pose, containing pose_a up to end_a, then pose_b starting from start_b
     Assumes pose_a has only one chain.
-    If you don't know why you are using this function then you should probably use the 
+    If you don't know why you are using this function then you should probably use the
     pyrosetta.rosetta.core.pose.append_pose_to_pose() method instead.
     :param pose_a: Pose 1
     :param pose_b: Pose 2
@@ -123,6 +121,7 @@ def combine_two_poses(
     for i in range(start_b + 1, length + 1):
         newpose.append_residue_by_bond(pose_b.residue(i))
     return newpose
+
 
 def check_pairwise_interfaces(
     pose: Pose,
@@ -183,6 +182,7 @@ def check_pairwise_interfaces(
             pass
     return True
 
+
 def count_interface(pose: Pose, sel_a, sel_b) -> int:
     """
     Given a pose and two residue selectors, return the number of
@@ -197,17 +197,16 @@ def count_interface(pose: Pose, sel_a, sel_b) -> int:
 
     import pyrosetta
     from pyrosetta.rosetta.core.select.residue_selector import (
-        InterGroupInterfaceByVectorSelector
+        InterGroupInterfaceByVectorSelector,
     )
 
-    int_sel = InterGroupInterfaceByVectorSelector(
-        sel_a, sel_b
-    )
+    int_sel = InterGroupInterfaceByVectorSelector(sel_a, sel_b)
     int_sel.nearby_atom_cut(3)
     int_sel.vector_dist_cut(5)
     int_sel.cb_dist_cut(7)
     int_count = sum(list(int_sel.apply(pose)))
     return int_count
+
 
 def measure_CA_dist(pose: Pose, resi_a: int, resi_b: int) -> float:
     """
@@ -248,13 +247,11 @@ class StateMaker(ABC):
         else:
             self.original_name = kwargs["name"]
 
-
-
     @staticmethod
     def get_helix_endpoints(pose: Pose, n_terminal: bool) -> dict:
         """
         Use dssp to get the endpoints of helices.
-        Make a dictionary of the start (n_terminal=True) or end residue indices of 
+        Make a dictionary of the start (n_terminal=True) or end residue indices of
         helices in the pose.
         :param pose: Pose to get endpoints from.
         :param n_terminal: If True, get the start residue indices of helices.
@@ -286,7 +283,6 @@ class StateMaker(ABC):
         for helix, residue_list in helix_dict.items():
             helix_endpoints[helix] = residue_list[index]
         return helix_endpoints
-
 
     def shift_pose_by_i(
         self,
@@ -430,8 +426,8 @@ class FreeStateMaker(StateMaker):
                     continue
                 # check if interface residue counts are acceptable
                 elif not check_pairwise_interfaces(
-                    pose=combined_pose, 
-                    int_count_cutoff=self.int_count_cutoff, 
+                    pose=combined_pose,
+                    int_count_cutoff=self.int_count_cutoff,
                     int_ratio_cutoff=self.int_ratio_cutoff,
                 ):
                     continue
@@ -457,7 +453,7 @@ class FreeStateMaker(StateMaker):
                 )
                 ppose = io.to_packed(combined_pose)
                 states.append(ppose)
-        # yield all packed poses that were generated 
+        # yield all packed poses that were generated
         for ppose in states:
             yield ppose
 
@@ -532,7 +528,7 @@ class BoundStateMaker(StateMaker):
                     # setup the order for docking helices into the combined pose
                     docking_order = [self.input_pose, shifted_pose]
                 # we want to dock the helices before and after the pivot helix
-                helices_to_dock = [pivot_helix-1, pivot_helix+1]
+                helices_to_dock = [pivot_helix - 1, pivot_helix + 1]
                 # dock the bound helix into the hinge pose
                 for hinge_pose, helix_to_dock in zip(docking_order, helices_to_dock):
                     # reuse the combined pose as the docking target
@@ -547,10 +543,10 @@ class BoundStateMaker(StateMaker):
                     )
                     # add the rest of the residues of the helix to dock to the target
                     for resid in range(
-                        self.starts[helix_to_dock]+1, self.ends[helix_to_dock]+1
+                        self.starts[helix_to_dock] + 1, self.ends[helix_to_dock] + 1
                     ):
                         dock.append_residue_by_bond(hinge_pose.residue(resid))
-                
+
                     # fix PDBInfo and chain numbering
                     rechain.apply(dock)
                     # mini filtering block
@@ -560,8 +556,8 @@ class BoundStateMaker(StateMaker):
                         continue
                     # check if interface residue counts are acceptable
                     elif not check_pairwise_interfaces(
-                        pose=dock, 
-                        int_count_cutoff=self.int_count_cutoff, 
+                        pose=dock,
+                        int_count_cutoff=self.int_count_cutoff,
                         int_ratio_cutoff=self.int_ratio_cutoff,
                     ):
                         continue
@@ -590,6 +586,7 @@ class BoundStateMaker(StateMaker):
 
 # TODO need to make a general wrapper for the state maker classes instead of seperating them
 # TODO could use Union["free", "bound", ...]
+
 
 @requires_init
 def make_free_states(
@@ -622,6 +619,7 @@ def make_free_states(
         # generate states
         for ppose in state_maker.generate_states():
             yield ppose
+
 
 @requires_init
 def make_bound_states(

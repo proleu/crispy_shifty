@@ -1,17 +1,20 @@
 # Python standard library
 from typing import Iterator, Union
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
+
 # Custom library imports
+
 
 @requires_init
 def path_to_pose_or_ppose(
-    path = "", 
-    cluster_scores: Optional[bool] = False, 
-    pack_result: Optional[bool] = False, 
+    path="",
+    cluster_scores: Optional[bool] = False,
+    pack_result: Optional[bool] = False,
 ) -> Iterator[Union[PackedPose, Pose]]:
     """
     :param path: Path to pdb or silent file
@@ -57,7 +60,7 @@ def path_to_pose_or_ppose(
 
 @requires_init
 def remove_terminal_loops(
-    packed_pose_in:Optional[PackedPose] = None, **kwargs
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
     :param packed_pose_in: PackedPose to remove terminal loops from.
@@ -95,12 +98,14 @@ def remove_terminal_loops(
         # get leading loop from ss
         if dssp[0] == "H":  # in case no leading loop is detected
             pass
-        elif dssp[0:2] == "LH": # leave it alone if it has a short terminal loop
+        elif dssp[0:2] == "LH":  # leave it alone if it has a short terminal loop
             pass
         else:  # get beginning index of first occurrence of LH in dssp
-            rosetta_idx_n_term  = str(dssp.find("LH")+1)
+            rosetta_idx_n_term = str(dssp.find("LH") + 1)
             # setup trimming mover
-            trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
+            trimmer = (
+                pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
+            )
             trimmer.region(str(trimmed_pose.chain_begin(1)), rosetta_idx_n_term)
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
@@ -113,9 +118,11 @@ def remove_terminal_loops(
         elif dssp[-2:] == "HL":
             pass
         else:  # get ending index of last occurrence of HL in dssp
-            rosetta_idx_c_term = str(dssp.rfind("HL")+2)
+            rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
             # setup trimming mover
-            trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
+            trimmer = (
+                pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
+            )
             trimmer.start("1")
             trimmer.end(rosetta_idx_c_term)
             trimmer.apply(trimmed_pose)
@@ -133,14 +140,14 @@ def remove_terminal_loops(
     for ppose in final_pposes:
         yield ppose
 
-def break_all_disulfides(pose:Pose) -> Pose:
+
+def break_all_disulfides(pose: Pose) -> Pose:
     """
     :param pose: Pose to break disulfides in
     :return: Pose with all disulfides broken
     Quickly break all disulfides in a pose
     """
     import pyrosetta
-
 
     seq = pose.sequence()
     all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
@@ -156,8 +163,9 @@ def break_all_disulfides(pose:Pose) -> Pose:
                 pass
     return pose
 
+
 def redesign_disulfides(
-    packed_pose_in:Optional[PackedPose] = None, **kwargs
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
     :param packed_pose_in: PackedPose object.
@@ -178,7 +186,10 @@ def redesign_disulfides(
     import sys
 
     sys.path.insert(0, "/mnt/projects/crispy_shifty")
-    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose, break_all_disulfides
+    from crispy_shifty.protocols.cleaning import (
+        path_to_pose_or_ppose,
+        break_all_disulfides,
+    )
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
