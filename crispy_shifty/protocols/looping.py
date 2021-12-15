@@ -410,7 +410,7 @@ def loop_hinges(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
 
-    all_chains_to_loop = [[int(chain) for chain in chains.split(',')] for chains in kwargs["chains_to_loop"].split(";")]
+    all_chains_to_loop = [[int(chain) for chain in chains.split(',')] for chains in kwargs["chains_to_loop"].split("/")]
 
     for pose in poses:
         scores = dict(pose.scores)
