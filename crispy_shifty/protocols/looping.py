@@ -228,23 +228,178 @@ def loop_remodel(
     return closure_type
 
 
+def loop_complex(pose: Pose, all_chains_to_loop: list, all_loop_lengths: list):
+
+    from time import time
+    import sys
+    import pyrosetta
+
+    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
+    from crispy_shifty.utils.io import print_timestamp
+    from crispy_shifty.protocols.design import gen_std_layer_design, gen_task_factory, packrotamers, struct_profile, clear_constraints, score_wnm, score_ss_sc
+
+    start_time = time()
+
+    # all_chains_to_loop = [[int(chain) for chain in chains.split(',')] for chains in kwargs["chains_to_loop"].split(";")]
+    # all_loop_lengths = [[int(length) for length in lengths.split(',')] for lengths in kwargs["loop_lengths"].split(";")]
+
+    # For convenience, the all_chains_to_loop function argument only includes the chains to loop.
+    # Add in all the other chains that aren't being looped.
+    chain_loop_configuration = [([i], None) for i in range(1,all_chains_to_loop[0][0])]
+    for i in range(len(all_chains_to_loop)-1):
+        chain_loop_configuration.append((all_chains_to_loop[i], all_loop_lengths[i]))
+        for j in range(all_chains_to_loop[i][-1]+1, all_chains_to_loop[i+1][0]):
+            chain_loop_configuration.append(([j], None))
+    chain_loop_configuration.append((all_chains_to_loop[-1], all_loop_lengths[-1]))
+    for j in range(all_chains_to_loop[-1][-1]+1, pose.num_chains()+1):
+        chain_loop_configuration.append(([j], None))
+
+    # careful- all_chains is still 1-indexed, so the chains_to_loop kwarg is 1-indexed also
+    all_chains = pose.split_by_chain()
+
+    looped_poses = []
+    closure_type = 'not_closed'
+    for chains_to_loop, loop_lengths in chain_loop_configuration:
+        looped_pose = all_chains[chains_to_loop[0]]
+
+        if len(chains_to_loop) >= 2:
+            new_loop_strs = []
+            for unlooped_chain, loop_length in zip(chains_to_loop[1:], loop_lengths):
+                loop_start = int(looped_pose.size()) + 1
+                pyrosetta.rosetta.core.pose.append_pose_to_pose(looped_pose, all_chains[unlooped_chain], True)
+                # Rebuild PDBInfo for ConnectChainsMover
+                pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(looped_pose)
+                looped_pose.pdb_info(pdb_info)
+
+                print_timestamp("Attempting closure by loop match...", start_time, end="")
+                closure_type = loop_match(looped_pose, loop_length)
+                # closure by loop matching was successful, move on to the next set to close or continue to scoring
+                # should I use an additional check like 'pose_to_loop.num_chains() == 1' to determine if the pose is closed?
+                if closure_type != 'not_closed':
+                    print('success.')
+                else:
+                    print('failed.')
+
+                    print_timestamp("Attempting closure by loop remodel...", start_time, end="")
+                    closure_type = loop_remodel(looped_pose, loop_length, 10, 1, 1, True)
+                    if closure_type != 'not_closed':
+                        print('success.')
+                    else:
+                        print('failed. Exiting.')
+                        # couldn't close this pair; stop trying with the whole set
+                        break
+
+                # is this naive? Phil did something more complicated with residue selectors, looking at the valines.
+                # Wondering if I'm missing some edge cases for which this approach doesn't work.
+                new_loop_strs.append(",".join(str(resi) for resi in range(loop_start, loop_start + loop_length)))
+
+            if closure_type == 'not_closed':
+                # couldn't close this set; stop trying with the all the sets
+                break
+
+            new_loop_str = ",".join(new_loop_strs)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                looped_pose, "new_loop_resis", new_loop_str
+            )
+
+        looped_poses.append(looped_pose)
+
+    # if we couldn't close one of the sets in this complex, continue to the next pose and skip scoring and yielding the pose (so nothing is written to disk)
+    if closure_type == 'not_closed':
+        return
+
+    # The code will only reach here if all loops are closed.
+    # Loop closure is fast but has a somewhat high failure rate, so more efficient to first see if all loops can be closed, 
+    # and only design and score if so.
+    # First combine all the looped poses into one pose, then design the new loop residues. This ensures the new loop
+    # residues are designed in the context of the rest of the pose.
+    # looped_poses contains single chains of the unlooped chains, and the looped chains.
+
+    # combine all the looped poses into one pose
+    print_timestamp("Collecting poses...", start_time, end="")
+    combined_looped_pose = pyrosetta.rosetta.core.pose.Pose()
+    new_loop_strs = []
+    loop_scores = {}
+    for i, looped_pose in enumerate(looped_poses):
+        chain_id = str(i + 1)
+        for key, value in looped_pose.scores.items():
+            loop_scores[key + '_' + chain_id] = value
+        pose_end = combined_looped_pose.size()
+        if 'new_loop_resis' in looped_pose.scores:
+            new_loop_resis = [int(i) + pose_end for i in looped_pose.scores['new_loop_resis'].split(',')]
+            new_loop_strs.append(','.join([str(i) for i in new_loop_resis]))
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(combined_looped_pose, looped_pose, True)
+    new_loop_str = ','.join(new_loop_strs)
+    # Rebuild PDBInfo
+    pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(combined_looped_pose)
+    combined_looped_pose.pdb_info(pdb_info)
+    # Add scores from looping
+    for key, value in loop_scores.items():
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, key, value)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, 'new_loop_resis', new_loop_str)
+    print('complete.')
+    print(new_loop_str)
+    
+    print_timestamp("Designing loops...", start_time, end="")
+    layer_design = gen_std_layer_design()
+    design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    design_sfxn.set_weight(
+        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
+    )
+
+    new_loop_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(new_loop_str)
+    design_sel = pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(new_loop_sel, 6, True)
+    task_factory = gen_task_factory(
+        design_sel=design_sel,
+        pack_nbhd=True,
+        extra_rotamers_level=2,
+        limit_arochi=True,
+        prune_buns=True,
+        upweight_ppi=False,
+        restrict_pro_gly=False,
+        precompute_ig=True,
+        ifcl=True,
+        layer_design=layer_design,
+    )
+    struct_profile(combined_looped_pose, design_sel) # Phil's code used eliminate_background=False...
+    packrotamers(combined_looped_pose, task_factory, design_sfxn)
+    clear_constraints(combined_looped_pose)
+    print('complete.')
+    
+    # Score the packed loops
+    print_timestamp("Scoring...", start_time, end="")
+    for i, looped_pose in enumerate(combined_looped_pose.split_by_chain()):
+        chain_id = str(i + 1)
+        total_length = len(looped_pose.residues)
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "total_length_" + chain_id, total_length)
+        dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(looped_pose)
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "dssp_" + chain_id, dssp)
+        tors = get_torsions(looped_pose)
+        abego_str = abego_string(tors)
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "abego_str_" + chain_id, abego_str)
+
+        # should be fast since the database is already loaded from CCM/SPM
+        wnm = score_wnm(looped_pose)
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "wnm_" + chain_id, wnm)
+        ss_sc = score_ss_sc(looped_pose, False, True, 'loop_sc')
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "ss_sc_" + chain_id, ss_sc)
+    print('complete.')
+
+    return combined_looped_pose
+
+
 @requires_init
-def loop_complex(
+def loop_hinges(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Generator[PackedPose, PackedPose, None]:
 
-    from time import time
     import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
 
     sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.utils.io import print_timestamp
-    from crispy_shifty.protocols.design import gen_std_layer_design, gen_task_factory, packrotamers, struct_profile, clear_constraints, score_wnm, score_ss_sc
-
-    start_time = time()
-
+    
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
@@ -254,163 +409,25 @@ def loop_complex(
         poses = path_to_pose_or_ppose(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
+
     all_chains_to_loop = [[int(chain) for chain in chains.split(',')] for chains in kwargs["chains_to_loop"].split(";")]
-    all_loop_lengths = [[int(length) for length in lengths.split(',')] for lengths in kwargs["loop_lengths"].split(";")]
 
     for pose in poses:
         scores = dict(pose.scores)
         pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
-        # get parent length from the score
-        # parent_length = int(float(scores["parent_length"]))
 
-        # For convenience, the all_chains_to_loop function argument only includes the chains to loop.
-        # Add in all the other chains that aren't being looped.
-        chain_loop_configuration = [([i], None) for i in range(1,all_chains_to_loop[0][0])]
-        for i in range(len(all_chains_to_loop)-1):
-            chain_loop_configuration.append((all_chains_to_loop[i], all_loop_lengths[i]))
-            for j in range(all_chains_to_loop[i][-1]+1, all_chains_to_loop[i+1][0]):
-                chain_loop_configuration.append(([j], None))
-        chain_loop_configuration.append((all_chains_to_loop[-1], all_loop_lengths[-1]))
-        for j in range(all_chains_to_loop[-1][-1]+1, pose.num_chains()+1):
-            chain_loop_configuration.append(([j], None))
+        parent_length = int(float(scores["parent_length"]))
+        loop_length = int(parent_length - pose.chain_end(2))
 
-        # careful- all_chains is still 1-indexed, so the chains_to_loop kwarg is 1-indexed also
-        all_chains = pose.split_by_chain()
+        looped_pose = loop_complex(pose, all_chains_to_loop, [[loop_length] for _ in range(len(all_chains_to_loop))])
 
-        looped_poses = []
-        closure_type = 'not_closed'
-        for chains_to_loop, loop_lengths in chain_loop_configuration:
-            looped_pose = all_chains[chains_to_loop[0]]
+        if looped_pose is not None:
+            # Add old scores back into the pose
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(looped_pose, key, value)
 
-            if len(chains_to_loop) >= 2:
-                new_loop_strs = []
-                for unlooped_chain, loop_length in zip(chains_to_loop[1:], loop_lengths):
-                    loop_start = int(looped_pose.size()) + 1
-                    pyrosetta.rosetta.core.pose.append_pose_to_pose(looped_pose, all_chains[unlooped_chain], True)
-                    # Rebuild PDBInfo for ConnectChainsMover
-                    pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(looped_pose)
-                    looped_pose.pdb_info(pdb_info)
-
-                    print_timestamp("Attempting closure by loop match...", start_time, end="")
-                    closure_type = loop_match(looped_pose, loop_length)
-                    # closure by loop matching was successful, move on to the next set to close or continue to scoring
-                    # should I use an additional check like 'pose_to_loop.num_chains() == 1' to determine if the pose is closed?
-                    if closure_type != 'not_closed':
-                        print('success.')
-                    else:
-                        print('failed.')
-
-                        print_timestamp("Attempting closure by loop remodel...", start_time, end="")
-                        closure_type = loop_remodel(looped_pose, loop_length, 10, 1, 1, True)
-                        if closure_type != 'not_closed':
-                            print('success.')
-                        else:
-                            print('failed. Exiting.')
-                            # couldn't close this pair; stop trying with the whole set
-                            break
-
-                    # is this naive? Phil did something more complicated with residue selectors, looking at the valines.
-                    # Wondering if I'm missing some edge cases for which this approach doesn't work.
-                    new_loop_strs.append(",".join(str(resi) for resi in range(loop_start, loop_start + loop_length)))
-
-                if closure_type == 'not_closed':
-                    # couldn't close this set; stop trying with the all the sets
-                    break
-
-                new_loop_str = ",".join(new_loop_strs)
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                    looped_pose, "new_loop_resis", new_loop_str
-                )
-
-            looped_poses.append(looped_pose)
-
-        # if we couldn't close one of the sets in this complex, continue to the next pose and skip scoring and yielding the pose (so nothing is written to disk)
-        if closure_type == 'not_closed':
-            continue
-
-        # The code will only reach here if all loops are closed.
-        # Loop closure is fast but has a somewhat high failure rate, so more efficient to first see if all loops can be closed, 
-        # and only design and score if so.
-        # First combine all the looped poses into one pose, then design the new loop residues. This ensures the new loop
-        # residues are designed in the context of the rest of the pose.
-        # looped_poses contains single chains of the unlooped chains, and the looped chains.
-
-        # combine all the looped poses into one pose
-        print_timestamp("Collecting poses...", start_time, end="")
-        combined_looped_pose = pyrosetta.rosetta.core.pose.Pose()
-        new_loop_strs = []
-        loop_scores = {}
-        for i, looped_pose in enumerate(looped_poses):
-            chain_id = str(i + 1)
-            for key, value in looped_pose.scores.items():
-                loop_scores[key + '_' + chain_id] = value
-            pose_end = combined_looped_pose.size()
-            if 'new_loop_resis' in looped_pose.scores:
-                new_loop_resis = [int(i) + pose_end for i in looped_pose.scores['new_loop_resis'].split(',')]
-                new_loop_strs.append(','.join([str(i) for i in new_loop_resis]))
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(combined_looped_pose, looped_pose, True)
-        new_loop_str = ','.join(new_loop_strs)
-        # Rebuild PDBInfo
-        pdb_info = pyrosetta.rosetta.core.pose.PDBInfo(combined_looped_pose)
-        combined_looped_pose.pdb_info(pdb_info)
-        # Add scores from looping
-        for key, value in loop_scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, key, value)
-        pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, 'new_loop_resis', new_loop_str)
-        print('complete.')
-        print(new_loop_str)
-        
-        print_timestamp("Designing loops...", start_time, end="")
-        layer_design = gen_std_layer_design()
-        design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
-        design_sfxn.set_weight(
-            pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
-        )
-
-        new_loop_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(new_loop_str)
-        design_sel = pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(new_loop_sel, 6, True)
-        task_factory = gen_task_factory(
-            design_sel=design_sel,
-            pack_nbhd=True,
-            extra_rotamers_level=2,
-            limit_arochi=True,
-            prune_buns=True,
-            upweight_ppi=False,
-            restrict_pro_gly=False,
-            precompute_ig=True,
-            ifcl=True,
-            layer_design=layer_design,
-        )
-        struct_profile(combined_looped_pose, design_sel) # Phil's code used eliminate_background=False...
-        packrotamers(combined_looped_pose, task_factory, design_sfxn)
-        clear_constraints(combined_looped_pose)
-        print('complete.')
-        
-        # Score the packed loops
-        print_timestamp("Scoring...", start_time, end="")
-        for i, looped_pose in enumerate(combined_looped_pose.split_by_chain()):
-            chain_id = str(i + 1)
-            total_length = len(looped_pose.residues)
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "total_length_" + chain_id, total_length)
-            dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(looped_pose)
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "dssp_" + chain_id, dssp)
-            tors = get_torsions(looped_pose)
-            abego_str = abego_string(tors)
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "abego_str_" + chain_id, abego_str)
-
-            # should be fast since the database is already loaded from CCM/SPM
-            wnm = score_wnm(looped_pose)
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "wnm_" + chain_id, wnm)
-            ss_sc = score_ss_sc(looped_pose, False, True, 'loop_sc')
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, "ss_sc_" + chain_id, ss_sc)
-        print('complete.')
-
-        # Add any old scores back into the pose
-        for key, value in scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(combined_looped_pose, key, value)
-
-        ppose = io.to_packed(combined_looped_pose)
-        yield ppose
+            ppose = io.to_packed(looped_pose)
+            yield ppose
 
 
 # Old, pre-generalization to arbitrary chain configurations
