@@ -426,20 +426,12 @@ def gen_array_tasks(
     from more_itertools import ichunked
 
     os.makedirs(output_path, exist_ok=True)
-
-    # def create_tasks(design_list_file, options):
-    #     with open(design_list_file, "r") as f:
-    #         for line in f:
-    #             tasks = {"-options": "corrections::beta_nov16 true"} # no dash in from of corrections- this is not a typo
-    #             tasks["-extra_options"] = options
-    #             tasks["-pdb_path"] = line.rstrip()
-    #             yield tasks
     
     def create_tasks(design_list_file, options, nstruct_per_task):
         with open(design_list_file, "r") as f:
             # returns an iteratable with nstruct_per_task elements: lines of design_list_file
             for lines in ichunked(f, nstruct_per_task):
-                tasks = {"-options": "corrections::beta_nov16 true"} # no dash in from of corrections- this is not a typo
+                tasks = {"-options": "corrections::beta_nov16 true"} # no dash in front of corrections- this is not a typo
                 tasks["-extra_options"] = options
                  # join the lines of design_list_file with spaces, removing trailing newlines
                 tasks["-pdb_path"] = ' '.join(line.rstrip() for line in lines)
@@ -529,3 +521,86 @@ def test_func(
 
         ppose = io.to_packed(pose)
         yield ppose
+
+
+
+# An interesting thought- this might work if I get annoyed with or limited by the current structure
+# For example, this would allow me to define my own create_tasks function
+# If I wanted different extra_kwargs for different tasks, I could the design_list_file into a dataframe, compute the extra_kwargs
+# for each design, sort on the extra kwargs, then bin the ones with the same extra_kwargs into different tasks
+# def create_chunked_tasks(
+#     design_list_file: str,
+#     options: str = '', 
+#     nstruct_per_task: int = 1,
+#     extra_kwargs: dict = {} # kwargs to pass to crispy_shifty_func. keys and values must be strings containing no spaces
+#     ):
+#     from more_itertools import ichunked
+#     extra_kwargs_str = " ".join([" ".join([k, str(v)]) for k, v in extra_kwargs.items()])
+#     with open(design_list_file, "r") as f:
+#         # returns an iteratable with nstruct_per_task elements: lines of design_list_file
+#         for lines in ichunked(f, nstruct_per_task):
+#             tasks = {"-options": "corrections::beta_nov16 true"} # no dash in front of corrections- this is not a typo
+#             tasks["-extra_options"] = options
+#                 # join the lines of design_list_file with spaces, removing trailing newlines
+#             tasks["-pdb_path"] = ' '.join(line.rstrip() for line in lines)
+#             tasks["-extra_kwargs"] = extra_kwargs_str
+#             yield tasks
+    
+# def gen_array_tasks(
+#     distribute_func: str, 
+#     create_tasks_func,
+#     create_tasks_args: dict, 
+#     output_path: str, 
+#     queue: str, 
+#     memory: str = '4G', 
+#     nstruct: int = 1,
+#     simulation_name: str = 'crispy_shifty',
+#     ):
+#     import os, stat
+
+#     os.makedirs(output_path, exist_ok=True)
+
+#     jid = "{SLURM_JOB_ID%;*}"
+#     sid = "{SLURM_ARRAY_TASK_ID}p"
+
+#     slurm_dir = os.path.join(output_path, 'slurm_logs')
+#     os.makedirs(slurm_dir, exist_ok=True)
+
+#     tasklist = os.path.join(output_path, 'tasks.cmds')
+#     # run_sh = """#!/usr/bin/env bash \n#SBATCH -J crispy_shifty \n#SBATCH -e {slurm_dir}/crispy_shifty-%J.err \n#SBATCH -o {slurm_dir}/crispy_shifty-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${c}" | bash""".format(
+#     #     slurm_dir=slurm_dir, queue=queue, memory=memory, jid=jid, sid=sid, tasklist=tasklist, c="{CMD}"
+#     # )
+#     run_sh = f"""#!/usr/bin/env bash \n#SBATCH -J {simulation_name} \n#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${{CMD}}" | bash"""
+#     run_sh_file = os.path.join(output_path, 'run.sh')
+#     with open(run_sh_file, "w+") as f:
+#         print(run_sh, file=f)
+#     st = os.stat(run_sh_file)
+#     os.chmod(run_sh_file, st.st_mode | stat.S_IEXEC)
+
+#     func_split = distribute_func.split('.')
+#     func_name = func_split[-1]
+#     run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/home/broerman/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
+#     run_py_file = os.path.join(output_path, 'run.py')
+#     with open(run_py_file, "w+") as f:
+#         print(run_py, file=f)
+#     st = os.stat(run_py_file)
+#     os.chmod(run_py_file, st.st_mode | stat.S_IEXEC)
+    
+#     instance_dict = {'output_path': output_path,
+#                      'simulation_name': simulation_name
+#                      }
+
+#     instance_str = "-instance " + " ".join([" ".join([k, str(v)]) for k, v in instance_dict.items()])
+#     # extra_kwargs_str = "-extra_kwargs " + " ".join([" ".join([k, str(v)]) for k, v in extra_kwargs.items()])
+
+#     with open(tasklist, "w+") as f:
+#         for i in range(0, nstruct):
+#             for tasks in create_tasks_func(*create_tasks_args):
+#                 task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
+#                 # cmd = f"{run_py_file} {task_str} {extra_kwargs_str} {instance_str}"
+#                 cmd = f"{run_py_file} {task_str} {instance_str}"
+#                 print(cmd, file=f)
+
+#     # Let's go
+#     print("Run the following command with your desired environment active:")
+#     print(f"sbatch -a 1-$(cat {tasklist} | wc -l) {run_sh_file}")
