@@ -1,5 +1,5 @@
 # Python standard library
-from typing import *  # TODO explicit imports
+from typing import Iterator, Optional, Union  # TODO explicit imports
 
 # 3rd party library imports
 # Rosetta library imports
@@ -32,7 +32,7 @@ def add_metadata_to_pose(
 
 def interface_between_selectors(
     sel_1: ResidueSelector, sel_2: ResidueSelector, vector_mode: bool = False
-):
+) -> ResidueSelector:
     """
     Returns a selector that selects the interface between two selectors.
     """
@@ -58,7 +58,9 @@ def interface_between_selectors(
         return AndResidueSelector(sel_1_nbhd, sel_2_nbhd)
 
 
-def interface_among_chains(chain_list: list, vector_mode: bool = False):
+def interface_among_chains(
+    chain_list: list, vector_mode: bool = False
+) -> ResidueSelector:
     """
     Returns a selector that selects the interface between the given chains of a pose.
     """
@@ -78,7 +80,7 @@ def interface_among_chains(chain_list: list, vector_mode: bool = False):
     return int_sel
 
 
-def gen_std_layer_design(layer_aas_list: list = None):
+def gen_std_layer_design(layer_aas_list: list = None) -> dict:
     from itertools import product
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
@@ -191,7 +193,7 @@ def gen_task_factory(
     restrict_pro_gly: bool = False,
     ifcl: bool = False,
     layer_design: dict = None,
-):
+) -> TaskFactory:
     import pyrosetta
     from pyrosetta.rosetta.core.pack.task.operation import (
         OperateOnResidueSubset,
@@ -292,7 +294,7 @@ def gen_movemap(
     bb: bool = False,
     nu: bool = False,
     branch: bool = False,
-):
+) -> MoveMap:
     import pyrosetta
 
     movemap = pyrosetta.rosetta.core.kinematics.MoveMap()
@@ -310,7 +312,7 @@ def fastdesign(
     scorefxn: ScoreFunction,
     movemap: MoveMap,
     repeats: int = 1,
-):
+) -> None:
     """
     Runs FastDesign with the given task factory and score function.
     """
@@ -334,9 +336,12 @@ def fastdesign(
     fdes_mover.set_scorefxn(scorefxn)
     fdes_mover.set_movemap(movemap)
     fdes_mover.apply(pose)
+    return
 
 
-def packrotamers(pose: Pose, task_factory: TaskFactory, scorefxn: ScoreFunction):
+def packrotamers(
+    pose: Pose, task_factory: TaskFactory, scorefxn: ScoreFunction
+) -> None:
     """
     Runs PackRotamers with the given task factory and score function.
     """
@@ -348,7 +353,7 @@ def packrotamers(pose: Pose, task_factory: TaskFactory, scorefxn: ScoreFunction)
     pack_mover.apply(pose)
 
 
-def struct_profile(pose: Pose, design_sel: ResidueSelector):
+def struct_profile(pose: Pose, design_sel: ResidueSelector) -> None:
     import pyrosetta
 
     # used the defaults from rosettascripts, only changing things changed in the original one-state xml
@@ -375,7 +380,7 @@ def struct_profile(pose: Pose, design_sel: ResidueSelector):
     sp_mover.apply(pose)
 
 
-def clear_constraints(pose: Pose):
+def clear_constraints(pose: Pose) -> None:
     """
     Removes all constraints from the pose.
     """
@@ -601,7 +606,7 @@ def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist"):
 @requires_init
 def one_state_design_unlooped_dimer(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
-) -> Generator[PackedPose, PackedPose, None]:
+) -> Iterator[PackedPose]:
 
     from time import time
     import sys

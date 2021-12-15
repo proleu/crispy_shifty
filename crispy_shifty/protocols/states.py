@@ -7,6 +7,9 @@ from typing import Iterator, List, Optional, Union
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
+from pyrosetta.rosetta.core.select.residue_selector import (
+    ResidueSelector
+)
 
 # Custom library imports
 
@@ -183,12 +186,10 @@ def check_pairwise_interfaces(
     return True
 
 
-def count_interface(pose: Pose, sel_a, sel_b) -> int:
+def count_interface(pose: Pose, sel_a: ResidueSelector, sel_b: ResidueSelector) -> int:
     """
     Given a pose and two residue selectors, return the number of
     residues in the interface between them.
-    TODO type hinting
-    TODO selector import
     :param pose: Pose
     :param sel_a: ResidueSelector
     :param sel_b: ResidueSelector
@@ -228,13 +229,14 @@ class StateMaker(ABC):
     """
     This abstract class is used to derive classes that make states from an input Pose
     or PackedPose.
-    TODO: imports?
-    TODO: docstring?
     """
 
     import pyrosetta.distributed.io as io
 
     def __init__(self, pose: Union[PackedPose, Pose], pre_break_helix: int, **kwargs):
+        """
+        Initialize the base class with common attributes.
+        """
 
         self.input_pose = pose
         self.pre_break_helix = pre_break_helix
@@ -303,7 +305,7 @@ class StateMaker(ABC):
         :param starts: Dictionary of start residue indices of helices in the pose.
         :param ends: Dictionary of end residue indices of helices in the pose.
         :param pivot_helix: Helix number to pivot the shift around.
-        :param full_helix: If True, align the entire helix. TODO
+        :param full_helix: If True, align the entire helix. 
         :return: Pose shifted by i residues.
         """
 
@@ -359,7 +361,7 @@ class FreeStateMaker(StateMaker):
 
     def __init__(self, *args, **kwargs):
         """
-        initialize the parent class then modify attributes with additional kwargs
+        Initialize the parent class then modify attributes with additional kwargs
         """
         super(FreeStateMaker, self).__init__(*args, **kwargs)
         if "clash_cutoff" in kwargs:
@@ -465,7 +467,7 @@ class BoundStateMaker(StateMaker):
 
     def __init__(self, *args, **kwargs):
         """
-        initialize the parent class then modify attributes with additional kwargs
+        Initialize the parent class then modify attributes with additional kwargs
         """
         super(BoundStateMaker, self).__init__(*args, **kwargs)
         if "clash_cutoff" in kwargs:
@@ -590,7 +592,8 @@ class BoundStateMaker(StateMaker):
 # TODO could use a factory function to return the appropriate class
 # TODO this would then serve as a general wrapper for the state maker classes
 # TODO and would use Union["free", "bound", ...] that maps to the appropriate class
-# TODO but that wouldn't save that many lines of code and would make the notebooks a little more confusing
+# TODO but that wouldn't save that many lines of code 
+# TODO it would make the notebooks a little more confusing too so I'm leaving it
 
 
 @requires_init
