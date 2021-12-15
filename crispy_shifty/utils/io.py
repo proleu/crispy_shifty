@@ -2,7 +2,7 @@
 from typing import *
 # 3rd party library imports
 import pandas as pd
-from tqdm import tqdm
+from tqdm.auto import tqdm
 # Rosetta library imports
 # Custom library imports
 
@@ -30,7 +30,7 @@ def parse_scorefile_linear(scores:str) -> pd.DataFrame:
     Uses less memory thant the oneshot method but takes longer to run.
     """
     import pandas as pd
-    from tqdm import tqdm
+    from tqdm.auto import tqdm
 
     dfs = []
     with open(scores, "r") as f:

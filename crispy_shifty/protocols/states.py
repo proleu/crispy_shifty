@@ -571,6 +571,9 @@ class BoundStateMaker(StateMaker):
                     setPoseExtraScore(dock, "parent", self.original_name)
                     setPoseExtraScore(dock, "parent_length", str(self.parent_length))
                     setPoseExtraScore(dock, "pivot_helix", str(pivot_helix))
+                    setPoseExtraScore(
+                        dock, "pre_break_helix", str(self.pre_break_helix)
+                    )
                     setPoseExtraScore(dock, "shift", str(i))
                     setPoseExtraScore(
                         dock,
@@ -584,8 +587,10 @@ class BoundStateMaker(StateMaker):
             yield ppose
 
 
-# TODO need to make a general wrapper for the state maker classes instead of seperating them
-# TODO could use Union["free", "bound", ...]
+# TODO could use a factory function to return the appropriate class
+# TODO this would then serve as a general wrapper for the state maker classes
+# TODO and would use Union["free", "bound", ...] that maps to the appropriate class
+# TODO but that wouldn't save that many lines of code and would make the notebooks a little more confusing
 
 
 @requires_init

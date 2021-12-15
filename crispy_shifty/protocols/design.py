@@ -1,5 +1,5 @@
 # Python standard library
-from typing import *
+from typing import *  # TODO explicit imports
 
 # 3rd party library imports
 # Rosetta library imports
@@ -13,6 +13,21 @@ from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.kinematics import MoveMap
 
 # Custom library imports
+
+
+def add_metadata_to_pose(
+    pose: Pose, key: str, metadata: Union[int, float, str]
+) -> None:
+    """
+    :param pose: Pose to add metadata to
+    :param metadata: Arbitrary metadata to add to the pose
+    :return: None
+    Adds arbitrary metadata to the pose.
+    """
+    import pyrosetta
+
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "metadata", str(metadata))
+    return
 
 
 def interface_between_selectors(
@@ -73,9 +88,21 @@ def gen_std_layer_design(layer_aas_list: list = None):
         SecondaryStructureSelector,
     )
 
-    layer_names = ['helix_cap', 'core AND helix_start', 'core AND helix', 'core AND sheet', 'core AND loop',
-                   'boundary AND helix_start', 'boundary AND helix', 'boundary AND sheet', 'boundary AND loop',
-                   'surface AND helix_start', 'surface AND helix', 'surface AND sheet', 'surface AND loop']
+    layer_names = [
+        "helix_cap",
+        "core AND helix_start",
+        "core AND helix",
+        "core AND sheet",
+        "core AND loop",
+        "boundary AND helix_start",
+        "boundary AND helix",
+        "boundary AND sheet",
+        "boundary AND loop",
+        "surface AND helix_start",
+        "surface AND helix",
+        "surface AND sheet",
+        "surface AND loop",
+    ]
 
     if layer_aas_list is None:  # set default layer design
         layer_aas_list = [
@@ -91,7 +118,7 @@ def gen_std_layer_design(layer_aas_list: list = None):
             "DEHKPQR",  # surface AND helix_start
             "EHKQR",  # surface AND helix
             "EHKNQRST",  # surface AND sheet
-            "DEGHKNPQRST", # surface AND loop
+            "DEGHKNPQRST",  # surface AND loop
         ]
     assert len(layer_aas_list) == 13
 
@@ -138,7 +165,9 @@ def gen_std_layer_design(layer_aas_list: list = None):
         region_sels.append(AndResidueSelector(layer_sel, ss_sel))
 
     layer_design = {}
-    for layer_name, layer_aas, region_sel in zip(layer_names, layer_aas_list, region_sels):
+    for layer_name, layer_aas, region_sel in zip(
+        layer_names, layer_aas_list, region_sels
+    ):
         layer_design[layer_name] = (layer_aas, region_sel)
 
         # testing - prints the pymol selections corresponding to the amino acids set for the layer
@@ -257,13 +286,15 @@ def gen_task_factory(
 
 
 # False is the default for all these in a new movemap
-def gen_movemap(jump: bool = False,
-                chi: bool = False,
-                bb: bool = False,
-                nu: bool = False,
-                branch: bool = False
+def gen_movemap(
+    jump: bool = False,
+    chi: bool = False,
+    bb: bool = False,
+    nu: bool = False,
+    branch: bool = False,
 ):
     import pyrosetta
+
     movemap = pyrosetta.rosetta.core.kinematics.MoveMap()
     movemap.set_jump(jump)
     movemap.set_chi(chi)
@@ -271,6 +302,7 @@ def gen_movemap(jump: bool = False,
     movemap.set_nu(nu)
     movemap.set_branches(branch)
     return movemap
+
 
 def fastdesign(
     pose: Pose,
@@ -304,11 +336,7 @@ def fastdesign(
     fdes_mover.apply(pose)
 
 
-def packrotamers(
-    pose: Pose,
-    task_factory: TaskFactory,
-    scorefxn: ScoreFunction
-):
+def packrotamers(pose: Pose, task_factory: TaskFactory, scorefxn: ScoreFunction):
     """
     Runs PackRotamers with the given task factory and score function.
     """
@@ -392,16 +420,27 @@ def score_on_chain_subset(pose: Pose, filter: Filter, chain_list: list):
 
 
 def score_cms(
-    pose: Pose, sel_1: ResidueSelector, sel_2: ResidueSelector, name: str = "cms",
-    filtered_area: float = 250.0, distance_weight: float = 1.0, quick: bool = False, use_rosetta_radii: bool = False # default values for the filter
+    pose: Pose,
+    sel_1: ResidueSelector,
+    sel_2: ResidueSelector,
+    name: str = "cms",
+    filtered_area: float = 250.0,
+    distance_weight: float = 1.0,
+    quick: bool = False,
+    use_rosetta_radii: bool = False,  # default values for the filter
 ):
     # requires pyrosetta >= 2021.44
     import pyrosetta
 
     cms_filter = (
         pyrosetta.rosetta.protocols.simple_filters.ContactMolecularSurfaceFilter(
-            filtered_area=filtered_area, distance_weight=distance_weight, quick=quick, verbose=False, # constructor requires these arguments
-            selector1=sel_1, selector2=sel_2, use_rosetta_radii=use_rosetta_radii
+            filtered_area=filtered_area,
+            distance_weight=distance_weight,
+            quick=quick,
+            verbose=False,  # constructor requires these arguments
+            selector1=sel_1,
+            selector2=sel_2,
+            use_rosetta_radii=use_rosetta_radii,
         )
     )
     cms_filter.set_user_defined_name(name)
@@ -541,17 +580,21 @@ def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
     import pyrosetta
 
     from crispy_shifty.protocols.states import measure_CA_dist
+
     dist = measure_CA_dist(pose, resi_1, resi_2)
     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(dist))
     return dist
 
 
 def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist"):
-    
+
     from crispy_shifty.protocols.states import get_helix_endpoints
+
     ends = get_helix_endpoints(pose, n_terminal=False)
-    end = ends[pre_break_helix] + 1 # now plus 1 since the helix ends one residue earlier due to the new chainbreak
-    loop_dist = score_CA_dist(pose, end, end+1, name)
+    end = (
+        ends[pre_break_helix] + 1
+    )  # now plus 1 since the helix ends one residue earlier due to the new chainbreak
+    loop_dist = score_CA_dist(pose, end, end + 1, name)
     return loop_dist
 
 
@@ -593,7 +636,7 @@ def one_state_design_unlooped_dimer(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=True, # so that it respects precompute_ig
+        ifcl=True,  # so that it respects precompute_ig TODO hardcode precompute_ig
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory")
@@ -625,6 +668,7 @@ def one_state_design_unlooped_dimer(
 
         # testing
         from crispy_shifty.utils.io import pymol_selection
+
         print(pymol_selection(pose, design_sel, "design_sel"))
 
         print_timestamp("Generating structure profile...", end="")
@@ -632,10 +676,22 @@ def one_state_design_unlooped_dimer(
         print("complete.")
 
         print_timestamp("Starting 1 round of fixed backbone design...", end="")
-        fastdesign(pose=pose, task_factory=task_factory, scorefxn=design_sfxn, movemap=fixbb_mm, repeats=1)
+        fastdesign(
+            pose=pose,
+            task_factory=task_factory,
+            scorefxn=design_sfxn,
+            movemap=fixbb_mm,
+            repeats=1,
+        )
         print("complete.")
         print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
-        fastdesign(pose=pose, task_factory=task_factory, scorefxn=design_sfxn, movemap=flexbb_mm, repeats=2)
+        fastdesign(
+            pose=pose,
+            task_factory=task_factory,
+            scorefxn=design_sfxn,
+            movemap=flexbb_mm,
+            repeats=2,
+        )
         print("complete.")
 
         print_timestamp("Clearing constraints...", end="")
@@ -645,7 +701,7 @@ def one_state_design_unlooped_dimer(
         print_timestamp("Scoring loop distance...", end="")
         pre_break_helix = int(float(pose.scores["pre_break_helix"]))
         score_loop_dist(pose, pre_break_helix, name="loop_dist_A")
-        score_loop_dist(pose, 3*pre_break_helix, name="loop_dist_B")
+        score_loop_dist(pose, 3 * pre_break_helix, name="loop_dist_B")
         print("complete.")
 
         print_timestamp(
@@ -666,7 +722,7 @@ def one_state_design_unlooped_dimer(
         ]
         pair_names = ["dhr", "dhr_ac", "dhr_bn", "ac_bn"]
         for (sel_1, sel_2), name in zip(selector_pairs, pair_names):
-            score_cms(pose, sel_1, sel_2, 'cms_' + name)
+            score_cms(pose, sel_1, sel_2, "cms_" + name)
             score_sc(pose, sel_1, sel_2, "sc_" + name)
         print("complete.")
 
@@ -687,6 +743,161 @@ def one_state_design_unlooped_dimer(
         for chain_list in chain_lists:
             score_on_chain_subset(pose, score_filter, chain_list)
         print("complete.")
+
+        ppose = io.to_packed(pose)
+        yield ppose
+
+
+@requires_init
+def one_state_design_bound_state(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+
+    from time import time
+    import sys
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    sys.path.insert(0, "/projects/crispy_shifty")
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+
+    # testing to properly set the TMPDIR on distributed jobs
+    # import os
+    # os.environ['TMPDIR'] = '/scratch'
+    # print(os.environ['TMPDIR'])
+
+    start_time = time()
+
+    def print_timestamp(print_str, end="\n", *args):
+        time_min = (time() - start_time) / 60
+        print(f"{time_min:.2f} min: {print_str}", end=end)
+        for arg in args:
+            print(arg)
+
+    design_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
+    print_timestamp("Generated interface selector")
+
+    layer_design = gen_std_layer_design()
+    task_factory = gen_task_factory(
+        design_sel=design_sel,
+        pack_nbhd=False,
+        extra_rotamers_level=2,
+        limit_arochi=True,
+        prune_buns=True,
+        upweight_ppi=True,
+        restrict_pro_gly=True,
+        ifcl=True,  # so that it respects precompute_ig TODO hardcode precompute_ig
+        layer_design=layer_design,
+    )
+    print_timestamp("Generated interface design task factory")
+
+    clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    design_sfxn.set_weight(
+        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
+    )
+    print_timestamp("Generated score functions")
+
+    fixbb_mm = gen_movemap(jump=True, chi=True, bb=False)
+    flexbb_mm = gen_movemap(jump=True, chi=True, bb=True)
+    print_timestamp("Generated movemaps")
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        )
+
+    for pose in poses:
+        start_time = time()
+        # for the neighborhood residue selector
+        pose.update_residue_neighbors()
+
+        # testing
+        from crispy_shifty.utils.io import pymol_selection
+
+        print(pymol_selection(pose, design_sel, "design_sel"))
+        print(pose.scores)
+
+        # print_timestamp("Generating structure profile...", end="")
+        # struct_profile(pose, design_sel)
+        # print("complete.")
+
+        print_timestamp("Starting 1 round of fixed backbone design...", end="")
+        fastdesign(
+            pose=pose,
+            task_factory=task_factory,
+            scorefxn=design_sfxn,
+            movemap=fixbb_mm,
+            repeats=1,
+        )
+        print("complete.")
+        print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
+        fastdesign(
+            pose=pose,
+            task_factory=task_factory,
+            scorefxn=design_sfxn,
+            movemap=flexbb_mm,
+            repeats=2,
+        )
+        print("complete.")
+
+        print_timestamp("Clearing constraints...", end="")
+        clear_constraints(pose)
+        print("complete.")
+
+        print_timestamp("Scoring loop distance...", end="")
+        pre_break_helix = int(float(pose.scores["pre_break_helix"]))
+        score_loop_dist(pose, pre_break_helix, name="loop_dist")
+        print("complete.")
+
+        print_timestamp(
+            "Scoring contact molecular surface and shape complementarity...", end=""
+        )
+        an_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(1)
+        ac_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(2)
+        b_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(3)
+        dhr_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(
+            an_sel, ac_sel
+        )
+        selector_pairs = [
+            (an_sel, ac_sel),
+            (an_sel, b_sel),
+            (ac_sel, b_sel),
+            (b_sel, dhr_sel),
+        ]
+        pair_names = ["AnAc", "AnB", "AcB", "AnAcB"]
+        for (sel_1, sel_2), name in zip(selector_pairs, pair_names):
+            score_cms(pose, sel_1, sel_2, "cms_" + name)
+            score_sc(pose, sel_1, sel_2, "sc_" + name)
+        print("complete.")
+
+        print_timestamp("Scoring secondary structure shape complementarity...", end="")
+        score_ss_sc(pose)
+        print("complete.")
+        print_timestamp("Scoring per_chain worst9mer...", end="")
+        score_wnm_all(pose)
+        print("complete.")
+        print_timestamp("Scoring helical worst9mer...", end="")
+        score_wnm_helix(pose)
+        print("complete.")
+
+        print_timestamp("Scoring...", end="")
+        score_per_res(pose, clean_sfxn)
+        score_filter = gen_score_filter(clean_sfxn)
+        chain_lists = [[1], [2], [3], [1, 2], [1, 3], [2, 3]]
+        for chain_list in chain_lists:
+            score_on_chain_subset(pose, score_filter, chain_list)
+        print("complete.")
+        add_metadata_to_pose(pose, "path_in", pdb_path)
+        end_time = time()
+        total_time = end_time - start_time
+        print_timestamp(f"Total time: {total_time:.2f} seconds")
+        add_metadata_to_pose(pose, "time", total_time)
 
         ppose = io.to_packed(pose)
         yield ppose

@@ -8,6 +8,7 @@ add submodules:
 
 
 how to do better than last round, chA:
+bicistronic screen had high false positives, possibly co-expressed genes resulted in "locked" state Y complexes.
 longer loops for state Ys, force state X to have longer (63 and 74-7 have longer than parent, 129 only has match)
 torsional space only for backbone generation, later relax into predictions (in torsional space?)
 absolutely no disulfides during design >:(
@@ -16,11 +17,23 @@ how to do better than last round, chB:
 longer chB, all have 27 except 63 which had 21 (as opposed to 17-25)
 charges? + C term, - N term
     check results of the chB order4
+FF129 has a very polar interface, Cterm sequence is QLQKKNKKQQK
+Some have lower helical propensity and most lower coiled-coil propensity at termini (did not quantify)
 backside hydrophobics and aromatics may break coiled coil propensity, resurfacing to all polars sometimes seemed to cause issues (also sometimes fixed issues like in FF75) 
     check results of the chB order4
 
 
 crispy shifty TODOs
+generally:
+Use MPNN for sequence design after smaller sampling runs with Rosetta to sample backbones
+Start MSD sampling from designs that alphafold to single state state Y
+Use MPNN for two-state sequence design after smaller sampling runs with “almost linkres” to sample backbones again
+Look for complex prediction on AF2 then fold state X
+Increase SAP tolerance somewhat
+Probably only need delta SAP and CMS/ddG/SASA for interface filtering
+If disulfide stapled states are needed or wanted, just staple and predict
+
+specifically:
 make bound states ~160k
 design interfaces on boinc ~? filter with standard interface stuff
 loop, allow extension, filter by trying to loop parent to match then loop design
