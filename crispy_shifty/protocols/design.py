@@ -22,7 +22,7 @@ def add_metadata_to_pose(
     :param pose: Pose to add metadata to
     :param metadata: Arbitrary metadata to add to the pose
     :return: None
-    Adds arbitrary metadata to the pose.
+    Adds arbitrary metadata to the pose datacache as a score.
     """
     import pyrosetta
 
@@ -775,11 +775,6 @@ def one_state_design_bound_state(
     sys.path.insert(0, "/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
-    # testing to properly set the TMPDIR on distributed jobs
-    # import os
-    # os.environ['TMPDIR'] = '/scratch'
-    # print(os.environ['TMPDIR'])
-
     start_time = time()
 
     def print_timestamp(print_str, end="\n", *args):
@@ -840,28 +835,28 @@ def one_state_design_bound_state(
         print(pymol_selection(pose, design_sel, "design_sel"))
         print(pose.scores)
 
-        # print_timestamp("Generating structure profile...", end="")
-        # struct_profile(pose, design_sel)
-        # print("complete.")
+        print_timestamp("Generating structure profile...", end="")
+        struct_profile(pose, design_sel)
+        print("complete.")
 
-        # print_timestamp("Starting 1 round of fixed backbone design...", end="")
-        # fastdesign(
-        #     pose=pose,
-        #     task_factory=task_factory,
-        #     scorefxn=design_sfxn,
-        #     movemap=fixbb_mm,
-        #     repeats=1,
-        # )
-        # print("complete.")
-        # print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
-        # fastdesign(
-        #     pose=pose,
-        #     task_factory=task_factory,
-        #     scorefxn=design_sfxn,
-        #     movemap=flexbb_mm,
-        #     repeats=2,
-        # )
-        # print("complete.")
+        print_timestamp("Starting 1 round of fixed backbone design...", end="")
+        fastdesign(
+            pose=pose,
+            task_factory=task_factory,
+            scorefxn=design_sfxn,
+            movemap=fixbb_mm,
+            repeats=1,
+        )
+        print("complete.")
+        print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
+        fastdesign(
+            pose=pose,
+            task_factory=task_factory,
+            scorefxn=design_sfxn,
+            movemap=flexbb_mm,
+            repeats=2,
+        )
+        print("complete.")
 
         print_timestamp("Clearing constraints...", end="")
         clear_constraints(pose)
@@ -889,7 +884,7 @@ def one_state_design_bound_state(
         ]
         pair_names = ["AnAc", "AnB", "AcB", "AnAcB"]
         for (sel_1, sel_2), name in zip(selector_pairs, pair_names):
-            score_cms(pose, sel_1, sel_2, "cms_" + name)
+            # score_cms(pose, sel_1, sel_2, "cms_" + name)
             score_sc(pose, sel_1, sel_2, "sc_" + name)
         print("complete.")
 
