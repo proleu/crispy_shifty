@@ -1,5 +1,5 @@
 # Python standard library
-from typing import * # TODO explicit imports
+from typing import *  # TODO explicit imports
 
 # 3rd party library imports
 import pandas as pd
@@ -50,7 +50,7 @@ def parse_scorefile_linear(scores: str) -> pd.DataFrame:
 
 
 def pymol_selection(pose: Pose, selector: ResidueSelector, name: str = None):
-    """ 
+    """
     :param: pose: Pose object
     :param: selector: ResidueSelector object
     :param: name: name of selection

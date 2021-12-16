@@ -1,5 +1,5 @@
 # Python standard library
-from typing import Iterator, Optional, Union  # TODO explicit imports
+from typing import Iterator, Optional, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -582,8 +582,11 @@ def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score"):
 
 
 def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
+
+    import sys
     import pyrosetta
 
+    sys.path.insert(0, "/projects/crispy_shifty")
     from crispy_shifty.protocols.states import measure_CA_dist
 
     dist = measure_CA_dist(pose, resi_1, resi_2)
@@ -591,11 +594,14 @@ def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
     return dist
 
 
-def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist"):
+def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist") -> float:
 
-    from crispy_shifty.protocols.states import get_helix_endpoints
+    import sys
 
-    ends = get_helix_endpoints(pose, n_terminal=False)
+    sys.path.insert(0, "/projects/crispy_shifty")
+    from crispy_shifty.protocols.states import StateMaker
+
+    ends = StateMaker.get_helix_endpoints(pose, n_terminal=False)
     end = (
         ends[pre_break_helix] + 1
     )  # now plus 1 since the helix ends one residue earlier due to the new chainbreak
@@ -629,6 +635,9 @@ def one_state_design_unlooped_dimer(
         for arg in args:
             print(arg)
 
+    # hardcode precompute_ig
+    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
+
     design_sel = interface_among_chains(chain_list=[1, 2, 3, 4], vector_mode=True)
     print_timestamp("Generated interface selector")
 
@@ -641,7 +650,7 @@ def one_state_design_unlooped_dimer(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=True,  # so that it respects precompute_ig TODO hardcode precompute_ig
+        ifcl=True,  # so that it respects precompute_ig TODO, this might be bad in some cases
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory")
@@ -779,6 +788,9 @@ def one_state_design_bound_state(
         for arg in args:
             print(arg)
 
+    # hardcode precompute_ig
+    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
+
     design_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
     print_timestamp("Generated interface selector")
 
@@ -791,7 +803,7 @@ def one_state_design_bound_state(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=True,  # so that it respects precompute_ig TODO hardcode precompute_ig
+        ifcl=True,  # so that it respects precompute_ig TODO, this might be bad in some cases
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory")
@@ -832,24 +844,24 @@ def one_state_design_bound_state(
         # struct_profile(pose, design_sel)
         # print("complete.")
 
-        print_timestamp("Starting 1 round of fixed backbone design...", end="")
-        fastdesign(
-            pose=pose,
-            task_factory=task_factory,
-            scorefxn=design_sfxn,
-            movemap=fixbb_mm,
-            repeats=1,
-        )
-        print("complete.")
-        print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
-        fastdesign(
-            pose=pose,
-            task_factory=task_factory,
-            scorefxn=design_sfxn,
-            movemap=flexbb_mm,
-            repeats=2,
-        )
-        print("complete.")
+        # print_timestamp("Starting 1 round of fixed backbone design...", end="")
+        # fastdesign(
+        #     pose=pose,
+        #     task_factory=task_factory,
+        #     scorefxn=design_sfxn,
+        #     movemap=fixbb_mm,
+        #     repeats=1,
+        # )
+        # print("complete.")
+        # print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
+        # fastdesign(
+        #     pose=pose,
+        #     task_factory=task_factory,
+        #     scorefxn=design_sfxn,
+        #     movemap=flexbb_mm,
+        #     repeats=2,
+        # )
+        # print("complete.")
 
         print_timestamp("Clearing constraints...", end="")
         clear_constraints(pose)

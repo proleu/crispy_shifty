@@ -7,9 +7,7 @@ from typing import Iterator, List, Optional, Union
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
-from pyrosetta.rosetta.core.select.residue_selector import (
-    ResidueSelector
-)
+from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 
@@ -305,7 +303,7 @@ class StateMaker(ABC):
         :param starts: Dictionary of start residue indices of helices in the pose.
         :param ends: Dictionary of end residue indices of helices in the pose.
         :param pivot_helix: Helix number to pivot the shift around.
-        :param full_helix: If True, align the entire helix. 
+        :param full_helix: If True, align the entire helix.
         :return: Pose shifted by i residues.
         """
 
@@ -592,7 +590,7 @@ class BoundStateMaker(StateMaker):
 # TODO could use a factory function to return the appropriate class
 # TODO this would then serve as a general wrapper for the state maker classes
 # TODO and would use Union["free", "bound", ...] that maps to the appropriate class
-# TODO but that wouldn't save that many lines of code 
+# TODO but that wouldn't save that many lines of code
 # TODO it would make the notebooks a little more confusing too so I'm leaving it
 
 

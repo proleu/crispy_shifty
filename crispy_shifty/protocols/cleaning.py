@@ -174,8 +174,8 @@ def redesign_disulfides(
     fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
     Requires the following init flags:
     -corrections::beta_nov16 true
-    -detect_disulf false TODO hardcode this
-    -holes:dalphaball /software/rosetta/DAlphaBall.gcc/software/DAlphaBall.gcc
+    -detect_disulf false
+    -holes:dalphaball /software/rosetta/DAlphaBall.gcc
     """
 
     import pyrosetta
@@ -198,6 +198,8 @@ def redesign_disulfides(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=False, pack_result=False
         )
+
+    pyrosetta.rosetta.basic.options.set_boolean_option("in:detect_disulf", False)
 
     xml = """
     <ROSETTASCRIPTS>
