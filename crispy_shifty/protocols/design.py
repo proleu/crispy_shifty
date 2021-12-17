@@ -830,14 +830,14 @@ def one_state_design_bound_state(
         pose.update_residue_neighbors()
 
         # testing
-        from crispy_shifty.utils.io import pymol_selection
+        # from crispy_shifty.utils.io import pymol_selection
 
-        print(pymol_selection(pose, design_sel, "design_sel"))
-        print(pose.scores)
+        # print(pymol_selection(pose, design_sel, "design_sel"))
+        # print(pose.scores)
 
-        print_timestamp("Generating structure profile...", end="")
-        struct_profile(pose, design_sel)
-        print("complete.")
+        # print_timestamp("Generating structure profile...", end="")
+        # struct_profile(pose, design_sel)
+        # print("complete.")
 
         print_timestamp("Starting 1 round of fixed backbone design...", end="")
         fastdesign(
@@ -858,9 +858,9 @@ def one_state_design_bound_state(
         )
         print("complete.")
 
-        print_timestamp("Clearing constraints...", end="")
-        clear_constraints(pose)
-        print("complete.")
+        # print_timestamp("Clearing constraints...", end="")
+        # clear_constraints(pose)
+        # print("complete.")
 
         print_timestamp("Scoring loop distance...", end="")
         pre_break_helix = int(float(pose.scores["pre_break_helix"]))
@@ -884,19 +884,19 @@ def one_state_design_bound_state(
         ]
         pair_names = ["AnAc", "AnB", "AcB", "AnAcB"]
         for (sel_1, sel_2), name in zip(selector_pairs, pair_names):
-            # score_cms(pose, sel_1, sel_2, "cms_" + name)
+            score_cms(pose, sel_1, sel_2, "cms_" + name)
             score_sc(pose, sel_1, sel_2, "sc_" + name)
         print("complete.")
 
         print_timestamp("Scoring secondary structure shape complementarity...", end="")
         score_ss_sc(pose)
         print("complete.")
-        print_timestamp("Scoring per_chain worst9mer...", end="")
-        score_wnm_all(pose)
-        print("complete.")
-        print_timestamp("Scoring helical worst9mer...", end="")
-        score_wnm_helix(pose)
-        print("complete.")
+        # print_timestamp("Scoring per_chain worst9mer...", end="")
+        # score_wnm_all(pose)
+        # print("complete.")
+        # print_timestamp("Scoring helical worst9mer...", end="")
+        # score_wnm_helix(pose)
+        # print("complete.")
 
         print_timestamp("Scoring...", end="")
         score_per_res(pose, clean_sfxn)

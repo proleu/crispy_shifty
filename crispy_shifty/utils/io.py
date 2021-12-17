@@ -469,7 +469,7 @@ def gen_array_tasks(
     )
 
     with open(tasklist, "w+") as f:
-        for i in tqdm(range(0, nstruct)):
+        for i in range(0, nstruct):
             for tasks in create_tasks(design_list_file, options, nstruct_per_task):
                 task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
                 cmd = f"{run_py_file} {task_str} {extra_kwargs_str} {instance_str}"
