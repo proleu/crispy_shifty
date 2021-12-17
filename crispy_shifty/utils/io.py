@@ -409,6 +409,7 @@ def gen_array_tasks(
 ):
     import os, stat
     from more_itertools import ichunked
+    from tqdm.auto import tqdm
 
     os.makedirs(output_path, exist_ok=True)
 
@@ -451,7 +452,7 @@ def gen_array_tasks(
 
     func_split = distribute_func.split(".")
     func_name = func_split[-1]
-    run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/home/broerman/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
+    run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
     run_py_file = os.path.join(output_path, "run.py")
     with open(run_py_file, "w+") as f:
         print(run_py, file=f)
@@ -468,7 +469,7 @@ def gen_array_tasks(
     )
 
     with open(tasklist, "w+") as f:
-        for i in range(0, nstruct):
+        for i in tqdm(range(0, nstruct)):
             for tasks in create_tasks(design_list_file, options, nstruct_per_task):
                 task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
                 cmd = f"{run_py_file} {task_str} {extra_kwargs_str} {instance_str}"
