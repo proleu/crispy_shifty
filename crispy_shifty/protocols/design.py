@@ -16,7 +16,7 @@ from pyrosetta.rosetta.core.kinematics import MoveMap
 
 
 def add_metadata_to_pose(
-    pose: Pose, key: str, metadata: Union[int, float, str]
+    pose: Pose, key: str = "metadata", metadata: Union[int, float, str]
 ) -> None:
     """
     :param pose: Pose to add metadata to
@@ -26,7 +26,7 @@ def add_metadata_to_pose(
     """
     import pyrosetta
 
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "metadata", str(metadata))
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(metadata))
     return
 
 

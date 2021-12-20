@@ -1,11 +1,22 @@
 # Python standard library
-from typing import *  # TODO explicit imports
+import bz2
+import collections
+from datetime import datetime
+import json
+import os
+from typing import Any, Callable, Dict, List, Iterator, NoReturn, Optional, Tuple, Union
+import uuid
 
 # 3rd party library imports
 import pandas as pd
+import toolz
 from tqdm.auto import tqdm
 
 # Rosetta library imports
+from pyrosetta.distributed import requires_init
+from pyrosetta.distributed.cluster.exceptions import OutputError
+import pyrosetta.distributed.io as io
+from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
@@ -49,12 +60,12 @@ def parse_scorefile_linear(scores: str) -> pd.DataFrame:
     return tabulated_scores
 
 
-def pymol_selection(pose: Pose, selector: ResidueSelector, name: str = None):
+def pymol_selection(pose: Pose, selector: ResidueSelector, name: str = None) -> str:
     """
-    :param: pose: Pose object
-    :param: selector: ResidueSelector object
-    :param: name: name of selection
-    :return: pymol selection string TODO is this what it actually returns?
+    :param: pose: Pose object.
+    :param: selector: ResidueSelector object.
+    :param: name: name of selection.
+    :return: pymol selection string.
     """
 
     import pyrosetta
@@ -69,46 +80,36 @@ def pymol_selection(pose: Pose, selector: ResidueSelector, name: str = None):
     return pymol_metric.calculate(pose)
 
 
-def print_timestamp(print_str, start_time, end="\n", *args):
+def print_timestamp(
+    print_str: str, start_time: Union[int, float], end: str = "\n", *args
+) -> None:
+    """
+    :param: print_str: string to print
+    :param: start_time: start time in seconds
+    :param: end: end string
+    :param: args: arguments to print_str
+    :return: None
+    Print a timestamp to the console along with the string passed in.
+    """
     from time import time
 
     time_min = (time() - start_time) / 60
     print(f"{time_min:.2f} min: {print_str}", end=end)
     for arg in args:
         print(arg, end=end)
+    return
 
 
 # Much of the following is extensively borrowed from pyrosetta.distributed.cluster.io
 
-try:
-    import toolz
-except ImportError:
-    print(
-        "Importing 'pyrosetta.distributed.cluster.io' requires the "
-        + "third-party package 'toolz' as a dependency!\n"
-        + "Please install this package into your python environment. "
-        + "For installation instructions, visit:\n"
-        + "https://pypi.org/project/toolz/\n"
-    )
-    raise
 
-import bz2
-import collections
-import json
-import os
-import pyrosetta.distributed.io as io
-import uuid
-
-from datetime import datetime
-from pyrosetta.rosetta.core.pose import Pose
-from pyrosetta.distributed.cluster.exceptions import OutputError
-from pyrosetta.distributed.packed_pose.core import PackedPose
-
-
-def _get_instance_and_metadata(
+@requires_init
+def get_instance_and_metadata(
     kwargs: Dict[Any, Any]
 ) -> Tuple[Dict[Any, Any], Dict[Any, Any]]:
     """
+    :param: kwargs: keyword arguments that need to be split into instance and metadata.
+    :return: tuple of instance and metadata.
     Get the current state of the PyRosettaCluster instance, and split the
     kwargs into the PyRosettaCluster instance kwargs and ancillary metadata.
     """
@@ -133,38 +134,45 @@ def _get_instance_and_metadata(
             instance_kwargs["tasks"][option] = pyrosetta.distributed._normflags(
                 instance_kwargs["tasks"][option]
             )
-    # instance_kwargs["seeds"] = kwargs.pop("seeds") # add this back in when you figure out how to get the pyrosetta seed...
+    # the following works if this is called from the same thread as init was called
+    instance_kwargs["seeds"] = [pyrosetta.rosetta.numeric.random.rg().get_seed()]
 
     return instance_kwargs, kwargs
 
 
-def _get_output_dir(decoy_dir: str) -> str:
-    """Get the output directory in which to write files to disk."""
+def get_output_dir(base_dir: str) -> str:
+    """
+    :param: base_dir: base directory to write outputs into.
+    :return: output directory with subdirectories auto-generated.
+    Get the output directory in which to write files to disk.
+    """
 
     zfill_value = 4
     max_dir_depth = 1000
     try:
-        decoy_dir_list = os.listdir(decoy_dir)
+        decoy_dir_list = os.listdir(base_dir)
     except FileNotFoundError:
         decoy_dir_list = []
     if not decoy_dir_list:
         new_dir = str(0).zfill(zfill_value)
-        output_dir = os.path.join(decoy_dir, new_dir)
+        output_dir = os.path.join(base_dir, new_dir)
         os.makedirs(output_dir, exist_ok=True)
     else:
         top_dir = list(reversed(sorted(decoy_dir_list)))[0]
-        if len(os.listdir(os.path.join(decoy_dir, top_dir))) < max_dir_depth:
-            output_dir = os.path.join(decoy_dir, top_dir)
+        if len(os.listdir(os.path.join(base_dir, top_dir))) < max_dir_depth:
+            output_dir = os.path.join(base_dir, top_dir)
         else:
             new_dir = str(int(top_dir) + 1).zfill(zfill_value)
-            output_dir = os.path.join(decoy_dir, new_dir)
+            output_dir = os.path.join(base_dir, new_dir)
             os.makedirs(output_dir, exist_ok=True)
 
     return output_dir
 
 
-def _format_result(result: Union[Pose, PackedPose]) -> Tuple[str, Dict[Any, Any]]:
+def format_result(result: Union[Pose, PackedPose]) -> Tuple[str, Dict[Any, Any]]:
     """
+    :param: result: Pose or PackedPose object.
+    :return: tuple of (pdb_string, metadata)
     Given a `Pose` or `PackedPose` object, return a tuple containing
     the pdb string and a scores dictionary.
     """
@@ -176,13 +184,15 @@ def _format_result(result: Union[Pose, PackedPose]) -> Tuple[str, Dict[Any, Any]
     return (_pdbstring, _scores_dict)
 
 
-def _parse_results(
+def parse_results(
     results: Union[
-        Iterable[Optional[Union[Pose, PackedPose]]],
+        Iterator[Optional[Union[Pose, PackedPose]]],
         Optional[Union[Pose, PackedPose]],
     ]
 ) -> Union[List[Tuple[str, Dict[Any, Any]]], NoReturn]:
     """
+    :param: results: Iterator of Pose or PackedPose objects, which may be None.
+    :return: list of tuples of (pdb_string, scores_dict) or nothing if None input.
     Format output results on distributed worker. Input argument `results` can be a
     `Pose` or `PackedPose` object, or a `list` or `tuple` of `Pose` and/or `PackedPose`
     objects, or an empty `list` or `tuple`. Returns a list of tuples, each tuple
@@ -197,7 +207,7 @@ def _parse_results(
         ),
     ):
         if not io.to_pose(results).empty():
-            out = [_format_result(results)]
+            out = [format_result(results)]
         else:
             out = []
     elif isinstance(results, collections.abc.Iterable):
@@ -211,7 +221,7 @@ def _parse_results(
                 ),
             ):
                 if not io.to_pose(result).empty():
-                    out.append(_format_result(result))
+                    out.append(format_result(result))
             else:
                 raise OutputError(result)
     elif not results:
@@ -223,16 +233,16 @@ def _parse_results(
 
 
 def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
-    """Write results and kwargs to disk."""
+    """
+    :param: results: results to pass to `parse_results`
+    :param: kwargs: instance and metadata kwargs
+    :return: None
+    Write results and kwargs to disk after processing metadata. Use `save_results` to
+    write results to disk.
+    """
 
     DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
-    # REMARK_FORMAT = "REMARK CrispyShifty: " # sadly, this interferes with using PRC functions which read PRC remarks...
     REMARK_FORMAT = "REMARK PyRosettaCluster: "
-
-    # could hack PRC with the following before running path_to_pose_or_ppose, but then you lose compatibility with outputs actually generated by PRC...
-    # from pyrosetta.distributed.cluster.io import IO
-    # IO.REMARK_FORMAT = 'REMARK CrispyShifty: '
-
     compressed = kwargs["compressed"]
     decoy_dir_name = kwargs["decoy_dir_name"]
     environment_file = kwargs["environment"]
@@ -242,16 +252,16 @@ def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
     simulation_records_in_scorefile = kwargs["simulation_records_in_scorefile"]
 
     # Parse and save results
-    for pdbstring, scores in _parse_results(results):
-        # kwargs = _process_kwargs(kwargs)
-        output_dir = _get_output_dir(
-            decoy_dir=os.path.join(output_path, decoy_dir_name)
-        )
+    for pdbstring, scores in parse_results(results):
+        # TODO we only want to do this once per thread...
+        output_dir = get_output_dir(base_dir=os.path.join(output_path, decoy_dir_name))
         decoy_name = "_".join([simulation_name, uuid.uuid4().hex])
         output_file = os.path.join(output_dir, decoy_name + ".pdb")
         if compressed:
             output_file += ".bz2"
-        score_dir = _get_output_dir(decoy_dir=os.path.join(output_path, score_dir_name))
+        # score_dir = get_output_dir(base_dir=os.path.join(output_path, score_dir_name)) # TODO
+        # assume the score_dir is the same as the decoy_dir, bad but thread safe
+        score_dir = os.path.join(output_dir.replace(decoy_dir_name, score_dir_name, 1))
         score_file = os.path.join(score_dir, decoy_name + ".json")
         extra_kwargs = {
             "crispy_shifty_decoy_name": decoy_name,
@@ -276,7 +286,7 @@ def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
                     "crispy_shifty_total_seconds": duration,
                 }
             )
-        instance, metadata = _get_instance_and_metadata(
+        instance, metadata = get_instance_and_metadata(
             toolz.dicttoolz.keymap(
                 lambda k: k.split("crispy_shifty_")[-1],
                 toolz.dicttoolz.merge(extra_kwargs, kwargs),
@@ -312,7 +322,21 @@ def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
             f.write(scorefile_data)
 
 
-def wrapper_for_array_tasks(func, args):
+def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
+
+    """
+    :param: func: function to wrap
+    :param: args: list of arguments to apply to func
+    :return: None
+    This function wraps a distributable pyrosetta function. It is intended to run once
+    per a single task on a single thread on a worker. If it is used on a a worker that
+    has multiple threads and is wrapping a function that has multithreading support,
+    it might or might not still work but some of the resulting metadata could be wrong.
+    Additionally, since it inits pyrosetta, pyrosetta should not have been initialized
+    on the worker and should not be initialized in the distributed function.
+    The use of the `maybe_init` functionality prevents the former from happening but
+    not the latter, and if the former happened, it would not be immediately obvious.
+    """
 
     import argparse
     import pyrosetta
@@ -382,10 +406,10 @@ def wrapper_for_array_tasks(func, args):
             "compressed": True,
             "decoy_dir_name": "decoys",
             "score_dir_name": "scores",
-            "environment": "",
+            "environment": "",  # TODO: This is a placeholder for now
             "task": task_kwargs,
-            "output_path": "~",
-            "simulation_name": "",
+            "output_path": "~",  # TODO: make this work
+            "simulation_name": "",  # TODO: make this work
             "simulation_records_in_scorefile": False,
             "crispy_shifty_datetime_start": datetime_start,
         }
@@ -413,20 +437,23 @@ def gen_array_tasks(
 
     os.makedirs(output_path, exist_ok=True)
 
-    # def create_tasks(design_list_file, options):
-    #     with open(design_list_file, "r") as f:
-    #         for line in f:
-    #             tasks = {"-options": "corrections::beta_nov16 true"} # no dash in from of corrections- this is not a typo
-    #             tasks["-extra_options"] = options
-    #             tasks["-pdb_path"] = line.rstrip()
-    #             yield tasks
-
-    def create_tasks(design_list_file, options, nstruct_per_task):
+    # Make a task generator that can scale up sampling
+    def create_tasks(
+        design_list_file, options, nstruct_per_task
+    ) -> Iterator[Dict[Any, Any]]:
+        """
+        :param: design_list_file: path to a file containing a list of pdb files inputs
+        :param: options: options for pyrosetta initialization
+        :param: nstruct_per_task: number of structures to generate per task
+        :return: an iterator of task dicts.
+        Generates tasks for pyrosetta distributed.
+        """
         with open(design_list_file, "r") as f:
             # returns an iteratable with nstruct_per_task elements: lines of design_list_file
             for lines in ichunked(f, nstruct_per_task):
                 tasks = {
-                    "-options": "corrections::beta_nov16 true"
+                    # "-options": "corrections::beta_nov16 true" # TODO this needs to be removed, just hardcode it in any protocol that requires it
+                    "-options": ""  # TODO ensure that this works
                 }  # no dash in from of corrections- this is not a typo
                 tasks["-extra_options"] = options
                 # join the lines of design_list_file with spaces, removing trailing newlines
@@ -440,22 +467,49 @@ def gen_array_tasks(
     os.makedirs(slurm_dir, exist_ok=True)
 
     tasklist = os.path.join(output_path, "tasks.cmds")
-    # run_sh = """#!/usr/bin/env bash \n#SBATCH -J crispy_shifty \n#SBATCH -e {slurm_dir}/crispy_shifty-%J.err \n#SBATCH -o {slurm_dir}/crispy_shifty-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${c}" | bash""".format(
-    #     slurm_dir=slurm_dir, queue=queue, memory=memory, jid=jid, sid=sid, tasklist=tasklist, c="{CMD}"
-    # )
-    run_sh = f"""#!/usr/bin/env bash \n#SBATCH -J {simulation_name} \n#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${{CMD}}" | bash"""
+    # TODO: remove below
+    # run_sh = f"""#!/usr/bin/env bash \n#SBATCH -J {simulation_name} \n#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${{CMD}}" | bash"""
+    run_sh = "".join(
+        [
+            "#!/usr/bin/env bash \n",
+            f"#SBATCH -J {simulation_name} \n",
+            f"#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n",
+            f"#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n",
+            f"#SBATCH -p {queue} \n",
+            f"#SBATCH --mem={memory} \n",
+            "\n",
+            f"JOB_ID=${jid} \n",
+            f"""CMD=$(sed -n "${sid}" {tasklist}) \n""",
+            f"""echo "${{CMD}}" | bash""",
+        ]
+    )
+    # Write the run.sh file
     run_sh_file = os.path.join(output_path, "run.sh")
     with open(run_sh_file, "w+") as f:
         print(run_sh, file=f)
+    # Make the run.sh executable
     st = os.stat(run_sh_file)
     os.chmod(run_sh_file, st.st_mode | stat.S_IEXEC)
 
     func_split = distribute_func.split(".")
     func_name = func_split[-1]
-    run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
+    # TODO: remove below
+    # run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
+    run_py = "".join(
+        [
+            "#!/usr/bin/env python\n",
+            "import sys\n",
+            "sys.path.insert(0, '/projects/crispy_shifty')\n",
+            "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
+            f"from {'.'.join(func_split[:-1])} import {func_name}\n",
+            f"wrapper_for_array_tasks({func_name}, sys.argv)",
+        ]
+    )
     run_py_file = os.path.join(output_path, "run.py")
+    # Write the run.py file
     with open(run_py_file, "w+") as f:
         print(run_py, file=f)
+    # Make the run.py executable
     st = os.stat(run_py_file)
     os.chmod(run_py_file, st.st_mode | stat.S_IEXEC)
 
@@ -480,7 +534,16 @@ def gen_array_tasks(
     print(f"sbatch -a 1-$(cat {tasklist} | wc -l) {run_sh_file}")
 
 
-def collect_score_file(output_path: str, score_dir_name: str = "scores"):
+def collect_score_file(output_path: str, score_dir_name: str = "scores") -> None:
+    """
+    :param output_path: path to the directory where the score dir is in.
+    :param score_dir_name: name of the directory where the score files are in.
+    :return: None
+    Collects all the score files in the `score_dir_name` subdirectory of the
+    `output_path` directory. Concatenates them into a single file in the
+    `output_path` directory.
+    """
+
     import os
     from glob import iglob
 
@@ -489,15 +552,13 @@ def collect_score_file(output_path: str, score_dir_name: str = "scores"):
         for score_file in iglob(os.path.join(score_dir, "*", "*.json")):
             with open(score_file, "r") as f:
                 scores_file.write(f.read() + "\n")
-
-
-from pyrosetta.distributed import requires_init
+    return
 
 
 @requires_init
 def test_func(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
-) -> Generator[PackedPose, PackedPose, None]:
+) -> Iterator[PackedPose]:
 
     # test env
     import pycorn
@@ -505,7 +566,7 @@ def test_func(
     import sys
     import pyrosetta.distributed.io as io
 
-    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
+    sys.path.insert(0, "/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
