@@ -260,8 +260,10 @@ def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
         if compressed:
             output_file += ".bz2"
         # score_dir = get_output_dir(base_dir=os.path.join(output_path, score_dir_name)) # TODO
-        # assume the score_dir is the same as the decoy_dir, bad but thread safe
+        # assume the score_dir is in the same parent dir as the decoy_dir
+        # this is less robust but more thread safe and at least ensures mirrored score files
         score_dir = os.path.join(output_dir.replace(decoy_dir_name, score_dir_name, 1))
+        os.makedirs(score_dir, exist_ok=True)
         score_file = os.path.join(score_dir, decoy_name + ".json")
         extra_kwargs = {
             "crispy_shifty_decoy_name": decoy_name,
