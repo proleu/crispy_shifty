@@ -120,7 +120,9 @@ def get_instance_and_metadata(
     # tracking with kwargs instead of class attributes
     instance_kwargs["compressed"] = kwargs.pop("compressed")
     instance_kwargs["decoy_dir_name"] = kwargs.pop("decoy_dir_name")
-    instance_kwargs["environment"] = kwargs.pop("environment")
+    instance_kwargs["environment"] = kwargs.pop(
+        "environment"
+    )  # TODO add this functionality
     instance_kwargs["output_path"] = kwargs.pop("output_path")
     instance_kwargs["score_dir_name"] = kwargs.pop("score_dir_name")
     instance_kwargs["simulation_name"] = kwargs.pop("simulation_name")
@@ -270,7 +272,9 @@ def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
             "crispy_shifty_output_file": output_file,
         }
         if os.path.exists(environment_file):
-            extra_kwargs["crispy_shifty_environment_file"] = environment_file
+            extra_kwargs[
+                "crispy_shifty_environment_file"
+            ] = environment_file  # TODO env file
         if "crispy_shifty_datetime_start" in kwargs:
             datetime_end = datetime.now().strftime(DATETIME_FORMAT)
             duration = str(
@@ -483,7 +487,7 @@ def gen_array_tasks(
             f"JOB_ID=${jid} \n",
             f"""CMD=$(sed -n "${sid}" {tasklist}) \n""",
             f"""echo "${{CMD}}" | bash""",
-        ]
+        ]  # TODO GRES support, maybe multicore support
     )
     # Write the run.sh file
     run_sh_file = os.path.join(output_path, "run.sh")
@@ -500,7 +504,7 @@ def gen_array_tasks(
     run_py = "".join(
         [
             # "#!/usr/bin/env python\n",
-            "#!/projects/crispy_shifty/envs/crispy/bin/python\n", # this is less flexible than /usr/bin/env python
+            "#!/projects/crispy_shifty/envs/crispy/bin/python\n",  # this is less flexible than /usr/bin/env python
             "import sys\n",
             "sys.path.insert(0, '/projects/crispy_shifty')\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
