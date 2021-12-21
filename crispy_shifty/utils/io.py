@@ -497,7 +497,8 @@ def gen_array_tasks(
     # run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
     run_py = "".join(
         [
-            "#!/usr/bin/env python\n",
+            # "#!/usr/bin/env python\n",
+            "#!/projects/crispy_shifty/envs/crispy/bin/python\n", # this is less flexible than /usr/bin/env python
             "import sys\n",
             "sys.path.insert(0, '/projects/crispy_shifty')\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
