@@ -27,9 +27,8 @@ def get_aspect_ratio(num_plots: int, aspect_ratio: str = 'wide') -> Tuple[int, i
 
     return subplot_rows, subplot_cols
 
-def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int, str] = 'auto', discrete: bool = False, hue: str = None, hue_order: List[str] = None):
+def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int, str] = 'auto', discrete: bool = False, hue: str = None, hue_order: List[str] = None, save_path: str = None):
     import matplotlib.pyplot as plt
-    import numpy as np
     import seaborn as sns
     from tqdm import tqdm
 
@@ -44,6 +43,11 @@ def histplot_df(df, cols: List[str], aspect_ratio: str = 'wide', bins: Union[int
         sns.histplot(data=df, x=col, ax=ax, bins=bins, discrete=discrete, hue=hue, hue_order=hue_order)
 
     fig.tight_layout()
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    return fig, axs
 
 # This probably doesn't work well; at some point need to test and refine
 def pairplot_df(df, cols: List[str], hue: str = None, hue_order: List[str] = None):
