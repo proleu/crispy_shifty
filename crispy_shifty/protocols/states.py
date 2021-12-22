@@ -12,6 +12,117 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 # Custom library imports
 
 
+def grow_terminal_helices(
+    pose: Pose,
+    chain: int,
+    extend_c_term: int = 0,
+    extend_n_term: int = 0,
+    idealize: bool = False,
+) -> Pose:
+    """
+    :param: extend_c_term: Number of residues to extend the C-terminal helix.
+    :param: extend_n_term: Number of residues to extend the N-terminal helix.
+    :param: pose: Pose to extend the terminal helices of.
+    :param: chain: Chain to extend the terminal helices of. Needs to be > 7 residues.
+    :return: Pose with the terminal helices extended.
+    Extend the terminal helices of a pose by a specified number of residues.
+    Mutates the first and last residues of the specified chain to GLY prior to extending.
+    """
+
+    import pyrosetta
+    from pyrosetta.rosetta.core.pose import append_pose_to_pose, Pose
+
+    # Get the chains of the pose
+    chains = list(pose.split_by_chain())
+    # PyRosetta indexing starts at 1 for chains
+    chain_to_extend = chains[chain - 1].clone()
+    try:
+        assert chain_to_extend.total_residue() > 7
+    except AssertionError:
+        raise ValueError("Chain to extend must be > 7 residues.")
+
+    # Build a backbone stub for each termini that will be extended.
+    ideal_c_term = pyrosetta.pose_from_sequence("G" * (extend_c_term + 7))
+    ideal_n_term = pyrosetta.pose_from_sequence("G" * (extend_n_term + 7))
+    # Set the torsions of the stubs to be ideal helices.
+    for stub in [ideal_c_term, ideal_n_term]:
+        for i in range(1, stub.total_residue()):
+            stub.set_phi(i, -60)
+            stub.set_psi(i, -60)
+            stub.set_omega(i, 180)
+    # For each non-zero terminal extension, align the ideal helix to the pose at the termini.
+    if extend_c_term > 0:
+        # align first 7 residues of ideal_c_term to the last 7 residues of chain_to_extend
+        range_CA_align(
+            pose_a=ideal_c_term,
+            pose_b=chain_to_extend,
+            start_a=1,
+            end_a=7,
+            start_b=chain_to_extend.chain_end(1) - 6,
+            end_b=chain_to_extend.chain_end(1),
+        )
+        # build a new chain by appending the ideal_c_term to the chain_to_extend
+        extended_c_term = Pose()
+        # first add the chain_to_extend into the extended_c_term but without the C-terminal residue
+        for i in range(chain_to_extend.chain_begin(1), chain_to_extend.chain_end(1)):
+            extended_c_term.append_residue_by_bond(chain_to_extend.residue(i))
+        # append the ideal_c_term to the extended_c_term plus one additional residue
+        for i in range(ideal_c_term.chain_begin(1) + 6, ideal_c_term.chain_end(1) + 1):
+            extended_c_term.append_residue_by_bond(ideal_c_term.residue(i))
+        new_pose = Pose()
+        for i, subpose in enumerate(chains, start=1):
+            if i == chain:
+                append_pose_to_pose(new_pose, extended_c_term, new_chain=True)
+            else:
+                append_pose_to_pose(new_pose, subpose, new_chain=True)
+
+        # make pose point to new pose
+        pose = new_pose
+        # get the chains again
+        chains = list(pose.split_by_chain())
+        # clone the chain again in case we are extending the N-terminal helix too
+        chain_to_extend = chains[chain - 1].clone()
+    else:
+        pass
+    if extend_n_term > 0:
+        # align last 7 residues of ideal_n_term to the first 7 residues of chain_to_extend
+        range_CA_align(
+            pose_a=ideal_n_term,
+            pose_b=chain_to_extend,
+            start_a=ideal_n_term.total_residue() - 6,
+            end_a=ideal_n_term.total_residue(),
+            start_b=chain_to_extend.chain_begin(1),
+            end_b=chain_to_extend.chain_begin(1) + 6,
+        )
+        # build a new chain by appending the chain_to_extend to the ideal_n_term
+        extended_n_term = Pose()
+        # first add the ideal_n_term into the extended_n_term plus one additional residue
+        for i in range(
+            ideal_n_term.chain_begin(1), ideal_n_term.chain_end(1) - 5
+        ):  # -7+1+1
+            extended_n_term.append_residue_by_bond(ideal_n_term.residue(i))
+        for i in range(
+            chain_to_extend.chain_begin(1) + 1, chain_to_extend.chain_end(1) + 1
+        ):
+            extended_n_term.append_residue_by_bond(chain_to_extend.residue(i))
+        new_pose = Pose()
+        for i, subpose in enumerate(chains, start=1):
+            if i == chain:
+                append_pose_to_pose(new_pose, extended_n_term, new_chain=True)
+            else:
+                append_pose_to_pose(new_pose, subpose, new_chain=True)
+        pose = new_pose
+    else:
+        pass
+    if idealize:
+        idealize_mover = pyrosetta.rosetta.protocols.idealize.IdealizeMover()
+        idealize_mover.apply(pose)
+    else:
+        pass
+
+    return pose
+
+
 def range_CA_align(
     pose_a: Pose,
     pose_b: Pose,
@@ -112,14 +223,15 @@ def combine_two_poses(
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
 
-    length = len(pose_a.sequence())
     newpose = Pose()
     for i in range(1, end_a + 1):
         newpose.append_residue_by_bond(pose_a.residue(i))
     newpose.append_residue_by_jump(
         pose_b.residue(start_b), newpose.chain_end(1), "CA", "CA", 1
     )
-    for i in range(start_b + 1, length + 1):
+    for i in range(
+        start_b + 1, pose_b.total_residue() + 1
+    ):  # TODO make sure this doesn't break the statemakers
         newpose.append_residue_by_bond(pose_b.residue(i))
     return newpose
 
@@ -548,6 +660,16 @@ class BoundStateMaker(StateMaker):
                         dock.append_residue_by_bond(hinge_pose.residue(resid))
 
                     # fix PDBInfo and chain numbering
+                    rechain.apply(dock)
+                    # extend the bound helix
+                    dock = grow_terminal_helices(
+                        pose=dock,
+                        chain=2,
+                        extend_n_term=5,
+                        extend_c_term=5,
+                        idealize=False,
+                    )
+                    # fix PDBInfo and chain numbering again
                     rechain.apply(dock)
                     # mini filtering block
                     bb_clash = clash_check(dock)
