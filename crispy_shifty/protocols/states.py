@@ -664,7 +664,7 @@ class BoundStateMaker(StateMaker):
                     # extend the bound helix
                     dock = grow_terminal_helices(
                         pose=dock,
-                        chain=2,
+                        chain=3,
                         extend_n_term=5,
                         extend_c_term=5,
                         idealize=False,

@@ -661,6 +661,7 @@ def one_state_design_unlooped_dimer(
     )
     print_timestamp("Generated interface design task factory")
 
+    # TODO hardcode scorefxn corrections with set basic boolean options
     clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
@@ -809,6 +810,7 @@ def one_state_design_bound_state(
     )
     print_timestamp("Generated interface design task factory")
 
+    # TODO hardcode scorefxn corrections with set basic boolean options
     clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
