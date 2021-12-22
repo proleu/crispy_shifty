@@ -16,7 +16,7 @@ from pyrosetta.rosetta.core.kinematics import MoveMap
 
 
 def add_metadata_to_pose(
-    pose: Pose, key: str = "metadata", metadata: Union[int, float, str]
+    pose: Pose, key: str, metadata: Union[int, float, str]
 ) -> None:
     """
     :param pose: Pose to add metadata to
@@ -172,14 +172,6 @@ def gen_std_layer_design(layer_aas_list: list = None) -> dict:
     ):
         layer_design[layer_name] = (layer_aas, region_sel)
 
-        # testing - prints the pymol selections corresponding to the amino acids set for the layer
-        # from crispy_shifty.utils.io import pymol_selection
-        # from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-        # import pyrosetta.distributed.io as io
-        # pdb_path = '/home/broerman/projects/crispy_shifty/projects/crispy_shifty_dimers/01_make_states/decoys/0000/CSD_01_make_states_4c315eabb34a449a886b9e9bd9b8227a.pdb.bz2'
-        # for pose in path_to_pose_or_ppose(path=pdb_path, cluster_scores=True, pack_result=False):
-        #     print(pymol_selection(pose, region_sel, 'region ' + layer_aas))
-
     return layer_design
 
 
@@ -194,6 +186,20 @@ def gen_task_factory(
     ifcl: bool = False,
     layer_design: dict = None,
 ) -> TaskFactory:
+    """
+    :param: design_sel: ResidueSelector for designable residues.
+    :param: pack_nbhd: bool, whether to pack the neighborhood of designable residues.
+    :param: extra_rotamers_level: int, how many extra rotamers to add to the packer.
+    :param: limit_arochi: bool, whether to limit extreme aromatic chi angles.
+    :param: prune_buns: bool, whether to prune rotamers with buried unsatisfied polars.
+    :param: upweight_ppi: bool, whether to upweight interfaces.
+    :param: restrict_pro_gly: bool, whether to restrict proline and glycine from design.
+    :param: ifcl: bool, whether to initialize the packer from the command line.
+    :param: layer_design: dict, custom layer design definition if you want to use one.
+    :return: TaskFactory for design.
+    Sets up the TaskFactory for design.
+    """
+
     import pyrosetta
     from pyrosetta.rosetta.core.pack.task.operation import (
         OperateOnResidueSubset,
