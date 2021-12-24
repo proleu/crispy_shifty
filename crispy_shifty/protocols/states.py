@@ -26,7 +26,7 @@ def grow_terminal_helices(
     :param: chain: Chain to extend the terminal helices of. Needs to be > 7 residues.
     :return: Pose with the terminal helices extended.
     Extend the terminal helices of a pose by a specified number of residues.
-    Mutates the first and last residues of the specified chain to GLY prior to extending.
+    Mutates the first and last residues of the specified chain to VAL prior to extending.
     """
 
     import pyrosetta
@@ -42,8 +42,8 @@ def grow_terminal_helices(
         raise ValueError("Chain to extend must be > 7 residues.")
 
     # Build a backbone stub for each termini that will be extended.
-    ideal_c_term = pyrosetta.pose_from_sequence("G" * (extend_c_term + 7))
-    ideal_n_term = pyrosetta.pose_from_sequence("G" * (extend_n_term + 7))
+    ideal_c_term = pyrosetta.pose_from_sequence("V" * (extend_c_term + 7))
+    ideal_n_term = pyrosetta.pose_from_sequence("V" * (extend_n_term + 7))
     # Set the torsions of the stubs to be ideal helices.
     for stub in [ideal_c_term, ideal_n_term]:
         for i in range(1, stub.total_residue()):

@@ -412,10 +412,10 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
             "compressed": True,
             "decoy_dir_name": "decoys",
             "score_dir_name": "scores",
-            "environment": "",  # TODO: This is a placeholder for now
+            "environment": "",  # TODO: This is a placeholder for now, make it work
             "task": task_kwargs,
-            "output_path": "~",  # TODO: make this work
-            "simulation_name": "",  # TODO: make this work
+            "output_path": "~",  # TODO: check if this is ok
+            "simulation_name": "",  # TODO: check if this is ok
             "simulation_records_in_scorefile": False,
             "crispy_shifty_datetime_start": datetime_start,
         }
@@ -458,7 +458,6 @@ def gen_array_tasks(
             # returns an iteratable with nstruct_per_task elements: lines of design_list_file
             for lines in ichunked(f, nstruct_per_task):
                 tasks = {
-                    # "-options": "corrections::beta_nov16 true" # TODO this needs to be removed, just hardcode it in any protocol that requires it
                     "-options": ""  # TODO ensure that this works
                 }  # no dash in from of corrections- this is not a typo
                 tasks["-extra_options"] = options

@@ -1,5 +1,5 @@
 # Python standard library
-from typing import * # TODO: explicit imports TODO, change Generator to Iterator TODO: params in docstrings
+from typing import *  # TODO: explicit imports TODO, change Generator to Iterator TODO: params in docstrings
 
 # 3rd party library imports
 # Rosetta library imports
@@ -34,6 +34,36 @@ def loop_match(pose: Pose, length: int) -> str:
         closure_type = "not_closed"
     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "closure_type", closure_type)
     return closure_type
+
+
+def loop_extend(pose: Pose, min_loop_length: int = 2, max_loop_length: int = 5) -> str:
+    """
+    Runs ConnectChainsMover. Expects a pose with two chains, A and B.
+    May increase the loop length relative to the parent.
+    """
+    import pyrosetta
+
+    objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
+        f"""
+        <MOVERS>
+            <ConnectChainsMover name="connectchains" 
+                chain_connections="[A+B]" 
+                loopLengthRange="{min_loop_length},{max_loop_length}" 
+                resAdjustmentRangeSide1="0,3" 
+                resAdjustmentRangeSide2="0,3" 
+                RMSthreshold="0.8"/>
+        </MOVERS>
+        """
+    )
+    cc_mover = objs.get_mover("connectchains")
+    cc_mover.apply(pose)
+    # try:
+    #     cc_mover.apply(pose)
+    #     closure_type = "loop_extend"
+    # except RuntimeError:  # if ConnectChainsMover cannot find a closure
+    #     closure_type = "not_closed"
+    # pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "closure_type", closure_type)
+    # return closure_type
 
 
 def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
@@ -418,4 +448,130 @@ def loop_dimer(
                 )
 
         ppose = io.to_packed(combined_looped_pose)
+        yield ppose
+
+
+@requires_init
+def loop_bound_state(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to be looped.
+    :param: kwargs: keyword arguments to be passed to looping protocol.
+    :return: an iterator of PackedPose objects.
+    """
+
+    from copy import deepcopy
+    import sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    sys.path.insert(0, "/projects/crispy_shifty")
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.design import (
+        clear_constraints,
+        gen_std_layer_design,
+        gen_task_factory,
+        packrotamers,
+        score_ss_sc,
+        score_wnm,
+        struct_profile,
+    )
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        )
+
+    looped_poses = []
+
+    for pose in poses:
+        scores = dict(pose.scores)
+        pose = deepcopy(pose)  # TODO why is this necessary?
+        pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
+        # get parent length from the scores
+        parent_length = scores["trimmed_length"]
+
+        looped_poses = []
+        sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sw.chain_order("123")
+        sw.apply(pose)
+        # TODO assumes residue numbering is correct in input
+        min_loop_length = int(float(parent_length) - pose.chain_end(2))
+        max_loop_length = 5
+        # TODO: get new loop resis
+        # TODO print_timestamp("Generating loop extension...", start_time, end="")
+        closure_type = loop_extend(pose, min_loop_length, max_loop_length)
+        if closure_type == "not_closed":
+            continue  # move on to next pose, we don't care about the ones that aren't closed
+        else:
+            looped_poses.append(pose)
+
+    layer_design = gen_std_layer_design()
+    # TODO hardcode corrections
+    design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    design_sfxn.set_weight(
+        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
+    )
+
+    for looped_pose in looped_poses:
+
+        print_timestamp("Designing loop...", start_time, end="")
+        new_loop_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+                new_loop_str
+            )
+        )
+        design_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
+                new_loop_sel, 6, True
+            )
+        )
+        task_factory = gen_task_factory(
+            design_sel=design_sel,
+            pack_nbhd=True,
+            extra_rotamers_level=2,
+            limit_arochi=True,
+            prune_buns=True,
+            upweight_ppi=False,
+            restrict_pro_gly=False,
+            ifcl=True,  # TODO: to respect precompute_ig just hardcode this to True
+        )
+        struct_profile(
+            looped_pose,
+            design_sel,
+        )
+        packrotamers(
+            looped_pose,
+            task_factory,
+            design_sfxn,
+        )
+        clear_constraints(looped_pose)
+        sw.chain_order("12")
+        sw.apply(looped_pose)
+        pyrosetta.rosetta.core.pose.clearPoseExtraScores(looped_pose)
+        total_length = looped_pose.total_residue()
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+            looped_pose, "total_length", total_length
+        )
+        dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(
+            looped_pose
+        )  # TODO this might not work
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+            looped_pose, "dssp", dssp.get_dssp_secstruct()
+        )
+        score_ss_sc(looped_pose, False, True, "loop_sc")
+        scores.update(looped_pose.scores)
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(looped_pose, key, value)
+        ppose = io.to_packed(looped_pose)
         yield ppose
