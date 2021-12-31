@@ -660,6 +660,7 @@ def one_state_design_unlooped_dimer(
     sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
+    # TODO: remove below
     # testing to properly set the TMPDIR on distributed jobs
     # import os
     # os.environ['TMPDIR'] = '/scratch'
@@ -667,6 +668,7 @@ def one_state_design_unlooped_dimer(
 
     start_time = time()
 
+    # TODO import print_timestamp
     def print_timestamp(print_str, end="\n", *args):
         time_min = (time() - start_time) / 60
         print(f"{time_min:.2f} min: {print_str}", end=end)
@@ -813,22 +815,15 @@ def one_state_design_bound_state(
 
     sys.path.insert(0, "/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-
-    # TODO import print_timestamp from somewhere else
+    from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
-
-    def print_timestamp(print_str, end="\n", *args):
-        time_min = (time() - start_time) / 60
-        print(f"{time_min:.2f} min: {print_str}", end=end)
-        for arg in args:
-            print(arg)
 
     # hardcode precompute_ig
     pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
 
     design_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
-    print_timestamp("Generated interface selector")
+    print_timestamp("Generated interface selector", start_time=start_time)
 
     layer_design = gen_std_layer_design()
     task_factory = gen_task_factory(
@@ -842,19 +837,20 @@ def one_state_design_bound_state(
         ifcl=True,  # so that it respects precompute_ig TODO, this might be bad in some cases
         layer_design=layer_design,
     )
-    print_timestamp("Generated interface design task factory")
+    print_timestamp("Generated interface design task factory", start_time=start_time)
 
-    # TODO hardcode scorefxn corrections with set basic boolean options
+    # hardcode scorefxn corrections
+    pyrosetta.rosetta.basic.options.set_boolean_option("corrections:beta_nov16", True)
     clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
         pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
     )
-    print_timestamp("Generated score functions")
+    print_timestamp("Generated score functions", start_time=start_time)
 
     fixbb_mm = gen_movemap(jump=True, chi=True, bb=False)
     flexbb_mm = gen_movemap(jump=True, chi=True, bb=True)
-    print_timestamp("Generated movemaps")
+    print_timestamp("Generated movemaps", start_time=start_time)
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -871,7 +867,7 @@ def one_state_design_bound_state(
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
 
-        print_timestamp("Starting 1 round of fixed backbone design...", end="")
+        print_timestamp("Starting 1 round of fixed backbone design...", end="", start_time=start_time)
         fastdesign(
             pose=pose,
             task_factory=task_factory,
@@ -880,7 +876,7 @@ def one_state_design_bound_state(
             repeats=1,
         )
         print("complete.")
-        print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
+        print_timestamp("Starting 2 rounds of flexible backbone design...", end="", start_time=start_time)
         fastdesign(
             pose=pose,
             task_factory=task_factory,
@@ -890,14 +886,13 @@ def one_state_design_bound_state(
         )
         print("complete.")
 
-        print_timestamp("Scoring loop distance...", end="")
+        print_timestamp("Scoring loop distance...", end="", start_time=start_time)
         pre_break_helix = int(float(pose.scores["pre_break_helix"]))
         score_loop_dist(pose, pre_break_helix, name="loop_dist")
         print("complete.")
 
         print_timestamp(
-            "Scoring contact molecular surface and shape complementarity...", end=""
-        )
+            "Scoring contact molecular surface and shape complementarity...", end="", start_time=start_time)
         an_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(1)
         ac_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(2)
         b_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(3)
@@ -916,17 +911,17 @@ def one_state_design_bound_state(
             score_sc(pose, sel_1, sel_2, "sc_" + name)
         print("complete.")
 
-        print_timestamp("Scoring secondary structure shape complementarity...", end="")
+        print_timestamp("Scoring secondary structure shape complementarity...", end="", start_time=start_time)
         score_ss_sc(pose)
         print("complete.")
 
-        print_timestamp("Scoring...", end="")
+        print_timestamp("Scoring...", end="", start_time=start_time)
         score_per_res(pose, clean_sfxn)
         score_filter = gen_score_filter(clean_sfxn)
         add_metadata_to_pose(pose, "path_in", pdb_path)
         end_time = time()
         total_time = end_time - start_time
-        print_timestamp(f"Total time: {total_time:.2f} seconds")
+        print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
         add_metadata_to_pose(pose, "time", total_time)
         clear_terms_from_pose(pose)
 
