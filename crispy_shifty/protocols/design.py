@@ -915,7 +915,7 @@ def one_state_design_bound_state(
         total_time = end_time - start_time
         print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
         add_metadata_to_pose(pose, "time", total_time)
-        clear_terms_from_pose(pose)
+        clear_terms_from_scores(pose)
 
         ppose = io.to_packed(pose)
         yield ppose
