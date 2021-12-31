@@ -52,7 +52,7 @@ beta_nov16_terms = [
     "yhh_planarity",
 ]
 
-def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]]) -> None:
+def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]]=None) -> None:
     """
     :param: pose: The pose to clear the terms from.
     :param: terms: The terms to clear from the pose.
