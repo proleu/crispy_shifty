@@ -4,7 +4,7 @@ add submodules:
 	pompd? probably not
 	mpnn: Need to ensure that the code is private to the module and not accessible from outside.
         Should work just fine as a git submodule.
-	af2: ask Nater tot if there are any special considerations
+	AF2: ask Nater tot if there are any special considerations
 
 
 how to do better than last round, chA:
@@ -36,8 +36,14 @@ If disulfide stapled states are needed or wanted, just staple and predict
 specifically:
 make bound states ~180k
 design interfaces on boinc ~? filter with standard interface stuff
-TODO: probably split into junctions x 1, non-junctions x 5-10, check lengths of non-junctions to make sure there's nothing too huge
+TODO: probably split into junctions x 1-3, non-junctions x 5-10, check lengths of non-junctions to make sure there's nothing too huge
 TODO: scaffold NBs extend helix, 01 loop bound_states 02 MPNN bound states 03_ fold bound states 04 loop parent 05 msd 06 MPNN msd 07 fold msd 08 detail 09 order
+TODO: mpnn script accepts residue selectors and poses, returns a list of poses, optionally a single pose with many sequences in the datacache
+TODO: mpnn wrapper accepts a pdb, either returns the pdb and a fasta, or the pdb with the many sequences in the scores
+TODO: AF2 wrapper accepts a reference pdb, has options to predict a single sequence, or predict many sequences, in many sequence case can accept fasta, otherwise will safely try to read sequences from the scores
+TODO: AF2 wrapper makes a multiprocessing pool of processes, each process compiles the model runners 1 and 3, and swaps weights as neccessary, this allows efficient use of GPUs on a node.
+TODO: AF2 wrapper allows just running single models, and manages outputs
+TODO: AF2 inference function that returns a list of poses, and a identically indexed list of score dicts
 loop, allow extension, filter by trying to loop parent to match then loop design
 mpnn or rosetta interface design? 
 AF2 interfaces, make pairs for those that form interfaces

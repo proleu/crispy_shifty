@@ -8,9 +8,9 @@ from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.distributed import requires_init
 
 
-def loop_match(pose: Pose, length: int) -> str:
+def loop_match(pose: Pose, length: int, connections: str = "[A+B]") -> str:
     """
-    Runs ConnectChainsMover. Expects a pose with two chains, A and B.
+    Runs ConnectChainsMover.
     """
     import pyrosetta
 
@@ -18,7 +18,7 @@ def loop_match(pose: Pose, length: int) -> str:
         f"""
         <MOVERS>
             <ConnectChainsMover name="connectchains" 
-                chain_connections="[A+B]" 
+                chain_connections="{connections}" 
                 loopLengthRange="{length},{length}" 
                 resAdjustmentRangeSide1="0,0" 
                 resAdjustmentRangeSide2="0,0" 
@@ -36,10 +36,21 @@ def loop_match(pose: Pose, length: int) -> str:
     return closure_type
 
 
-def loop_extend(pose: Pose, min_loop_length: int = 2, max_loop_length: int = 5) -> str:
+def loop_extend(
+    pose: Pose,
+    min_loop_length: int = 2,
+    max_loop_length: int = 5,
+    connections: str = "[A+B]",
+) -> str:
     """
-    Runs ConnectChainsMover. Expects a pose with two chains, A and B.
-    May increase the loop length relative to the parent.
+    :param: pose: The pose to insert the loop into.
+    :param: min_loop_length: The minimum length of the loop.
+    :param: max_loop_length: The maximum length of the loop.
+    :param: connections: The connections to use.
+    :return: Whether the loop was successfully inserted.
+
+    Runs ConnectChainsMover.
+    May increase the loop length relative to the parent
     """
     import pyrosetta
 
@@ -47,7 +58,7 @@ def loop_extend(pose: Pose, min_loop_length: int = 2, max_loop_length: int = 5) 
         f"""
         <MOVERS>
             <ConnectChainsMover name="connectchains" 
-                chain_connections="[A+B]" 
+                chain_connections="{connections}" 
                 loopLengthRange="{min_loop_length},{max_loop_length}" 
                 resAdjustmentRangeSide1="0,3" 
                 resAdjustmentRangeSide2="0,3" 
@@ -56,14 +67,13 @@ def loop_extend(pose: Pose, min_loop_length: int = 2, max_loop_length: int = 5) 
         """
     )
     cc_mover = objs.get_mover("connectchains")
-    cc_mover.apply(pose)
-    # try:
-    #     cc_mover.apply(pose)
-    #     closure_type = "loop_extend"
-    # except RuntimeError:  # if ConnectChainsMover cannot find a closure
-    #     closure_type = "not_closed"
-    # pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "closure_type", closure_type)
-    # return closure_type
+    try:
+        cc_mover.apply(pose)
+        closure_type = "loop_extend"
+    except RuntimeError:  # if ConnectChainsMover cannot find a closure
+        closure_type = "not_closed"
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "closure_type", closure_type)
+    return closure_type
 
 
 def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
@@ -493,27 +503,34 @@ def loop_bound_state(
         )
 
     looped_poses = []
-
+    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
     for pose in poses:
         scores = dict(pose.scores)
-        pose = deepcopy(pose)  # TODO why is this necessary?
-        pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
         # get parent length from the scores
-        parent_length = scores["trimmed_length"]
-
+        parent_length = int(float(scores["trimmed_length"]))
         looped_poses = []
-        sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
         sw.chain_order("123")
         sw.apply(pose)
-        # TODO assumes residue numbering is correct in input
-        min_loop_length = int(float(parent_length) - pose.chain_end(2))
+        min_loop_length = int(parent_length - pose.chain_end(2))
         max_loop_length = 5
-        # TODO: get new loop resis
-        # TODO print_timestamp("Generating loop extension...", start_time, end="")
-        closure_type = loop_extend(pose, min_loop_length, max_loop_length)
+        loop_start = pose.chain_end(1) + 1
+        pre_looped_length = pose.chain_end(2)
+        print_timestamp("Generating loop extension...", start_time, end="")
+        closure_type = loop_extend(pose=pose, min_loop_length=min_loop_length, max_loop_length=max_loop_length, connections="[A+B],C")
         if closure_type == "not_closed":
             continue  # move on to next pose, we don't care about the ones that aren't closed
         else:
+            sw.chain_order("12")
+            sw.apply(pose)
+            # get new loop resis
+            new_loop_length = pose.chain_end(1) - pre_looped_length
+            new_loop_str = ",".join(
+                [str(i) for i in range(loop_start, loop_start + new_loop_length)]
+            )
+            scores["new_loop_str"] = new_loop_str
+            scores["looped_length"] = pose.chain_end(1) 
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
             looped_poses.append(pose)
 
     layer_design = gen_std_layer_design()
@@ -524,7 +541,8 @@ def loop_bound_state(
     )
 
     for looped_pose in looped_poses:
-
+        scores = dict(looped_pose.scores)
+        new_loop_str = scores["new_loop_str"]
         print_timestamp("Designing loop...", start_time, end="")
         new_loop_sel = (
             pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
@@ -533,7 +551,7 @@ def loop_bound_state(
         )
         design_sel = (
             pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
-                new_loop_sel, 6, True
+                new_loop_sel, 8, True
             )
         )
         task_factory = gen_task_factory(
@@ -556,8 +574,6 @@ def loop_bound_state(
             design_sfxn,
         )
         clear_constraints(looped_pose)
-        sw.chain_order("12")
-        sw.apply(looped_pose)
         pyrosetta.rosetta.core.pose.clearPoseExtraScores(looped_pose)
         total_length = looped_pose.total_residue()
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
@@ -565,7 +581,7 @@ def loop_bound_state(
         )
         dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(
             looped_pose
-        )  # TODO this might not work
+        )
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
             looped_pose, "dssp", dssp.get_dssp_secstruct()
         )

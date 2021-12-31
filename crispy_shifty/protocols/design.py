@@ -1,5 +1,5 @@
 # Python standard library
-from typing import Iterator, Optional, Union
+from typing import Iterator, List, Optional, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -13,6 +13,57 @@ from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.kinematics import MoveMap
 
 # Custom library imports
+
+beta_nov16_terms = [
+    "dslf_fa13",
+    "fa_atr",
+    "fa_dun",
+    "fa_dun_dev",
+    "fa_dun_rot",
+    "fa_dun_semi",
+    "fa_elec",
+    "fa_dun_dev",
+    "fa_dun_rot",
+    "fa_dun_semi",
+    "fa_elec",
+    "fa_intra_atr_xover4",
+    "fa_intra_elec",
+    "fa_intra_rep",
+    "fa_intra_rep_xover4",
+    "fa_intra_sol_xover4",
+    "fa_rep",
+    "fa_sol",
+    "hbond_bb_sc",
+    "hbond_lr_bb",
+    "hbond_sc",
+    "hbond_sr_bb",
+    "hxl_tors",
+    "lk_ball",
+    "lk_ball_bridge",
+    "lk_ball_bridge_uncpl",
+    "lk_ball_iso",
+    "lk_ball_wtd",
+    "omega",
+    "p_aa_pp",
+    "pro_close",
+    "rama_prepro",
+    "ref",
+    "res_type_constraint",
+    "yhh_planarity",
+]
+
+def clear_terms_from_scores(pose: Pose, terms: List[str]=beta_nov16_terms) -> None:
+    """
+    :param: pose: The pose to clear the terms from.
+    :param: terms: The terms to clear from the pose.
+    :return: None.
+    Clears beta nov16 terms from the pose by default, or the given terms if provided.
+    """
+    import pyrosetta
+
+    for term in beta_nov16_terms:
+        pyrosetta.rosetta.core.pose.clearPoseExtraScore(pose, term)
+    return
 
 
 def add_metadata_to_pose(
@@ -512,7 +563,7 @@ def score_wnm(pose: Pose, sel: ResidueSelector = None, name: str = "wnm"):
     return wnm
 
 
-def score_wnm_all(pose: Pose, name: str = "wnm"):
+def score_wnm_all(pose: Pose, name: str = "wnm") -> List[float]:
     # loading the database takes 4.5 minutes, but once loaded, remains for the rest of the python session
     # could instead call score_wnm inside this function, but that would require parsing the xml multiple times. Faster to just parse it once and change the residue selector.
     import pyrosetta
@@ -534,25 +585,6 @@ def score_wnm_all(pose: Pose, name: str = "wnm"):
         wnm = score_on_chain_subset(pose, wnm_filter, [chain_num])
         wnms.append(wnm)
     return wnms
-
-    # wnm_filter.set_user_defined_name(name) # change name above to be wnm_all
-    # wnms = []
-    # for chain_num in range(1, pose.num_chains() + 1):
-    #     chain_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(chain_num)
-    #     wnm_filter.set_residue_selector(chain_sel)
-    #     wnm = wnm_filter.report_sm(pose)
-    #     wnms.append(wnm)
-    # wnm_all = max(wnms)
-    # pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(wnm_all))
-    # return wnm_all
-
-    # for chain_num in range(1, pose.num_chains() + 1):
-    #     chain_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(chain_num)
-    #     name_chain = name + '_' + str(chain_num)
-    #     wnm_filter.set_user_defined_name(name_chain)
-    #     wnm_filter.set_residue_selector(chain_sel)
-    #     wnm = wnm_filter.report_sm(pose)
-    #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name_chain, str(wnm))
 
 
 def score_wnm_helix(pose: Pose, name: str = "wnm_hlx"):
@@ -782,6 +814,8 @@ def one_state_design_bound_state(
     sys.path.insert(0, "/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
+    # TODO import print_timestamp from somewhere else
+
     start_time = time()
 
     def print_timestamp(print_str, end="\n", *args):
@@ -837,16 +871,6 @@ def one_state_design_bound_state(
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
 
-        # testing
-        # from crispy_shifty.utils.io import pymol_selection
-
-        # print(pymol_selection(pose, design_sel, "design_sel"))
-        # print(pose.scores)
-
-        # print_timestamp("Generating structure profile...", end="")
-        # struct_profile(pose, design_sel)
-        # print("complete.")
-
         print_timestamp("Starting 1 round of fixed backbone design...", end="")
         fastdesign(
             pose=pose,
@@ -865,10 +889,6 @@ def one_state_design_bound_state(
             repeats=2,
         )
         print("complete.")
-
-        # print_timestamp("Clearing constraints...", end="")
-        # clear_constraints(pose)
-        # print("complete.")
 
         print_timestamp("Scoring loop distance...", end="")
         pre_break_helix = int(float(pose.scores["pre_break_helix"]))
@@ -899,25 +919,16 @@ def one_state_design_bound_state(
         print_timestamp("Scoring secondary structure shape complementarity...", end="")
         score_ss_sc(pose)
         print("complete.")
-        # print_timestamp("Scoring per_chain worst9mer...", end="")
-        # score_wnm_all(pose)
-        # print("complete.")
-        # print_timestamp("Scoring helical worst9mer...", end="")
-        # score_wnm_helix(pose)
-        # print("complete.")
 
         print_timestamp("Scoring...", end="")
         score_per_res(pose, clean_sfxn)
         score_filter = gen_score_filter(clean_sfxn)
-        chain_lists = [[1], [2], [3], [1, 2], [1, 3], [2, 3]]
-        for chain_list in chain_lists:
-            score_on_chain_subset(pose, score_filter, chain_list)
-        print("complete.")
         add_metadata_to_pose(pose, "path_in", pdb_path)
         end_time = time()
         total_time = end_time - start_time
         print_timestamp(f"Total time: {total_time:.2f} seconds")
         add_metadata_to_pose(pose, "time", total_time)
+        clear_terms_from_pose(pose)
 
         ppose = io.to_packed(pose)
         yield ppose
