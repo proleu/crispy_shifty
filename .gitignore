@@ -28,7 +28,7 @@ figs
 *.out
 *.log
 *.err
-*.json
+*.json*
 *.yml
 *.silent
 ._*

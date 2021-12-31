@@ -293,7 +293,9 @@ def loop_remodel(
 def loop_dimer(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Generator[PackedPose, PackedPose, None]:
-
+    """
+    Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
+    """
     from copy import deepcopy
     from time import time
     import sys
@@ -469,6 +471,7 @@ def loop_bound_state(
     :param: packed_pose_in: a PackedPose object to be looped.
     :param: kwargs: keyword arguments to be passed to looping protocol.
     :return: an iterator of PackedPose objects.
+    Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
     """
 
     from copy import deepcopy
@@ -533,8 +536,9 @@ def loop_bound_state(
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
             looped_poses.append(pose)
 
+    # hardcode precompute_ig
+    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
     layer_design = gen_std_layer_design()
-    # TODO hardcode corrections
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
         pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
@@ -562,7 +566,7 @@ def loop_bound_state(
             prune_buns=True,
             upweight_ppi=False,
             restrict_pro_gly=False,
-            ifcl=True,  # TODO: to respect precompute_ig just hardcode this to True
+            ifcl=True,  
         )
         struct_profile(
             looped_pose,

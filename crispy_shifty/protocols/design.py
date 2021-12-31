@@ -677,10 +677,8 @@ def one_state_design_unlooped_dimer(
 
     # hardcode precompute_ig
     pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
-
     design_sel = interface_among_chains(chain_list=[1, 2, 3, 4], vector_mode=True)
     print_timestamp("Generated interface selector")
-
     layer_design = gen_std_layer_design()
     task_factory = gen_task_factory(
         design_sel=design_sel,
@@ -690,12 +688,11 @@ def one_state_design_unlooped_dimer(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=True,  # so that it respects precompute_ig TODO, this might be bad in some cases
+        ifcl=True,  # so that it respects precompute_ig if it is passed as a flag
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory")
 
-    # TODO hardcode scorefxn corrections with set basic boolean options
     clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
@@ -818,13 +815,10 @@ def one_state_design_bound_state(
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
-
     # hardcode precompute_ig
     pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
-
     design_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
     print_timestamp("Generated interface selector", start_time=start_time)
-
     layer_design = gen_std_layer_design()
     task_factory = gen_task_factory(
         design_sel=design_sel,
@@ -834,7 +828,7 @@ def one_state_design_bound_state(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=True,  # so that it respects precompute_ig TODO, this might be bad in some cases
+        ifcl=True,  # so that it respects precompute_ig if it is passed as an flag
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory", start_time=start_time)
@@ -844,8 +838,6 @@ def one_state_design_bound_state(
     design_sfxn.set_weight(
         pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
     )
-    # hardcode scorefxn corrections
-    pyrosetta.rosetta.basic.options.set_boolean_option("corrections:beta_nov16", True) 
     print_timestamp("Generated score functions", start_time=start_time)
 
     fixbb_mm = gen_movemap(jump=True, chi=True, bb=False)
