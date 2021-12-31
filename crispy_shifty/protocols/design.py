@@ -52,16 +52,24 @@ beta_nov16_terms = [
     "yhh_planarity",
 ]
 
-def clear_terms_from_scores(pose: Pose, terms: List[str]=beta_nov16_terms) -> None:
+def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]]) -> None:
     """
     :param: pose: The pose to clear the terms from.
     :param: terms: The terms to clear from the pose.
     :return: None.
     Clears beta nov16 terms from the pose by default, or the given terms if provided.
     """
+    import sys
     import pyrosetta
+    sys.path.insert(0, "/projects/crispy_shifty")
+    from crispy_shifty.protocols.design import beta_nov16_terms
 
-    for term in beta_nov16_terms:
+    if terms is None:
+        terms = beta_nov16_terms
+    else:
+        pass
+
+    for term in terms:
         pyrosetta.rosetta.core.pose.clearPoseExtraScore(pose, term)
     return
 
