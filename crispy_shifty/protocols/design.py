@@ -839,13 +839,13 @@ def one_state_design_bound_state(
     )
     print_timestamp("Generated interface design task factory", start_time=start_time)
 
-    # hardcode scorefxn corrections
-    pyrosetta.rosetta.basic.options.set_boolean_option("corrections:beta_nov16", True)
     clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
         pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
     )
+    # hardcode scorefxn corrections
+    pyrosetta.rosetta.basic.options.set_boolean_option("corrections:beta_nov16", True) 
     print_timestamp("Generated score functions", start_time=start_time)
 
     fixbb_mm = gen_movemap(jump=True, chi=True, bb=False)
