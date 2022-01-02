@@ -348,7 +348,7 @@ class StateMaker(ABC):
         Initialize the base class with common attributes.
         """
 
-        self.input_pose = pose
+        self.input_pose = io.to_pose(pose)
         self.pre_break_helix = pre_break_helix
         self.post_break_helix = self.pre_break_helix + 1
         self.scores = dict(self.input_pose.scores)

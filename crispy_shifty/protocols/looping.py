@@ -1,5 +1,5 @@
 # Python standard library
-from typing import *  # TODO: explicit imports TODO, change Generator to Iterator TODO: params in docstrings
+from typing import Iterator, List, Optional, Tuple
 
 # 3rd party library imports
 # Rosetta library imports
@@ -10,6 +10,10 @@ from pyrosetta.distributed import requires_init
 
 def loop_match(pose: Pose, length: int, connections: str = "[A+B]") -> str:
     """
+    :param: pose: The pose to insert the loop into.
+    :param: length: The length of the loop.
+    :param: connections: The connections to use.
+    :return: Whether the loop was successfully inserted.
     Runs ConnectChainsMover.
     """
     import pyrosetta
@@ -78,6 +82,10 @@ def loop_extend(
 
 def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
     """
+    :param: phi: The phi angle.
+    :param: psi: The psi angle.
+    :param: omega: The omega angle.
+    :return: The abego string.
     From Buwei
     https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
     """
@@ -100,8 +108,10 @@ def phi_psi_omega_to_abego(phi: float, psi: float, omega: float) -> str:
             return "B"
 
 
-def abego_string(phi_psi_omega: list) -> str:
+def abego_string(phi_psi_omega: List[Tuple[float]]) -> str:
     """
+    :param: phi_psi_omega: A list of tuples of phi, psi, and omega angles.
+    :return: The abego string.
     From Buwei
     https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
     """
@@ -111,8 +121,10 @@ def abego_string(phi_psi_omega: list) -> str:
     return out
 
 
-def get_torsions(pose: Pose) -> list:
+def get_torsions(pose: Pose) -> List[Tuple[float]]:
     """
+    :param: pose: The pose to get the torsions from.
+    :return: A list of tuples of phi, psi, and omega angles.
     From Buwei
     https://wiki.ipd.uw.edu/protocols/dry_lab/rosetta/scaffold_generation_with_piecewise_blueprint_builder
     """
@@ -137,13 +149,20 @@ def loop_remodel(
     remodel_before_loop: int = 1,
     remodel_after_loop: int = 1,
     remodel_lengths_by_vector: bool = False,
-):
+) -> str:
     """
+    :param: pose: The pose to insert the loop into.
+    :param: length: The length of the loop.
+    :param: attempts: The number of attempts to make.
+    :param: remodel_before_loop: The number of residues to remodel before the loop.
+    :param: remodel_after_loop: The number of residues to remodel after the loop.
+    :param: remodel_lengths_by_vector: Use the vector angles of chain ends to determine what length to remodel.
+    :return: Whether the loop was successfully inserted.
     Remodel a new loop using Blueprint Builder. Expects a pose with two chains.
     DSSP and SS agnostic in principle but in practice more or less matches.
     """
-    import numpy as np
     import os
+    import numpy as np
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
 
@@ -153,6 +172,15 @@ def loop_remodel(
         remodel_before_loop: int = 1,
         remodel_after_loop: int = 1,
     ) -> str:
+        """
+        :param: pose: The pose to insert the loop into.
+        :param: loop_length: The length of the loop.
+        :param: remodel_before_loop: The number of residues to remodel before the loop.
+        :param: remodel_after_loop: The number of residues to remodel after the loop.
+        :return: The filename of the blueprint file to be used to remodel the loop.
+        Writes a blueprint file to the current directory or TMPDIR and returns the filename.
+        """
+
         import binascii, os
         import pyrosetta
 
@@ -292,7 +320,7 @@ def loop_remodel(
 @requires_init
 def loop_dimer(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
-) -> Generator[PackedPose, PackedPose, None]:
+) -> Iterator[PackedPose]:
     """
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
     """
@@ -484,6 +512,7 @@ def loop_bound_state(
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.design import (
         clear_constraints,
+        clear_terms_from_scores,
         gen_std_layer_design,
         gen_task_factory,
         packrotamers,
@@ -593,5 +622,6 @@ def loop_bound_state(
         scores.update(looped_pose.scores)
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(looped_pose, key, value)
+        clear_terms_from_scores(looped_pose)
         ppose = io.to_packed(looped_pose)
         yield ppose
