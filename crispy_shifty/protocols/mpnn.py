@@ -1,6 +1,6 @@
 # Python standard library
 from abc import ABC, abstractmethod
-from typing import Iterator, List, Optional, Union
+from typing import Dict, Iterator, List, Optional, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -15,41 +15,103 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 class MPNNRunner(ABC):
     """
     Abstract base class for MPNN runners.
+    TODO: dunder methods? probs not
+    TODO: test update_flags method
     """
+    import binascii, os
     import pyrosetta.distributed.io as io
 
     def __init__(
         self,
-        pose: Pose,
-        residue_selector: Optional[ResidueSelector] = None,
-        batch_size: int = 8,
-        num_sequences: int = 64,
-        temperature: float = 0.1,
+        batch_size: Optional[int] = 8,
+        num_sequences: Optional[int] = 64,
+        omit_AAs: Optional[str] = "X",
+        temperature: Optional[float] = 0.1,
     ):
         """
         Initialize the base class for MPNN runners with common attributes.
         """
-        self.pose = io.to_pose(pose)
-        self.residue_selector = residue_selector
         self.batch_size = batch_size
         self.num_sequences = num_sequences
+        self.omit_AAs = omit_AAs
         self.temperature = temperature
-        # setup standard command line flags for MPNN
-        self.flags = [
-            "--backbone_noise 0.05 ",
-            "--checkpoint_path '/projects/ml/struc2seq/data_for_complexes/training_scripts/paper_experiments/model_outputs/p10/checkpoints/epoch51_step255000.pt' ",
-            "--decoding_order 'random' ",
-            "--hidden_dim 192 ",
-            "--max_length 10000 ",
-            "--num_connections 64 ",
-            "--num_layers 3 ",
-            "--protein_features 'full' ",
-        ]
-                                                    
+        # setup standard command line flags for MPNN with default values
+        self.flags = {
+            "--backbone_noise": "0.05",
+            "--checkpoint_path": "/projects/ml/struc2seq/data_for_complexes/training_scripts/paper_experiments/model_outputs/p10/checkpoints/epoch51_step255000.pt",
+            "--decoding_order": "random",
+            "--hidden_dim": "192",
+            "--max_length": "10000",
+            "--num_connections": "64",
+            "--num_layers": "3",
+            "--protein_features": "full",
+        }
+        # add the flags that are required by MPNN and provided by the user
+        self.flags.update(
+            {
+                "--batch_size": str(self.batch_size),
+                "--num_seq_per_target": str(self.num_sequences),
+                "--omit_AAs": self.omit_AAs,
+                "--sampling_temp": str(self.temperature),
+            }
+        )
+        # TODO: needs --jsonl_path --chain_id_jsonl --fixed_positions_jsonl --out_folder
+        # TODO: optional --bias_AA_jsonl --omit_AA_jsonl --tied_positions_jsonl
+        self.allowed_flags = [
+            # flags that have default values that are provided by the runner:
+            "--backbone_noise",
+            "--checkpoint_path",
+            "--decoding_order",
+            "--hidden_dim",
+            "--max_length",
+            "--num_connections",
+            "--num_layers",
+            "--protein_features",
+            # flags that are set by MPNNRunner constructor:
+            "--batch_size",
+            "--num_seq_per_target",
+            "--omit_AAs",
+            "--sampling_temp",
+            # flags that are required and are set by MPNNRunner or children:
+            "--jsonl_path",
+            "--chain_id_jsonl",
+            "--fixed_positions_jsonl",
+            "--out_folder",
+            # flags that are optional and are set by MPNNRunner or children:
+            "--bias_AA_jsonl",
+            "--omit_AA_jsonl",
+            "--tied_positions_jsonl",
+            "--pssm_bias_flag",
+            "--pssm_jsonl",
+            "--pssm_log_odds_flag",
+            "--pssm_multi",
+            "--pssm_threshold",
+        ] 
 
+    def get_flags(self) -> Dict[str, str]:
+        """
+        :return: dictionary of flags.
+        """
+        return self.flags
+
+    def update_flags(self, update_dict: Dict[str, str]) -> None:
+        """
+        :param: update_dict: dictionary of flags to update.
+        :return: None
+        Update the flags dictionary with the provided dictionary.
+        Validate the flags before updating.
+        """
+        
+        for flag in update_dict.keys():
+            if flag not in allowed_flags:
+                raise ValueError(
+                    f"Flag {flag} is not allowed. Allowed flags are {allowed_flags}"
+                )
+        self.flags.update(update_dict)
+        return
 
     @abstractmethod
-    def run(self) -> None:
+    def apply(self) -> None:
         """
         This function needs to be implemented by the child class of MPNNRunner.
         """
