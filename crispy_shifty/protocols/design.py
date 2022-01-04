@@ -52,7 +52,8 @@ beta_nov16_terms = [
     "yhh_planarity",
 ]
 
-def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]]=None) -> None:
+
+def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]] = None) -> None:
     """
     :param: pose: The pose to clear the terms from.
     :param: terms: The terms to clear from the pose.
@@ -61,6 +62,7 @@ def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]]=None) -> None
     """
     import sys
     import pyrosetta
+
     sys.path.insert(0, "/projects/crispy_shifty")
     from crispy_shifty.protocols.design import beta_nov16_terms
 
@@ -867,7 +869,11 @@ def one_state_design_bound_state(
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
 
-        print_timestamp("Starting 1 round of fixed backbone design...", end="", start_time=start_time)
+        print_timestamp(
+            "Starting 1 round of fixed backbone design...",
+            end="",
+            start_time=start_time,
+        )
         fastdesign(
             pose=pose,
             task_factory=task_factory,
@@ -876,7 +882,11 @@ def one_state_design_bound_state(
             repeats=1,
         )
         print("complete.")
-        print_timestamp("Starting 2 rounds of flexible backbone design...", end="", start_time=start_time)
+        print_timestamp(
+            "Starting 2 rounds of flexible backbone design...",
+            end="",
+            start_time=start_time,
+        )
         fastdesign(
             pose=pose,
             task_factory=task_factory,
@@ -892,7 +902,10 @@ def one_state_design_bound_state(
         print("complete.")
 
         print_timestamp(
-            "Scoring contact molecular surface and shape complementarity...", end="", start_time=start_time)
+            "Scoring contact molecular surface and shape complementarity...",
+            end="",
+            start_time=start_time,
+        )
         an_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(1)
         ac_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(2)
         b_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(3)
@@ -911,7 +924,11 @@ def one_state_design_bound_state(
             score_sc(pose, sel_1, sel_2, "sc_" + name)
         print("complete.")
 
-        print_timestamp("Scoring secondary structure shape complementarity...", end="", start_time=start_time)
+        print_timestamp(
+            "Scoring secondary structure shape complementarity...",
+            end="",
+            start_time=start_time,
+        )
         score_ss_sc(pose)
         print("complete.")
 

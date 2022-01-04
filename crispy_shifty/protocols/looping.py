@@ -548,7 +548,12 @@ def loop_bound_state(
         loop_start = pose.chain_end(1) + 1
         pre_looped_length = pose.chain_end(2)
         print_timestamp("Generating loop extension...", start_time, end="")
-        closure_type = loop_extend(pose=pose, min_loop_length=min_loop_length, max_loop_length=max_loop_length, connections="[A+B],C")
+        closure_type = loop_extend(
+            pose=pose,
+            min_loop_length=min_loop_length,
+            max_loop_length=max_loop_length,
+            connections="[A+B],C",
+        )
         if closure_type == "not_closed":
             continue  # move on to next pose, we don't care about the ones that aren't closed
         else:
@@ -560,7 +565,7 @@ def loop_bound_state(
                 [str(i) for i in range(loop_start, loop_start + new_loop_length)]
             )
             scores["new_loop_str"] = new_loop_str
-            scores["looped_length"] = pose.chain_end(1) 
+            scores["looped_length"] = pose.chain_end(1)
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
             looped_poses.append(pose)
@@ -595,7 +600,7 @@ def loop_bound_state(
             prune_buns=True,
             upweight_ppi=False,
             restrict_pro_gly=False,
-            ifcl=True,  
+            ifcl=True,
         )
         struct_profile(
             looped_pose,
@@ -612,9 +617,7 @@ def loop_bound_state(
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
             looped_pose, "total_length", total_length
         )
-        dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(
-            looped_pose
-        )
+        dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(looped_pose)
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
             looped_pose, "dssp", dssp.get_dssp_secstruct()
         )

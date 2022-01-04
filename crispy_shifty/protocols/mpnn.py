@@ -17,8 +17,10 @@ class MPNNRunner(ABC):
     Abstract base class for MPNN runners.
     TODO: dunder methods? probs not
     TODO: test update_flags method
+    TODO: fasta mode
     """
-    import binascii, os
+
+    import os, pwd, uuid, shutil, subprocess
     import pyrosetta.distributed.io as io
 
     def __init__(
@@ -27,14 +29,28 @@ class MPNNRunner(ABC):
         num_sequences: Optional[int] = 64,
         omit_AAs: Optional[str] = "X",
         temperature: Optional[float] = 0.1,
+        selector: Optional[ResidueSelector] = None,
+        chains_to_mask: Optional[List[str]] = None,
     ):
         """
         Initialize the base class for MPNN runners with common attributes.
+        :param: batch_size: number of sequences to generate per batch.
+        :param: num_sequences: number of sequences to generate in total.
+        :param: omit_AAs: concatenated string of amino acids to omit from the sequence.
+        :param: temperature: temperature to use for the MPNN.
+        :param: selector: ResidueSelector that specifies residues to design.
+        :param: chains_to_mask: list of chains to mask, these will be designable.
+        If no `chains_to_mask` is provided, the runner will run on (mask) all chains.
+        If a `chains_to_mask` is provided, the runner will run on (mask) only that chain.
+        If no `selector` is provided, all residues on all masked chains will be designed.
+        The chain letters in your PDB must be correct. TODO, might want to add a check for this.
         """
         self.batch_size = batch_size
         self.num_sequences = num_sequences
         self.omit_AAs = omit_AAs
         self.temperature = temperature
+        self.selector = selector
+        self.chains_to_mask = chains_to_mask
         # setup standard command line flags for MPNN with default values
         self.flags = {
             "--backbone_noise": "0.05",
@@ -55,8 +71,8 @@ class MPNNRunner(ABC):
                 "--sampling_temp": str(self.temperature),
             }
         )
-        # TODO: needs --jsonl_path --chain_id_jsonl --fixed_positions_jsonl --out_folder
-        # TODO: optional --bias_AA_jsonl --omit_AA_jsonl --tied_positions_jsonl
+        # unset, needed: --jsonl_path --chain_id_jsonl --fixed_positions_jsonl --out_folder
+        # unset, optional: --bias_AA_jsonl --omit_AA_jsonl --tied_positions_jsonl
         self.allowed_flags = [
             # flags that have default values that are provided by the runner:
             "--backbone_noise",
@@ -86,13 +102,50 @@ class MPNNRunner(ABC):
             "--pssm_log_odds_flag",
             "--pssm_multi",
             "--pssm_threshold",
-        ] 
+        ]
+        # this updates to mpnn_run_tied.py if there is the --tied_positions_jsonl flag
+        self.script = "/projects/crispy_shifty/mpnn/mpnn_run.py"
+        self.tmpdir = None  # this will be updated by the setup_tmpdir method.
+        self.is_setup = False  # this will be updated by the setup_runner method.
 
     def get_flags(self) -> Dict[str, str]:
         """
         :return: dictionary of flags.
         """
         return self.flags
+
+    def get_script(self) -> str:
+        """
+        :return: script path.
+        """
+        return self.script
+
+    def setup_tmpdir(self) -> None:
+        """
+        :return: None
+        Create a temporary directory for the MPNNRunner.
+        """
+        import os, pwd, uuid
+
+        if os.environ.get("TMPDIR") is not None:
+            tmpdir_root = os.environ.get("TMPDIR")
+        else:
+            tmpdir_root = f"/net/scratch/{pwd.getpwuid(os.getuid()).pw_name}"
+
+        self.tmpdir = os.path.join(tmpdir_root, uuid.uuid4().hex)
+        os.makedirs(self.tmpdir, exist_ok=True)
+        return
+
+    def teardown_tmpdir(self) -> None:
+        """
+        :return: None
+        Remove the temporary directory for the MPNNRunner.
+        """
+        import shutil
+
+        if self.tmpdir is not None:
+            shutil.rmtree(self.tmpdir)
+        return
 
     def update_flags(self, update_dict: Dict[str, str]) -> None:
         """
@@ -101,13 +154,130 @@ class MPNNRunner(ABC):
         Update the flags dictionary with the provided dictionary.
         Validate the flags before updating.
         """
-        
+
         for flag in update_dict.keys():
-            if flag not in allowed_flags:
+            if flag not in self.allowed_flags:
                 raise ValueError(
                     f"Flag {flag} is not allowed. Allowed flags are {allowed_flags}"
                 )
         self.flags.update(update_dict)
+        return
+
+    def update_script(self) -> None:
+        """
+        :return: None
+        Update the script path based on whether the --tied_positions_jsonl flag is set.
+        """
+        if self.flags["--tied_positions_jsonl"] is not None:
+            self.script = "/projects/crispy_shifty/mpnn/mpnn_run_tied.py"
+        else:
+            self.script = "/projects/crispy_shifty/mpnn/mpnn_run.py"
+        return
+
+    def setup_runner(self, pose: Pose) -> None:
+        """
+        :param: pose: Pose object to run MPNN on.
+        :return: None
+        Setup the MPNNRunner.
+        Output sequences and scores are written temporarily to the tmpdir.
+        They are then read in, and the sequences are appended to the pose datacache.
+        The tmpdir is then removed.
+        """
+        import json, os, subprocess, sys
+        import pyrosetta.distributed.io as io
+
+        sys.path.insert(0, "/projects/crispy_shifty")
+        from crispy_shifty.utils.io import cmd_no_stderr
+
+        # setup the tmpdir
+        self.setup_tmpdir()
+        out_path = self.tmpdir
+        # write the pose to a clean PDB file of only ATOM coordinates.
+        tmp_pdb_path = os.path.join(out_path, "tmp.pdb")
+        # TODO need to actually write the PDB file.
+        io.to_pdbstring(pose, tmp_pdb_path)
+        # make the jsonl file for the PDB biounits
+        biounit_path = os.path.join(out_path, "biounits.jsonl")
+        cmd = " ".join(
+            [
+                "/projects/crispy_shifty/mpnn/parse_multiple_chains.py",
+                f"--pdb_folder {out_path}",
+                f"--out_path {biounit_path}",
+            ]
+        )
+        cmd_no_stderr(cmd)  # TODO can print this to debug
+        # make a number to letter dictionary that starts at 1
+        num_to_letter = {
+            i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
+        }
+        # make the jsonl file for the chain_ids
+        chain_id_path = os.path.join(out_path, "chain_id.jsonl")
+        chain_dict = {}
+        # make lists of masked and visible chains
+        masked, visible = [], []
+        # first make a list of all chain letters in the pose
+        all_chains = [num_to_letter[i] for i in range(1, pose.num_chains() + 1)]
+        # if chains_to_mask is provided, update the masked and visible lists
+        if self.chains_to_mask is not None:
+            # loop over the chains in the pose and add them to the appropriate list
+            for chain in all_chains:
+                if chain in self.chains_to_mask:
+                    masked.append(i)
+                else:
+                    visible.append(i)
+        else:
+            # if chains_to_mask is not provided, mask all chains
+            masked = all_chains
+        chain_dict["tmp"] = [masked, visible]
+        # write the chain_dict to a jsonl file
+        with open(chain_id_path, "w") as f:
+            f.write(
+                json.dumps(chain_dict)
+            )  # TODO can print this to debug, probably don't need newline
+        # make the jsonl file for the fixed_positions
+        fixed_positions_path = os.path.join(out_path, "fixed_positions.jsonl")
+        fixed_positions_dict = {"tmp": {chain: [] for chain in all_chains}}
+        # get a boolean mask of the residues in the selector
+        if self.selector is not None:
+            designable_filter = list(self.selector.apply(pose))
+        else:  # if no selector is provided, make all residues designable
+            designable_filter = [True] * pose.size()
+        # check the residue selector specifies designability across the entire pose
+        try:
+            assert len(designable_filter) == pose.total_residue()
+        except AssertionError:
+            print(
+                "Residue selector must specify designability for all residues.\n",
+                f"Selector: {len(list(self.selector.apply(pose)))}\n",
+                f"Pose: {pose.size()}",
+            )
+            raise
+        # make a dict mapping of residue numbers to whether they are designable
+        designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
+        # loop over the actual residues in the pose and add them to the fixed_positions_dict
+        for i, residue in enumerate(pose.residues(), start=1):
+            residue_chain = num_to_letter[residue.chain()]
+            # if the residue is in a chain that is not masked, it won't be designed anyway
+            if residue_chain in visible:
+                continue
+            # if the residue is not designable, add it to the fixed_positions_dict
+            elif not designable_dict[i]:
+                fixed_positions_dict["tmp"][residue_chain].append(i)
+            else:
+                continue
+        # write the fixed_positions_dict to a jsonl file
+        with open(fixed_positions_path, "w") as f:
+            f.write(
+                json.dumps(fixed_positions_dict)
+            )  # TODO can print this to debug, probably don't need newline
+        # update the flags for the biounit, chain_id, and fixed_positions paths
+        flag_update = {
+            "--jsonl_path": biounit_path,
+            "--chain_id_jsonl": chain_id_path,
+            "--fixed_positions_jsonl": fixed_positions_path,
+        }
+        self.update_flags(flag_update)
+        self.is_setup = True
         return
 
     @abstractmethod
@@ -117,43 +287,63 @@ class MPNNRunner(ABC):
         """
         pass
 
-def run_mpnn(
-    pose: Pose,
-    residue_selector: Optional[ResidueSelector] = None,
-    num_iterations: int = 64,
-    batch_size: int = 8,
-) -> Iterator[Pose]:    
 
+class MPNNDesign(MPNNRunner):
     """
-    :param: pose: Pose to run MPNN on.
-    :param: residue_selector: Residue selector to use for MPNN.
-    :param: num_iterations: Number of sequences to generate.
-    :param: batch_size: Number of sequences to generate at a time.
-    :return: Iterator of poses generated by MPNN. TODO
-    Runs MPNN on a pose. Manages file I/O. If a residue selector is provided, will only
-    run MPNN on the selected residues.
+    Class for running MPNN on a single interface selection or chain.
     """
 
-    import binascii, os
-    import pyrosetta.distributed.io as io
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        """
+        Initialize the base class for MPNN runners with common attributes.
+        """
+        super().__init__(*args, **kwargs)
 
-    # use TMPDIR if os.environ['TMPDIR'] is set
-    if 'TMPDIR' in os.environ:
-        tmpdir = os.environ['TMPDIR']
-    else:
-        tmpdir = os.getcwd()
+    def apply(self, pose: Pose) -> None:
+        """
+        :param: pose: Pose object to run MPNN on.
+        :return: None
+        Run MPNN on the provided pose.
+        """
+        import subprocess, sys
+        import pyrosetta.distributed.io as io
 
-    # dump a clean pdbstring of the pose as a temp pdb
+        sys.path.insert(0, "/projects/crispy_shifty")
+        from crispy_shifty.utils.io import cmd
 
-    # make a jsonl from the pdb and delete the pdb
+        # setup runner
+        self.setup_runner(pose)
+        self.update_flags({"--out_path": self.out_path})
+        self.update_script()
 
-    # make masked
+        # run mpnn by calling self.script and providing the flags
+        run_cmd = (
+            self.script + " " + " ".join([f"{k} {v}" for k, v in self.flags.items()])
+        )
+        out_err = cmd(run_cmd)
+        # TODO can print this to debuga
+        alignments_path = os.path.join(self.out_path, "alignments/tmp.fa")
+        # parse the alignments fasta into a dictionary of zfill indexes and sequences
+        with open(alignments_path, "r") as f:
+            alignments = {
+                zfill(i): seq  # TODO
+                for i, seq in enumerate(io.fasta_to_dict(f), start=1)
+                # TODO
+            }
+        for i, seq in alignments.items():
+            # print(f"{i}: {seq}")
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, f"mpnn_seq_{i}", seq)
+        return
 
 
 def thread_mpnn_sequence(
-    pose: Pose, 
+    pose: Pose,
     sequence: str,
-    start_res: int=1,
+    start_res: int = 1,
 ) -> Pose:
     """
     :param: pose: Pose to thread sequence onto.
@@ -176,7 +366,6 @@ def thread_mpnn_sequence(
     stm.apply(pose)
 
     return pose
-
 
 
 @requires_init
@@ -236,7 +425,12 @@ def mpnn_bound_state(
         loop_start = pose.chain_end(1) + 1
         pre_looped_length = pose.chain_end(2)
         print_timestamp("Generating loop extension...", start_time, end="")
-        closure_type = loop_extend(pose=pose, min_loop_length=min_loop_length, max_loop_length=max_loop_length, connections="[A+B],C")
+        closure_type = loop_extend(
+            pose=pose,
+            min_loop_length=min_loop_length,
+            max_loop_length=max_loop_length,
+            connections="[A+B],C",
+        )
         if closure_type == "not_closed":
             continue  # move on to next pose, we don't care about the ones that aren't closed
         else:
@@ -248,7 +442,7 @@ def mpnn_bound_state(
                 [str(i) for i in range(loop_start, loop_start + new_loop_length)]
             )
             scores["new_loop_str"] = new_loop_str
-            scores["looped_length"] = pose.chain_end(1) 
+            scores["looped_length"] = pose.chain_end(1)
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
             looped_poses.append(pose)
@@ -283,7 +477,7 @@ def mpnn_bound_state(
             prune_buns=True,
             upweight_ppi=False,
             restrict_pro_gly=False,
-            ifcl=True,  
+            ifcl=True,
         )
         struct_profile(
             looped_pose,
@@ -300,9 +494,7 @@ def mpnn_bound_state(
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
             looped_pose, "total_length", total_length
         )
-        dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(
-            looped_pose
-        )
+        dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(looped_pose)
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
             looped_pose, "dssp", dssp.get_dssp_secstruct()
         )
@@ -313,4 +505,3 @@ def mpnn_bound_state(
         clear_terms_from_scores(looped_pose)
         ppose = io.to_packed(looped_pose)
         yield ppose
-

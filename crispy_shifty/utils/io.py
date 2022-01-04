@@ -23,6 +23,53 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 # Custom library imports
 
 
+def cmd(command: str = "", wait: bool = True) -> str:
+    """
+    :param: command: Command to run.
+    :param: wait: Wait for command to finish.
+    :return: stdout.
+    Run a command.
+    """
+    import os, subprocess
+
+    p = subprocess.Popen(
+        command,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+    )
+    if wait:
+        out = str(p.communicate()[0]) + str(p.communicate()[1]) # TODO: check if this is correct
+        return out
+    else:
+        return
+
+
+def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
+    """
+    :param: command: Command to run.
+    :param: wait: Wait for command to finish.
+    :return: stdout.
+    Run a command and suppress stderr.
+    """
+    import os, subprocess
+
+    with open(os.devnull, "w") as devnull:
+        p = subprocess.Popen(
+            command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=devnull,
+            universal_newlines=True,
+        )
+    if wait:
+        out = str(p.communicate()[0]) # TODO: check if this is correct
+        return out
+    else:
+        return
+
+
 def parse_scorefile_oneshot(scores: str) -> pd.DataFrame:
     """
     :param: scores: path to scores.json
