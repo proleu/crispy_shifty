@@ -12,6 +12,8 @@ __pycache__
 *.png
 *.pse
 
+envs
+software
 projects/*/00*/*
 projects/*/01*/*
 projects/*/02*/*
