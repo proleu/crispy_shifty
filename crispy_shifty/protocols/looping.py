@@ -500,6 +500,7 @@ def loop_bound_state(
     :param: kwargs: keyword arguments to be passed to looping protocol.
     :return: an iterator of PackedPose objects.
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
+    TODO rerun bb_clash after loop closure.
     """
 
     from copy import deepcopy

@@ -158,7 +158,7 @@ class MPNNRunner(ABC):
         for flag in update_dict.keys():
             if flag not in self.allowed_flags:
                 raise ValueError(
-                    f"Flag {flag} is not allowed. Allowed flags are {allowed_flags}"
+                    f"Flag {flag} is not allowed. Allowed flags are {self.allowed_flags}"
                 )
         self.flags.update(update_dict)
         return
@@ -168,7 +168,7 @@ class MPNNRunner(ABC):
         :return: None
         Update the script path based on whether the --tied_positions_jsonl flag is set.
         """
-        if self.flags["--tied_positions_jsonl"] is not None:
+        if "--tied_positions_jsonl" in self.flags.keys():
             self.script = "/projects/crispy_shifty/mpnn/mpnn_run_tied.py"
         else:
             self.script = "/projects/crispy_shifty/mpnn/mpnn_run.py"
@@ -187,25 +187,26 @@ class MPNNRunner(ABC):
         import pyrosetta.distributed.io as io
 
         sys.path.insert(0, "/projects/crispy_shifty")
-        from crispy_shifty.utils.io import cmd_no_stderr
+        from crispy_shifty.utils.io import cmd # TODO
 
         # setup the tmpdir
         self.setup_tmpdir()
         out_path = self.tmpdir
         # write the pose to a clean PDB file of only ATOM coordinates.
         tmp_pdb_path = os.path.join(out_path, "tmp.pdb")
-        # TODO need to actually write the PDB file.
-        io.to_pdbstring(pose, tmp_pdb_path)
+        pdbstring = io.to_pdbstring(pose)
+        with open(tmp_pdb_path, "w") as f:
+            f.write(pdbstring)
         # make the jsonl file for the PDB biounits
         biounit_path = os.path.join(out_path, "biounits.jsonl")
-        cmd = " ".join(
+        run_cmd = " ".join(
             [
                 "/projects/crispy_shifty/mpnn/parse_multiple_chains.py",
                 f"--pdb_folder {out_path}",
                 f"--out_path {biounit_path}",
             ]
         )
-        cmd_no_stderr(cmd)  # TODO can print this to debug
+        print(cmd(run_cmd))  # TODO can print this to debug
         # make a number to letter dictionary that starts at 1
         num_to_letter = {
             i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
@@ -255,7 +256,7 @@ class MPNNRunner(ABC):
         # make a dict mapping of residue numbers to whether they are designable
         designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
         # loop over the actual residues in the pose and add them to the fixed_positions_dict
-        for i, residue in enumerate(pose.residues(), start=1):
+        for i, residue in enumerate(pose.residues, start=1):
             residue_chain = num_to_letter[residue.chain()]
             # if the residue is in a chain that is not masked, it won't be designed anyway
             if residue_chain in visible:
@@ -308,16 +309,21 @@ class MPNNDesign(MPNNRunner):
         :param: pose: Pose object to run MPNN on.
         :return: None
         Run MPNN on the provided pose.
+        Setup the MPNNRunner using the provided pose.
+        Run MPNN in a subprocess using the provided flags and tmpdir.
+        Read in and parse the output fasta file to get the sequences.
+        Each sequence designed by MPNN is then appended to the pose datacache.
         """
-        import subprocess, sys
+        import os, subprocess, sys
         import pyrosetta.distributed.io as io
 
         sys.path.insert(0, "/projects/crispy_shifty")
+        from crispy_shifty.protocols.mpnn import fasta_to_dict, thread_full_sequence
         from crispy_shifty.utils.io import cmd
 
         # setup runner
         self.setup_runner(pose)
-        self.update_flags({"--out_path": self.out_path})
+        self.update_flags({"--out_folder": self.tmpdir})
         self.update_script()
 
         # run mpnn by calling self.script and providing the flags
@@ -325,22 +331,104 @@ class MPNNDesign(MPNNRunner):
             self.script + " " + " ".join([f"{k} {v}" for k, v in self.flags.items()])
         )
         out_err = cmd(run_cmd)
-        # TODO can print this to debuga
-        alignments_path = os.path.join(self.out_path, "alignments/tmp.fa")
-        # parse the alignments fasta into a dictionary of zfill indexes and sequences
-        with open(alignments_path, "r") as f:
-            alignments = {
-                zfill(i): seq  # TODO
-                for i, seq in enumerate(io.fasta_to_dict(f), start=1)
-                # TODO
-            }
-        for i, seq in alignments.items():
-            # print(f"{i}: {seq}")
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, f"mpnn_seq_{i}", seq)
+        print(run_cmd)
+        print(out_err)
+        # TODO can print this to debug
+        alignments_path = os.path.join(self.tmpdir, "alignments/tmp.fa")
+        # parse the alignments fasta into a dictionary
+        alignments = fasta_to_dict(alignments_path)
+        for i, (tag, seq) in enumerate(alignments.items()):
+            index = str(i).zfill(4)
+            # print(f"{i}: {seq}") TODO
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, f"mpnn_seq_{index}", seq)
+        # clean up the temporary files
+        self.teardown_tmpdir()
         return
 
+    def dump_fasta(self, pose: Pose, out_path: str) -> None:
+        """
+        :param: pose: Pose object that contains the designed sequences.
+        :param: out_path: Path to write the fasta file to.
+        :return: None
+        Dump the pose mpnn_seq_* sequences to a single fasta.
+        """
+        import sys
 
-def thread_mpnn_sequence(
+        sys.path.insert(0, "/projects/crispy_shifty")
+        from crispy_shifty.protocols.mpnn import dict_to_fasta 
+
+        # get the mpnn_seq_* sequences from the pose
+        seqs_to_write = {tag: seq for tag, seq in pose.scores.items() if "mpnn_seq_" in tag}
+        # write the sequences to a fasta
+        dict_to_fasta(seqs_to_write, out_path)
+
+        return
+
+    def generate_poses(self, pose: Pose) -> Iterator[Pose]:
+        """
+        :param: pose: Pose object to generate poses from.
+        :return: Iterator of Pose objects.
+        Generate poses from the provided pose with the newly designed sequences.
+        """
+        import sys
+
+        sys.path.insert(0, "/projects/crispy_shifty")
+        from crispy_shifty.protocols.mpnn import thread_full_sequence
+
+        # get the mpnn_seq_* sequences from the pose
+        seqs_dict = {tag: seq for tag, seq in pose.scores.items() if "mpnn_seq_" in tag}
+        # generate the poses from the seqs_dict
+        for _, seq in seqs_dict.items():
+            # print(f"{tag}: {seq}")
+            # thread the full sequence
+            threaded_pose = thread_full_sequence(pose, seq)
+            yield threaded_pose
+
+    
+def dict_to_fasta(
+    seqs_dict: Dict[str, str],
+    out_path: str,
+) -> None:
+    """
+    :param seqs_dict: dictionary of sequences to write to a fasta file.
+    :param out_path: path to write the fasta file to.
+    :return: None
+    Write a fasta file to the provided path with the provided sequence dict.
+    """
+    import os
+
+    # make the output path if it doesn't exist
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+    else:
+        pass
+    # write the sequences to a fasta file
+    with open(out_path, "w") as f:
+        for i, seq in seqs_dict.items():
+            f.write(f">{i}\n{seq}\n")
+    return
+
+def fasta_to_dict(fasta:str) -> Dict[str, str]:
+    """
+    :param fasta: fasta filepath to read from
+    :return: dictionary of tags and sequences
+    Read in a fasta file and return a dictionary of tags and sequences.
+    """
+    seqs_dict = {}
+
+    with open(fasta, "r") as f:
+        for line in f:
+            if line.startswith(">"):
+                tag = line.strip().split()[0][1:]
+                seq = ""
+            else:
+                seq += line.strip()
+            seqs_dict[tag] = seq
+
+    return seqs_dict
+
+
+def thread_full_sequence(
     pose: Pose,
     sequence: str,
     start_res: int = 1,
@@ -349,7 +437,7 @@ def thread_mpnn_sequence(
     :param: pose: Pose to thread sequence onto.
     :param: sequence: Sequence to thread onto pose.
     :return: Pose with threaded sequence.
-    Threads an MPNN sequence onto a pose after cloning the input pose.
+    Threads a full sequence onto a pose after cloning the input pose.
     Doesn't require the chainbreak '/' to be cleaned.
     """
     from pyrosetta.rosetta.protocols.simple_moves import SimpleThreadingMover
@@ -374,29 +462,21 @@ def mpnn_bound_state(
 ) -> Iterator[PackedPose]:
     """
     :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
-    :param: kwargs: keyword arguments to be passed to looping protocol.
+    :param: kwargs: keyword arguments to be passed to MPNNDesign.
     :return: an iterator of PackedPose objects.
-    Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
+    TODO: Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` ?
     """
 
-    from copy import deepcopy
     import sys
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
 
     sys.path.insert(0, "/projects/crispy_shifty")
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import (
-        clear_constraints,
-        clear_terms_from_scores,
-        gen_std_layer_design,
-        gen_task_factory,
-        packrotamers,
-        score_ss_sc,
-        score_wnm,
-        struct_profile,
-    )
+    from crispy_shifty.protocols.design import interface_between_selectors
+    from crispy_shifty.protocols.mpnn import MPNNDesign
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
@@ -411,97 +491,27 @@ def mpnn_bound_state(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
 
-    looped_poses = []
-    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
     for pose in poses:
+        pose.update_residue_neighbors()
         scores = dict(pose.scores)
-        # get parent length from the scores
-        parent_length = int(float(scores["trimmed_length"]))
-        looped_poses = []
-        sw.chain_order("123")
-        sw.apply(pose)
-        min_loop_length = int(parent_length - pose.chain_end(2))
-        max_loop_length = 5
-        loop_start = pose.chain_end(1) + 1
-        pre_looped_length = pose.chain_end(2)
-        print_timestamp("Generating loop extension...", start_time, end="")
-        closure_type = loop_extend(
-            pose=pose,
-            min_loop_length=min_loop_length,
-            max_loop_length=max_loop_length,
-            connections="[A+B],C",
+        print_timestamp("Setting up design selector", start_time)
+        # make a designable residue selector of only the interface residues
+        chain_a = ChainSelector(1)
+        chain_b = ChainSelector(2)
+        interface_selector = interface_between_selectors(chain_a, chain_b)
+        print_timestamp("Designing interface with MPNN", start_time)
+        # construct the MPNNDesign object
+        mpnn_design = MPNNDesign(
+            selector=interface_selector,
+            # TODO **kwargs,
         )
-        if closure_type == "not_closed":
-            continue  # move on to next pose, we don't care about the ones that aren't closed
-        else:
-            sw.chain_order("12")
-            sw.apply(pose)
-            # get new loop resis
-            new_loop_length = pose.chain_end(1) - pre_looped_length
-            new_loop_str = ",".join(
-                [str(i) for i in range(loop_start, loop_start + new_loop_length)]
-            )
-            scores["new_loop_str"] = new_loop_str
-            scores["looped_length"] = pose.chain_end(1)
-            for key, value in scores.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-            looped_poses.append(pose)
-
-    # hardcode precompute_ig
-    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
-    layer_design = gen_std_layer_design()
-    design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
-    design_sfxn.set_weight(
-        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
-    )
-
-    for looped_pose in looped_poses:
-        scores = dict(looped_pose.scores)
-        new_loop_str = scores["new_loop_str"]
-        print_timestamp("Designing loop...", start_time, end="")
-        new_loop_sel = (
-            pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
-                new_loop_str
-            )
-        )
-        design_sel = (
-            pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
-                new_loop_sel, 8, True
-            )
-        )
-        task_factory = gen_task_factory(
-            design_sel=design_sel,
-            pack_nbhd=True,
-            extra_rotamers_level=2,
-            limit_arochi=True,
-            prune_buns=True,
-            upweight_ppi=False,
-            restrict_pro_gly=False,
-            ifcl=True,
-        )
-        struct_profile(
-            looped_pose,
-            design_sel,
-        )
-        packrotamers(
-            looped_pose,
-            task_factory,
-            design_sfxn,
-        )
-        clear_constraints(looped_pose)
-        pyrosetta.rosetta.core.pose.clearPoseExtraScores(looped_pose)
-        total_length = looped_pose.total_residue()
-        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-            looped_pose, "total_length", total_length
-        )
-        dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(looped_pose)
-        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-            looped_pose, "dssp", dssp.get_dssp_secstruct()
-        )
-        score_ss_sc(looped_pose, False, True, "loop_sc")
-        scores.update(looped_pose.scores)
+        # design the pose
+        mpnn_design.apply(pose)
+        print_timestamp("MPNN design complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        # update the pose with the updated scores dict
         for key, value in scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(looped_pose, key, value)
-        clear_terms_from_scores(looped_pose)
-        ppose = io.to_packed(looped_pose)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        ppose = io.to_packed(pose)
         yield ppose

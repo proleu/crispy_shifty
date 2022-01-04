@@ -461,8 +461,8 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
             "score_dir_name": "scores",
             "environment": "",  # TODO: This is a placeholder for now, make it work
             "task": task_kwargs,
-            "output_path": "~",  # TODO: check if this is ok
-            "simulation_name": "",  # TODO: check if this is ok
+            "output_path": "~",
+            "simulation_name": "",
             "simulation_records_in_scorefile": False,
             "crispy_shifty_datetime_start": datetime_start,
         }
@@ -519,8 +519,10 @@ def gen_array_tasks(
     os.makedirs(slurm_dir, exist_ok=True)
 
     tasklist = os.path.join(output_path, "tasks.cmds")
-    # TODO: remove below
-    # run_sh = f"""#!/usr/bin/env bash \n#SBATCH -J {simulation_name} \n#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n#SBATCH -p {queue} \n#SBATCH --mem={memory} \n\nJOB_ID=${jid} \nCMD=$(sed -n "${sid}" {tasklist}) \necho "${{CMD}}" | bash"""
+    # Save active conda environment as a yml file
+    env_file = os.path.join(output_path, "environment.yml")
+    # TODO
+
     run_sh = "".join(
         [
             "#!/usr/bin/env bash \n",
@@ -545,12 +547,10 @@ def gen_array_tasks(
 
     func_split = distribute_func.split(".")
     func_name = func_split[-1]
-    # TODO: remove below
-    # run_py = f"""#!/usr/bin/env python\nimport sys\nsys.path.insert(0, "/projects/crispy_shifty")\nfrom crispy_shifty.utils.io import wrapper_for_array_tasks\nfrom {'.'.join(func_split[:-1])} import {func_name}\nwrapper_for_array_tasks({func_name}, sys.argv)"""
     run_py = "".join(
         [
             # "#!/usr/bin/env python\n",
-            "#!/projects/crispy_shifty/envs/crispy/bin/python\n",  # this is less flexible than /usr/bin/env python
+            "#!/projects/crispy_shifty/envs/crispy/bin/python\n",  # this is less flexible than /usr/bin/env python TODO
             "import sys\n",
             "sys.path.insert(0, '/projects/crispy_shifty')\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
@@ -566,7 +566,7 @@ def gen_array_tasks(
     st = os.stat(run_py_file)
     os.chmod(run_py_file, st.st_mode | stat.S_IEXEC)
 
-    instance_dict = {"output_path": output_path, "simulation_name": simulation_name}
+    instance_dict = {"output_path": output_path, "simulation_name": simulation_name} # TODO: environment here?
 
     instance_str = "-instance " + " ".join(
         [" ".join([k, str(v)]) for k, v in instance_dict.items()]

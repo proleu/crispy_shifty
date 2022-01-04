@@ -95,6 +95,10 @@ def interface_between_selectors(
     sel_1: ResidueSelector, sel_2: ResidueSelector, vector_mode: bool = False
 ) -> ResidueSelector:
     """
+    :param: sel_1: ResidueSelector for the first half of the interface.
+    :param: sel_2: ResidueSelector for the second half of the interface.
+    :param: vector_mode: If true, use vectors of Cb atoms in addition to distance.
+    :return: ResidueSelector that selects the interface between the two selectors.
     Returns a selector that selects the interface between two selectors.
     """
     if vector_mode:
