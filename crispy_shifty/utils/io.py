@@ -69,6 +69,43 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
     else:
         return
 
+def get_yml() -> str:
+    """
+    Inspired by pyrosetta.distributed.cluster.converter_tasks.get_yml()
+    Works on jupyterhub
+    """
+    import subprocess, sys
+    from pyrosetta.distributed.cluster.config import source_domains
+
+    sys.path.insert(0, "/projects/crispy_shifty")
+    from crispy_shifty.utils.io import cmd
+
+    conda_path = f"{sys.prefix}/bin/conda"
+    export_command = f"{conda_path} env export --prefix {sys.prefix}"
+    try:
+        raw_yml = cmd(export_command)
+
+    except subprocess.CalledProcessError:
+        raw_yml = ""
+
+    return (
+        (
+            os.linesep.join(
+                [
+                    line
+                    for line in raw_yml.split(os.linesep)
+                    if all(
+                        source_domain not in line for source_domain in source_domains
+                    ) 
+                    and all(not line.startswith(s) for s in ["name:", "prefix:"])
+                    and line
+                ]
+            )
+            + os.linesep
+        )
+        if raw_yml
+        else raw_yml
+    )
 
 def parse_scorefile_oneshot(scores: str) -> pd.DataFrame:
     """
@@ -478,10 +515,11 @@ def gen_array_tasks(
     simulation_name: str = "crispy_shifty",
     extra_kwargs: dict = {},  # kwargs to pass to crispy_shifty_func. keys and values must be strings containing no spaces
 ):
-    import os, stat
+    import os, stat, sys
     from more_itertools import ichunked
-    from pyrosetta.distributed.cluster.converter_tasks import get_yml
     from tqdm.auto import tqdm
+    sys.path.insert(0, "/projects/crispy_shifty")
+    from crispy_shifty.utils.io import get_yml
 
     os.makedirs(output_path, exist_ok=True)
 
@@ -517,7 +555,6 @@ def gen_array_tasks(
     env_str = get_yml()
     with open(env_file, "w") as f:
         f.write(env_str)
-    # TODO
 
     run_sh = "".join(
         [
