@@ -15,9 +15,6 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 class MPNNRunner(ABC):
     """
     Abstract base class for MPNN runners.
-    TODO: dunder methods? probs not
-    TODO: test update_flags method
-    TODO: fasta mode
     """
 
     import os, pwd, uuid, shutil, subprocess
@@ -31,6 +28,7 @@ class MPNNRunner(ABC):
         temperature: Optional[float] = 0.1,
         selector: Optional[ResidueSelector] = None,
         chains_to_mask: Optional[List[str]] = None,
+        **kwargs,
     ):
         """
         Initialize the base class for MPNN runners with common attributes.
@@ -187,7 +185,7 @@ class MPNNRunner(ABC):
         import pyrosetta.distributed.io as io
 
         sys.path.insert(0, "/projects/crispy_shifty")
-        from crispy_shifty.utils.io import cmd # TODO
+        from crispy_shifty.utils.io import cmd_no_stderr
 
         # setup the tmpdir
         self.setup_tmpdir()
@@ -199,14 +197,15 @@ class MPNNRunner(ABC):
             f.write(pdbstring)
         # make the jsonl file for the PDB biounits
         biounit_path = os.path.join(out_path, "biounits.jsonl")
+        python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = " ".join(
             [
-                "/projects/crispy_shifty/mpnn/parse_multiple_chains.py",
+                f"{python} /projects/crispy_shifty/mpnn/parse_multiple_chains.py",
                 f"--pdb_folder {out_path}",
                 f"--out_path {biounit_path}",
             ]
         )
-        print(cmd(run_cmd))  # TODO can print this to debug
+        cmd_no_stderr(run_cmd)
         # make a number to letter dictionary that starts at 1
         num_to_letter = {
             i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
@@ -232,9 +231,7 @@ class MPNNRunner(ABC):
         chain_dict["tmp"] = [masked, visible]
         # write the chain_dict to a jsonl file
         with open(chain_id_path, "w") as f:
-            f.write(
-                json.dumps(chain_dict)
-            )  # TODO can print this to debug, probably don't need newline
+            f.write(json.dumps(chain_dict))
         # make the jsonl file for the fixed_positions
         fixed_positions_path = os.path.join(out_path, "fixed_positions.jsonl")
         fixed_positions_dict = {"tmp": {chain: [] for chain in all_chains}}
@@ -255,22 +252,23 @@ class MPNNRunner(ABC):
             raise
         # make a dict mapping of residue numbers to whether they are designable
         designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
-        # loop over the actual residues in the pose and add them to the fixed_positions_dict
-        for i, residue in enumerate(pose.residues, start=1):
-            residue_chain = num_to_letter[residue.chain()]
-            # if the residue is in a chain that is not masked, it won't be designed anyway
-            if residue_chain in visible:
-                continue
-            # if the residue is not designable, add it to the fixed_positions_dict
-            elif not designable_dict[i]:
-                fixed_positions_dict["tmp"][residue_chain].append(i)
-            else:
-                continue
+        # loop over the chains and the residues in the pose
+        i = 1  # total residue counter
+        for chain_number, chain in enumerate(all_chains, start=1):
+            j = 1  # chain residue counter
+            for res in range(
+                pose.chain_begin(chain_number), pose.chain_end(chain_number) + 1
+            ):
+                # if the residue is on a masked chain but not designable, add it
+                if not designable_dict[i] and chain in masked:
+                    fixed_positions_dict["tmp"][chain].append(j)
+                else:
+                    pass
+                j += 1
+                i += 1
         # write the fixed_positions_dict to a jsonl file
         with open(fixed_positions_path, "w") as f:
-            f.write(
-                json.dumps(fixed_positions_dict)
-            )  # TODO can print this to debug, probably don't need newline
+            f.write(json.dumps(fixed_positions_dict))
         # update the flags for the biounit, chain_id, and fixed_positions paths
         flag_update = {
             "--jsonl_path": biounit_path,
@@ -292,6 +290,7 @@ class MPNNRunner(ABC):
 class MPNNDesign(MPNNRunner):
     """
     Class for running MPNN on a single interface selection or chain.
+    TODO either in here or base class determine how to go from task factory to omit_AA_jsonl
     """
 
     def __init__(
@@ -315,6 +314,8 @@ class MPNNDesign(MPNNRunner):
         Each sequence designed by MPNN is then appended to the pose datacache.
         """
         import os, subprocess, sys
+        import pyrosetta
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
         import pyrosetta.distributed.io as io
 
         sys.path.insert(0, "/projects/crispy_shifty")
@@ -327,20 +328,20 @@ class MPNNDesign(MPNNRunner):
         self.update_script()
 
         # run mpnn by calling self.script and providing the flags
+        python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = (
-            self.script + " " + " ".join([f"{k} {v}" for k, v in self.flags.items()])
+            f"{python} {self.script}"
+            + " "
+            + " ".join([f"{k} {v}" for k, v in self.flags.items()])
         )
         out_err = cmd(run_cmd)
-        print(run_cmd)
         print(out_err)
-        # TODO can print this to debug
         alignments_path = os.path.join(self.tmpdir, "alignments/tmp.fa")
         # parse the alignments fasta into a dictionary
-        alignments = fasta_to_dict(alignments_path)
+        alignments = fasta_to_dict(alignments_path, new_tags=True)
         for i, (tag, seq) in enumerate(alignments.items()):
             index = str(i).zfill(4)
-            # print(f"{i}: {seq}") TODO
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, f"mpnn_seq_{index}", seq)
+            setPoseExtraScore(pose, f"mpnn_seq_{index}", seq)
         # clean up the temporary files
         self.teardown_tmpdir()
         return
@@ -355,10 +356,12 @@ class MPNNDesign(MPNNRunner):
         import sys
 
         sys.path.insert(0, "/projects/crispy_shifty")
-        from crispy_shifty.protocols.mpnn import dict_to_fasta 
+        from crispy_shifty.protocols.mpnn import dict_to_fasta
 
         # get the mpnn_seq_* sequences from the pose
-        seqs_to_write = {tag: seq for tag, seq in pose.scores.items() if "mpnn_seq_" in tag}
+        seqs_to_write = {
+            tag: seq for tag, seq in pose.scores.items() if "mpnn_seq_" in tag
+        }
         # write the sequences to a fasta
         dict_to_fasta(seqs_to_write, out_path)
 
@@ -384,7 +387,7 @@ class MPNNDesign(MPNNRunner):
             threaded_pose = thread_full_sequence(pose, seq)
             yield threaded_pose
 
-    
+
 def dict_to_fasta(
     seqs_dict: Dict[str, str],
     out_path: str,
@@ -408,26 +411,33 @@ def dict_to_fasta(
             f.write(f">{i}\n{seq}\n")
     return
 
-def fasta_to_dict(fasta:str) -> Dict[str, str]:
+
+def fasta_to_dict(fasta: str, new_tags: bool = False) -> Dict[str, str]:
     """
-    :param fasta: fasta filepath to read from
-    :return: dictionary of tags and sequences
+    :param fasta: fasta filepath to read from.
+    :param new_tags: if False, use the sequence tag as the key, if True, use the index.
+    :return: dictionary of tags and sequences.
     Read in a fasta file and return a dictionary of tags and sequences.
     """
     seqs_dict = {}
 
     with open(fasta, "r") as f:
+        i = 0
         for line in f:
-            if line.startswith(">"):
-                tag = line.strip().split()[0][1:]
-                seq = ""
-            else:
-                seq += line.strip()
-            seqs_dict[tag] = seq
+            if line.startswith(">"):  # this is a header line
+                if new_tags:
+                    tag = str(i)
+                else:
+                    tag = line.strip().replace(">", "")
+                seqs_dict[tag] = ""
+                i += 1
+            else:  # we can assume this is a sequence line, add the sequence
+                seqs_dict[tag] += line.strip()
 
     return seqs_dict
 
 
+@requires_init
 def thread_full_sequence(
     pose: Pose,
     sequence: str,
@@ -464,7 +474,6 @@ def mpnn_bound_state(
     :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
     :param: kwargs: keyword arguments to be passed to MPNNDesign.
     :return: an iterator of PackedPose objects.
-    TODO: Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` ?
     """
 
     import sys
@@ -503,7 +512,8 @@ def mpnn_bound_state(
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
             selector=interface_selector,
-            # TODO **kwargs,
+            omit_AAs="CX",
+            **kwargs,
         )
         # design the pose
         mpnn_design.apply(pose)

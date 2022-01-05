@@ -40,7 +40,7 @@ def cmd(command: str = "", wait: bool = True) -> str:
         universal_newlines=True,
     )
     if wait:
-        out = str(p.communicate()[0]) + str(p.communicate()[1]) # TODO: check if this is correct
+        out = str(p.communicate()[0]) + str(p.communicate()[1])
         return out
     else:
         return
@@ -64,7 +64,7 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
             universal_newlines=True,
         )
     if wait:
-        out = str(p.communicate()[0]) # TODO: check if this is correct
+        out = str(p.communicate()[0])
         return out
     else:
         return
@@ -167,9 +167,7 @@ def get_instance_and_metadata(
     # tracking with kwargs instead of class attributes
     instance_kwargs["compressed"] = kwargs.pop("compressed")
     instance_kwargs["decoy_dir_name"] = kwargs.pop("decoy_dir_name")
-    instance_kwargs["environment"] = kwargs.pop(
-        "environment"
-    )  # TODO add this functionality
+    instance_kwargs["environment"] = kwargs.pop("environment")
     instance_kwargs["output_path"] = kwargs.pop("output_path")
     instance_kwargs["score_dir_name"] = kwargs.pop("score_dir_name")
     instance_kwargs["simulation_name"] = kwargs.pop("simulation_name")
@@ -302,15 +300,13 @@ def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
 
     # Parse and save results
     for pdbstring, scores in parse_results(results):
-        # TODO we only want to do this once per thread...
         output_dir = get_output_dir(base_dir=os.path.join(output_path, decoy_dir_name))
         decoy_name = "_".join([simulation_name, uuid.uuid4().hex])
         output_file = os.path.join(output_dir, decoy_name + ".pdb")
         if compressed:
             output_file += ".bz2"
-        # score_dir = get_output_dir(base_dir=os.path.join(output_path, score_dir_name)) # TODO
         # assume the score_dir is in the same parent dir as the decoy_dir
-        # this is less robust but more thread safe and at least ensures mirrored score files
+        # this is a less robust but more thread safe way to get mirrored score files
         score_dir = os.path.join(output_dir.replace(decoy_dir_name, score_dir_name, 1))
         os.makedirs(score_dir, exist_ok=True)
         score_file = os.path.join(score_dir, decoy_name + ".json")
@@ -319,9 +315,7 @@ def save_results(results: Any, kwargs: Dict[Any, Any]) -> None:
             "crispy_shifty_output_file": output_file,
         }
         if os.path.exists(environment_file):
-            extra_kwargs[
-                "crispy_shifty_environment_file"
-            ] = environment_file  # TODO env file
+            extra_kwargs["crispy_shifty_environment_file"] = environment_file
         if "crispy_shifty_datetime_start" in kwargs:
             datetime_end = datetime.now().strftime(DATETIME_FORMAT)
             duration = str(
@@ -459,7 +453,7 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
             "compressed": True,
             "decoy_dir_name": "decoys",
             "score_dir_name": "scores",
-            "environment": "",  # TODO: This is a placeholder for now, make it work
+            "environment": "",
             "task": task_kwargs,
             "output_path": "~",
             "simulation_name": "",
@@ -486,6 +480,7 @@ def gen_array_tasks(
 ):
     import os, stat
     from more_itertools import ichunked
+    from pyrosetta.distributed.cluster.converter_tasks import get_yml
     from tqdm.auto import tqdm
 
     os.makedirs(output_path, exist_ok=True)
@@ -504,9 +499,7 @@ def gen_array_tasks(
         with open(design_list_file, "r") as f:
             # returns an iteratable with nstruct_per_task elements: lines of design_list_file
             for lines in ichunked(f, nstruct_per_task):
-                tasks = {
-                    "-options": ""  # TODO ensure that this works
-                }  # no dash in from of corrections- this is not a typo
+                tasks = {"-options": ""}
                 tasks["-extra_options"] = options
                 # join the lines of design_list_file with spaces, removing trailing newlines
                 tasks["-pdb_path"] = " ".join(line.rstrip() for line in lines)
@@ -521,6 +514,9 @@ def gen_array_tasks(
     tasklist = os.path.join(output_path, "tasks.cmds")
     # Save active conda environment as a yml file
     env_file = os.path.join(output_path, "environment.yml")
+    env_str = get_yml()
+    with open(env_file, "w") as f:
+        f.write(env_str)
     # TODO
 
     run_sh = "".join(
@@ -550,7 +546,8 @@ def gen_array_tasks(
     run_py = "".join(
         [
             # "#!/usr/bin/env python\n",
-            "#!/projects/crispy_shifty/envs/crispy/bin/python\n",  # this is less flexible than /usr/bin/env python TODO
+            # this is less flexible than /usr/bin/env python TODO
+            "#!/projects/crispy_shifty/envs/crispy/bin/python\n",
             "import sys\n",
             "sys.path.insert(0, '/projects/crispy_shifty')\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
@@ -566,7 +563,11 @@ def gen_array_tasks(
     st = os.stat(run_py_file)
     os.chmod(run_py_file, st.st_mode | stat.S_IEXEC)
 
-    instance_dict = {"output_path": output_path, "simulation_name": simulation_name} # TODO: environment here?
+    instance_dict = {
+        "output_path": output_path,
+        "simulation_name": simulation_name,
+        "environment": env_file,
+    }  # TODO: environment here?
 
     instance_str = "-instance " + " ".join(
         [" ".join([k, str(v)]) for k, v in instance_dict.items()]
