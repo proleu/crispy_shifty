@@ -3,6 +3,9 @@ add submodules:
 	pymatcher? could just rewrite, probably wouldn't hurt
 	AF2: ask Nater tot if there are any special considerations
 
+TODO: 
+    - Smart sys.path.insert(0, os.path.dirname(__file__)) with prefix (maybe in __init__.py)
+
 
 how to do better than last round, chA:
 bicistronic screen had high false positives, possibly co-expressed genes resulted in "locked" state Y complexes.
@@ -42,16 +45,14 @@ order chA and do SEC / expression screening # TODO order chB and do SEC / expres
 dev TODOs:
 TODO: 
     01 loop bound_states 
-    02 MPNN bound states  # do I need to filter befor af2?
-    03 fold bound states 
-    04 loop parents
-    05 design paired states
+    02 MPNN bound states
+    03 fold bound states # folding.py # cluster by length?
+    04 loop parents # lookup in free state df for common pdb, state 0? then use remodel
+    05 design paired states # almost linkres in msd.py
     06 MPNN paired states 
-    07 fold paired states
+    07 fold paired states # folding.py
     08 detail and filter
     09 order and analyze
-TODO: mpnn script distributable sig with packed_pose_in or pdb_path, returns iterator of poses, optionally a single pose with many sequences in the datacache
-TODO: mpnn wrapper accepts a pdb, either returns the pdb and a fasta, or the pdb with the many sequences in the scores
 
 TODO: AF2 wrapper accepts a reference pdb, has options to predict a single sequence, or predict many sequences, in many sequence case can accept fasta, otherwise will safely try to read sequences from the scores
 TODO: AF2 wrapper makes a multiprocessing pool of processes, each process compiles the model runners 1 and 3, and swaps weights as neccessary, this allows efficient use of GPUs on a node.
