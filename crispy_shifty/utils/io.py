@@ -69,6 +69,34 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
     else:
         return
 
+def df_to_fasta(df: pd.DataFrame, prefix:str, out_path: Optional[str] = None) -> None:
+    """
+    :param: df: pandas dataframe.
+    :param: prefix: prefix for column names to pull sequence from.
+    :param: out_path: path to write fasta to.
+    :return: None.
+    Write a pandas dataframe to a fasta file.
+    """
+    import sys
+    import pandas as pd
+
+    sys.path.insert(0, "/projects/crispy_shifty")
+    from crispy_shifty.protocols.mpnn import dict_to_fasta
+
+    # get columns that have sequences based on prefix
+    sequence_cols = [col for col in df.columns if prefix in col]
+    df = df.loc[:, sequence_cols]
+    for i, row in df.iterrows():
+        if out_path is None:
+            # assume the index is abspaths to pdb.bz2 files
+            # mirror the fastas in the same directory as the pdb.bz2 files
+            fasta_path = f"{i.replace('decoys', 'fastas').replace('pdb.bz2','')}.fa"
+            print(dict_to_fasta(row))
+        else:
+
+
+
+
 def get_yml() -> str:
     """
     Inspired by pyrosetta.distributed.cluster.converter_tasks.get_yml()

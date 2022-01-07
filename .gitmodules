@@ -4,3 +4,6 @@
 [submodule "mpnn"]
 	path = mpnn
 	url = https://git.ipd.uw.edu/justas/mpnn.git
+[submodule "superfold"]
+	path = superfold
+	url = git@github.com:rdkibler/superfold.git
