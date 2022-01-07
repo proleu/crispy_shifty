@@ -37,7 +37,6 @@ AF2 interfaces again, then AF2 the monomers that pass
 order chA and do SEC / expression screening # TODO order chB and do SEC / expression screening too?
 
 dev TODOs:
-    - Smart sys.path.insert(0, os.path.dirname(__file__)) with prefix (maybe in __init__.py)
     - git repo check in io.py gen_array_tasks
 
 

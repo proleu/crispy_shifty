@@ -69,18 +69,20 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
     else:
         return
 
-def df_to_fasta(df: pd.DataFrame, prefix:str, out_path: Optional[str] = None) -> None:
+def df_to_fastas(df: pd.DataFrame, prefix:str, out_path: Optional[str] = None) -> None:
     """
     :param: df: pandas dataframe.
     :param: prefix: prefix for column names to pull sequence from.
     :param: out_path: path to write fasta to.
     :return: None.
-    Write a pandas dataframe to a fasta file.
+    Generate fastas from each row of a df. If `out_path` is not specified, assume the
+    index of the dataframe is absolute paths to pdb.bz2 files, a la PyRosettaCluster.
     """
     import sys
+    from pathlib import Path
     import pandas as pd
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.mpnn import dict_to_fasta
 
     # get columns that have sequences based on prefix
@@ -103,9 +105,10 @@ def get_yml() -> str:
     Works on jupyterhub
     """
     import subprocess, sys
+    from pathlib import Path
     from pyrosetta.distributed.cluster.config import source_domains
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.utils.io import cmd
 
     conda_path = f"{sys.prefix}/bin/conda"
@@ -543,10 +546,15 @@ def gen_array_tasks(
     simulation_name: str = "crispy_shifty",
     extra_kwargs: dict = {},  # kwargs to pass to crispy_shifty_func. keys and values must be strings containing no spaces
 ):
+    """
+    TODO: docstring, git commit sha1 check (try to get it from the git repo)
+    """
     import os, stat, sys
     from more_itertools import ichunked
+    from pathlib import Path
     from tqdm.auto import tqdm
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.utils.io import get_yml
 
     os.makedirs(output_path, exist_ok=True)
@@ -610,11 +618,10 @@ def gen_array_tasks(
     func_name = func_split[-1]
     run_py = "".join(
         [
-            # "#!/usr/bin/env python\n",
-            # this is less flexible than /usr/bin/env python TODO
-            "#!/projects/crispy_shifty/envs/crispy/bin/python\n",
+            # this is less flexible than /usr/bin/env python but it ensures using a conda environment
+            f"#!{str(Path(__file__).resolve().parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}\n",
             "import sys\n",
-            "sys.path.insert(0, '/projects/crispy_shifty')\n",
+            "sys.path.insert(0, str(Path(__file__).resolve().parent.parent))\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
             f"from {'.'.join(func_split[:-1])} import {func_name}\n",
             f"wrapper_for_array_tasks({func_name}, sys.argv)",
@@ -632,7 +639,7 @@ def gen_array_tasks(
         "output_path": output_path,
         "simulation_name": simulation_name,
         "environment": env_file,
-    }  # TODO: environment here?
+    }
 
     instance_str = "-instance " + " ".join(
         [" ".join([k, str(v)]) for k, v in instance_dict.items()]
@@ -679,13 +686,12 @@ def test_func(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
 
-    # test env
-    import pycorn
-
     import sys
+    from pathlib import Path
+    import pycorn # test env
     import pyrosetta.distributed.io as io
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose

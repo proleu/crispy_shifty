@@ -324,13 +324,14 @@ def loop_dimer(
     """
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
     """
-    from copy import deepcopy
-    from time import time
     import sys
+    from copy import deepcopy
+    from pathlib import Path
+    from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
-
-    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).absolute().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.utils.io import print_timestamp
     from crispy_shifty.protocols.design import (
@@ -503,13 +504,14 @@ def loop_bound_state(
     TODO rerun bb_clash after loop closure.
     """
 
-    from copy import deepcopy
     import sys
+    from copy import deepcopy
+    from pathlib import Path
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).absolute().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.design import (
         clear_constraints,

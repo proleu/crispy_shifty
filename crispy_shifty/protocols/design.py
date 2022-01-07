@@ -60,10 +60,11 @@ def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]] = None) -> No
     :return: None.
     Clears beta nov16 terms from the pose by default, or the given terms if provided.
     """
+    from pathlib import Path
     import sys
     import pyrosetta
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.design import beta_nov16_terms
 
     if terms is None:
@@ -635,10 +636,11 @@ def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score"):
 
 def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
 
+    from pathlib import Path
     import sys
     import pyrosetta
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.states import measure_CA_dist
 
     dist = measure_CA_dist(pose, resi_1, resi_2)
@@ -648,9 +650,10 @@ def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
 
 def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist") -> float:
 
+    from pathlib import Path
     import sys
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.states import StateMaker
 
     ends = StateMaker.get_helix_endpoints(pose, n_terminal=False)
@@ -666,12 +669,13 @@ def one_state_design_unlooped_dimer(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
 
+    from pathlib import Path
     from time import time
     import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
-
-    sys.path.insert(0, "/mnt/home/broerman/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # TODO: remove below
@@ -819,12 +823,13 @@ def one_state_design_bound_state(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
 
+    from pathlib import Path
     from time import time
     import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.utils.io import print_timestamp
 

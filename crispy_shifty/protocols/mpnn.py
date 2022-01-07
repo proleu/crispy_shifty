@@ -102,7 +102,7 @@ class MPNNRunner(ABC):
             "--pssm_threshold",
         ]
         # this updates to mpnn_run_tied.py if there is the --tied_positions_jsonl flag
-        self.script = "/projects/crispy_shifty/mpnn/mpnn_run.py"
+        self.script = f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run.py')}"
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.is_setup = False  # this will be updated by the setup_runner method.
 
@@ -167,9 +167,9 @@ class MPNNRunner(ABC):
         Update the script path based on whether the --tied_positions_jsonl flag is set.
         """
         if "--tied_positions_jsonl" in self.flags.keys():
-            self.script = "/projects/crispy_shifty/mpnn/mpnn_run_tied.py"
+            self.script = f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run_tied.py')}"
         else:
-            self.script = "/projects/crispy_shifty/mpnn/mpnn_run.py"
+            self.script = f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run.py')}"
         return
 
     def setup_runner(self, pose: Pose) -> None:
@@ -182,9 +182,10 @@ class MPNNRunner(ABC):
         The tmpdir is then removed.
         """
         import json, os, subprocess, sys
+        from pathlib import Path
         import pyrosetta.distributed.io as io
-
-        sys.path.insert(0, "/projects/crispy_shifty")
+        # insert the root of the repo into the sys.path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.utils.io import cmd_no_stderr
 
         # setup the tmpdir
@@ -197,10 +198,10 @@ class MPNNRunner(ABC):
             f.write(pdbstring)
         # make the jsonl file for the PDB biounits
         biounit_path = os.path.join(out_path, "biounits.jsonl")
-        python = "/projects/crispy_shifty/envs/crispy/bin/python"
+        python = f"{str(Path(__file__).resolve().parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}"
         run_cmd = " ".join(
             [
-                f"{python} /projects/crispy_shifty/mpnn/parse_multiple_chains.py",
+                f"{python} {str(Path(__file__).resolve().parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
                 f"--pdb_folder {out_path}",
                 f"--out_path {biounit_path}",
             ]
@@ -314,11 +315,12 @@ class MPNNDesign(MPNNRunner):
         Each sequence designed by MPNN is then appended to the pose datacache.
         """
         import os, subprocess, sys
+        from pathlib import Path
         import pyrosetta
         from pyrosetta.rosetta.core.pose import setPoseExtraScore
         import pyrosetta.distributed.io as io
-
-        sys.path.insert(0, "/projects/crispy_shifty")
+        # insert the root of the repo into the sys.path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.protocols.mpnn import fasta_to_dict, thread_full_sequence
         from crispy_shifty.utils.io import cmd
 
@@ -328,7 +330,7 @@ class MPNNDesign(MPNNRunner):
         self.update_script()
 
         # run mpnn by calling self.script and providing the flags
-        python = "/projects/crispy_shifty/envs/crispy/bin/python"
+        python = f"{str(Path(__file__).resolve().parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}"
         run_cmd = (
             f"{python} {self.script}"
             + " "
@@ -353,9 +355,10 @@ class MPNNDesign(MPNNRunner):
         :return: None
         Dump the pose mpnn_seq_* sequences to a single fasta.
         """
+        from pathlib import Path
         import sys
-
-        sys.path.insert(0, "/projects/crispy_shifty")
+        # insert the root of the repo into the sys.path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.protocols.mpnn import dict_to_fasta
 
         # get the mpnn_seq_* sequences from the pose
@@ -373,9 +376,10 @@ class MPNNDesign(MPNNRunner):
         :return: Iterator of Pose objects.
         Generate poses from the provided pose with the newly designed sequences.
         """
+        from pathlib import Path
         import sys
-
-        sys.path.insert(0, "/projects/crispy_shifty")
+        # insert the root of the repo into the sys.path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.protocols.mpnn import thread_full_sequence
 
         # get the mpnn_seq_* sequences from the pose
@@ -476,13 +480,14 @@ def mpnn_bound_state(
     :return: an iterator of PackedPose objects.
     """
 
+    from pathlib import Path
     import sys
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
-
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.design import interface_between_selectors
     from crispy_shifty.protocols.mpnn import MPNNDesign
