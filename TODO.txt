@@ -1,26 +1,20 @@
 unit tests? No, I'm not going to write any.
-add submodules:
-	pymatcher? could just rewrite, probably wouldn't hurt
-	AF2: ask Nater tot if there are any special considerations
-
-TODO: 
-    - Smart sys.path.insert(0, os.path.dirname(__file__)) with prefix (maybe in __init__.py)
-
 
 how to do better than last round, chA:
-bicistronic screen had high false positives, possibly co-expressed genes resulted in "locked" state Y complexes.
-longer loops for state Ys, force state X to have longer (63 and 74-7 have longer than parent, 129 only has match)
-torsional space only for backbone generation, later relax into predictions (in torsional space?)
-absolutely no disulfides during design >:(
-don't over optimize on SAP
+    - bicistronic screen had high false positives, possibly co-expressed genes resulted in "locked" state Y complexes.
+    - longer loops for state Ys, force state X to have longer (63 and 74-7 have longer than parent, 129 only has match)
+    - torsional space only for backbone generation, later relax into predictions (in torsional space?)
+    - absolutely no disulfides during design >:(
+    - don't over optimize on SAP
+
 how to do better than last round, chB:
-longer chB, all have 27 except 63 which had 21 (as opposed to 17-25)
-charges? + C term, - N term
-    check results of the chB order4
-FF129 has a very polar interface, Cterm sequence is QLQKKNKKQQK
-Some have lower helical propensity and most lower coiled-coil propensity at termini (did not quantify)
-backside hydrophobics and aromatics may break coiled coil propensity, resurfacing to all polars sometimes seemed to cause issues (also sometimes fixed issues like in FF75) 
-    check results of the chB order4
+    - longer chB, all have 27 except 63 which had 21 (as opposed to 17-25)
+    - charges? + C term, - N term
+    -     check results of the chB order4
+    - FF129 has a very polar interface, Cterm sequence is QLQKKNKKQQK
+    - Some have lower helical propensity and most lower coiled-coil propensity at termini (did not quantify)
+    - backside hydrophobics and aromatics may break coiled coil propensity, resurfacing to all polars sometimes seemed to cause issues (also sometimes fixed issues like in FF75) 
+    -     check results of the chB order4
 
 
 Strategy:
@@ -43,6 +37,10 @@ AF2 interfaces again, then AF2 the monomers that pass
 order chA and do SEC / expression screening # TODO order chB and do SEC / expression screening too?
 
 dev TODOs:
+    - Smart sys.path.insert(0, os.path.dirname(__file__)) with prefix (maybe in __init__.py)
+    - git repo check in io.py gen_array_tasks
+
+
 TODO: 
     01 loop bound_states 
     02 MPNN bound states
@@ -53,11 +51,6 @@ TODO:
     07 fold paired states # folding.py
     08 detail and filter
     09 order and analyze
-
-TODO: AF2 wrapper accepts a reference pdb, has options to predict a single sequence, or predict many sequences, in many sequence case can accept fasta, otherwise will safely try to read sequences from the scores
-TODO: AF2 wrapper makes a multiprocessing pool of processes, each process compiles the model runners 1 and 3, and swaps weights as neccessary, this allows efficient use of GPUs on a node.
-TODO: AF2 wrapper allows just running single models, and manages outputs
-TODO: AF2 inference function that returns a list of poses, and a identically indexed list of score dicts
 
 
 Paper TODOs:
