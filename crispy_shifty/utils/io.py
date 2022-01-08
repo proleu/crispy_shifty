@@ -682,7 +682,7 @@ def gen_array_tasks(
             f"#!{python} \n",
             "import sys\n",
             # use the root of the repo location to import the module
-            f"sys.path.insert(0, '{root}'))\n",
+            f"sys.path.insert(0, '{root}')\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
             f"from {'.'.join(func_split[:-1])} import {func_name}\n",
             f"wrapper_for_array_tasks({func_name}, sys.argv)",
