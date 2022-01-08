@@ -63,6 +63,7 @@ def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]] = None) -> No
     from pathlib import Path
     import sys
     import pyrosetta
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.design import beta_nov16_terms
@@ -639,6 +640,7 @@ def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
     from pathlib import Path
     import sys
     import pyrosetta
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.states import measure_CA_dist
@@ -652,6 +654,7 @@ def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist") -
 
     from pathlib import Path
     import sys
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.states import StateMaker
@@ -674,6 +677,7 @@ def one_state_design_unlooped_dimer(
     import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -828,6 +832,7 @@ def one_state_design_bound_state(
     import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose

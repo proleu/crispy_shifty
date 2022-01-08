@@ -75,6 +75,7 @@ def remove_terminal_loops(
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.scoring.dssp import Dssp
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -185,6 +186,7 @@ def redesign_disulfides(
     from pyrosetta.distributed.tasks.rosetta_scripts import (
         SingleoutputRosettaScriptsTask,
     )
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import (

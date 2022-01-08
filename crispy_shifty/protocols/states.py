@@ -730,6 +730,7 @@ def make_free_states(
     from pathlib import Path
     import pyrosetta
     import pyrosetta.distributed.io as io
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(pyrosetta.__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -764,6 +765,7 @@ def make_bound_states(
     from pathlib import Path
     import pyrosetta
     import pyrosetta.distributed.io as io
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose

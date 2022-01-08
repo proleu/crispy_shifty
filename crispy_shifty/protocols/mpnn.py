@@ -102,7 +102,9 @@ class MPNNRunner(ABC):
             "--pssm_threshold",
         ]
         # this updates to mpnn_run_tied.py if there is the --tied_positions_jsonl flag
-        self.script = f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run.py')}"
+        self.script = (
+            f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run.py')}"
+        )
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.is_setup = False  # this will be updated by the setup_runner method.
 
@@ -187,6 +189,7 @@ class MPNNRunner(ABC):
         import json, os, subprocess, sys
         from pathlib import Path
         import pyrosetta.distributed.io as io
+
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.utils.io import cmd_no_stderr
@@ -322,6 +325,7 @@ class MPNNDesign(MPNNRunner):
         import pyrosetta
         from pyrosetta.rosetta.core.pose import setPoseExtraScore
         import pyrosetta.distributed.io as io
+
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.protocols.mpnn import fasta_to_dict, thread_full_sequence
@@ -360,6 +364,7 @@ class MPNNDesign(MPNNRunner):
         """
         from pathlib import Path
         import sys
+
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.protocols.mpnn import dict_to_fasta
@@ -381,6 +386,7 @@ class MPNNDesign(MPNNRunner):
         """
         from pathlib import Path
         import sys
+
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.protocols.mpnn import thread_full_sequence
@@ -489,6 +495,7 @@ def mpnn_bound_state(
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose

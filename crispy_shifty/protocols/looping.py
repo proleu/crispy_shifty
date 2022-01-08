@@ -330,6 +330,7 @@ def loop_dimer(
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).absolute().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -510,6 +511,7 @@ def loop_bound_state(
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).absolute().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
