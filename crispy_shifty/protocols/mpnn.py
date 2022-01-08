@@ -412,10 +412,11 @@ def dict_to_fasta(
     Write a fasta file to the provided path with the provided sequence dict.
     """
     import os
+    from pathlib import Path
 
     # make the output path if it doesn't exist
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)
+    if not os.path.exists(Path(out_path).parent):
+        os.makedirs(Path(out_path).parent)
     else:
         pass
     # write the sequences to a fasta file

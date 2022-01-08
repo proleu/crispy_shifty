@@ -95,12 +95,12 @@ def df_to_fastas(
     # get columns that have sequences based on prefix
     sequence_cols = [col for col in df.columns if prefix in col]
 
-    def mask(row: pd.Series) -> str:
+    def mask(row: pd.Series, out_path: Optional[str] = None) -> str:
         name = row.name
         seq_dict = {col: row[col] for col in sequence_cols}
         if out_path is None:  # assume the index of the dataframe is abspaths to pdb.bz2
             # use pathlib sorcery to get the basename
-            out_path = f"{Path(name).resolve().stem.stem}.fasta"
+            out_path = f"{Path(name).with_suffix('').with_suffix('')}.fa"
             if "decoys" in out_path:
                 out_path = out_path.replace("decoys", "fastas")
             else:
@@ -111,15 +111,8 @@ def df_to_fastas(
 
         return out_path
 
-    df["fasta_path"] = df.progress_apply(mask, axis=1)
+    df["fasta_path"] = df.progress_apply(mask, args=(out_path), axis=1)
     return df
-
-    # if out_path is None:
-    #     # assume the index is abspaths to pdb.bz2 files
-    #     # mirror the fastas in the same directory as the pdb.bz2 files
-    #     fasta_path = f"{i.replace('decoys', 'fastas').replace('pdb.bz2','')}.fa"
-    #     print(dict_to_fasta(row))
-    # else:
 
 
 def get_yml() -> str:
