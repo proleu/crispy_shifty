@@ -122,6 +122,9 @@ class MPNNRunner(ABC):
         """
         :return: None
         Create a temporary directory for the MPNNRunner.
+        TODO: try use TMPDIR environment variable as the root. if that fails, check if
+        /net/scratch is available. if that fails, check if $PSCRATCH is available. if
+        that fails, use cwd as the root
         """
         import os, pwd, uuid
 
