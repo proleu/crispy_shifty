@@ -533,6 +533,12 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
 
         save_results(pposes, save_kwargs)
 
+def validate_repo():
+    """
+    TODO:
+    """
+    print("TODO: validate repo")
+
 
 def gen_array_tasks(
     distribute_func: str,
@@ -556,6 +562,9 @@ def gen_array_tasks(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.utils.io import get_yml
+    from crispy_shifty.utils.io import validate_repo 
+
+    validate_repo()
 
     os.makedirs(output_path, exist_ok=True)
 
