@@ -33,7 +33,7 @@ order chB and do SEC / expression screening too?
 
 dev TODOs:
     - add crispy kernel to ipython kernelspecs on perlmutter and janelia
-    - git repo check in io.py gen_array_tasks
+    - check output pdb.bz2 files for REMARK records containing env, sha1, and seed.
     - if TMPDIR and /net/scratch and PSCRATCH don't exist, create a tmpdir in cwd with uuid for anything that has to cache temp files
     - test PAE summarization in fasta mode
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN

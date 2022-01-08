@@ -669,8 +669,9 @@ def gen_array_tasks(
     func_name = func_split[-1]
     run_py = "".join(
         [
-            # this is less flexible than /usr/bin/env python but it ensures using a conda environment
-            f"#!{str(Path(__file__).resolve().parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}\n",
+            # TODO: might want to infer the python path (path to crispy env, whereever it is)
+            "#!/usr/bin/env python \n",
+            f"#!{str(Path(__file__).resolve().parent.parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}\n",
             "import sys\n",
             "sys.path.insert(0, str(Path(__file__).resolve().parent.parent))\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
