@@ -187,6 +187,7 @@ class MPNNRunner(ABC):
         The tmpdir is then removed.
         """
         import json, os, subprocess, sys
+        import git
         from pathlib import Path
         import pyrosetta.distributed.io as io
 
@@ -204,7 +205,14 @@ class MPNNRunner(ABC):
             f.write(pdbstring)
         # make the jsonl file for the PDB biounits
         biounit_path = os.path.join(out_path, "biounits.jsonl")
-        python = f"{str(Path(__file__).resolve().parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}"
+        # use git to find the root of the repo
+        repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
+        root = repo.git.rev_parse("--show-toplevel")
+        python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+        if os.path.exists(python):
+            pass
+        else:
+            python = "/usr/bin/env python"
         run_cmd = " ".join(
             [
                 f"{python} {str(Path(__file__).resolve().parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
@@ -321,6 +329,7 @@ class MPNNDesign(MPNNRunner):
         Each sequence designed by MPNN is then appended to the pose datacache.
         """
         import os, subprocess, sys
+        import git
         from pathlib import Path
         import pyrosetta
         from pyrosetta.rosetta.core.pose import setPoseExtraScore
@@ -337,7 +346,14 @@ class MPNNDesign(MPNNRunner):
         self.update_script()
 
         # run mpnn by calling self.script and providing the flags
-        python = f"{str(Path(__file__).resolve().parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}"
+        # use git to find the root of the repo
+        repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
+        root = repo.git.rev_parse("--show-toplevel")
+        python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+        if os.path.exists(python):
+            pass
+        else:
+        python = "/usr/bin/env python"
         run_cmd = (
             f"{python} {self.script}"
             + " "

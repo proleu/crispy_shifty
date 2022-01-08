@@ -596,6 +596,7 @@ def gen_array_tasks(
     TODO: GRES and multicore support?
     """
     import os, stat, sys
+    import git
     from more_itertools import ichunked
     from pathlib import Path
     from pyrosetta.distributed.cluster.converters import _parse_sha1 as parse_sha1
@@ -606,6 +607,14 @@ def gen_array_tasks(
     from crispy_shifty.utils.io import get_yml
 
     sha1 = parse_sha1(sha1)
+    # use git to find the root of the repo
+    repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
+    root = repo.git.rev_parse("--show-toplevel")
+    python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+    if os.path.exists(python):
+        pass
+    else:
+        python = "/usr/bin/env python"
 
     os.makedirs(output_path, exist_ok=True)
 
@@ -669,11 +678,11 @@ def gen_array_tasks(
     func_name = func_split[-1]
     run_py = "".join(
         [
-            # TODO: might want to infer the python path (path to crispy env, whereever it is)
-            "#!/usr/bin/env python \n",
-            f"#!{str(Path(__file__).resolve().parent.parent.parent / 'envs' / 'crispy' / 'bin' / 'python')}\n",
+            # TODO: try to infer the python path (path to crispy env, wherever it is)
+            f"#!{python} \n",
             "import sys\n",
-            "sys.path.insert(0, str(Path(__file__).resolve().parent.parent))\n",
+            # use the root of the repo location to import the module
+            f"sys.path.insert(0, {root}))\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
             f"from {'.'.join(func_split[:-1])} import {func_name}\n",
             f"wrapper_for_array_tasks({func_name}, sys.argv)",
