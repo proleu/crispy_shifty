@@ -174,6 +174,8 @@ class MPNNRunner(ABC):
         :return: None
         Update the script path based on whether the --tied_positions_jsonl flag is set.
         """
+        from pathlib import Path
+
         if "--tied_positions_jsonl" in self.flags.keys():
             self.script = f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run_tied.py')}"
         else:
