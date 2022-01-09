@@ -43,6 +43,9 @@ class MPNNRunner(ABC):
         If no `selector` is provided, all residues on all masked chains will be designed.
         The chain letters in your PDB must be correct. TODO, might want to add a check for this.
         """
+
+        from pathlib import Path
+
         self.batch_size = batch_size
         self.num_sequences = num_sequences
         self.omit_AAs = omit_AAs
