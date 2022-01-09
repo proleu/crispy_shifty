@@ -106,7 +106,7 @@ class MPNNRunner(ABC):
         ]
         # this updates to mpnn_run_tied.py if there is the --tied_positions_jsonl flag
         self.script = (
-            f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run.py')}"
+            f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run.py')}"
         )
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.is_setup = False  # this will be updated by the setup_runner method.
@@ -177,9 +177,9 @@ class MPNNRunner(ABC):
         from pathlib import Path
 
         if "--tied_positions_jsonl" in self.flags.keys():
-            self.script = f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run_tied.py')}"
+            self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run_tied.py')}"
         else:
-            self.script = f"{str(Path(__file__).resolve().parent.parent / 'mpnn' / 'mpnn_run.py')}"
+            self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run.py')}"
         return
 
     def setup_runner(self, pose: Pose) -> None:
@@ -220,7 +220,7 @@ class MPNNRunner(ABC):
             python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = " ".join(
             [
-                f"{python} {str(Path(__file__).resolve().parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
+                f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
                 f"--pdb_folder {out_path}",
                 f"--out_path {biounit_path}",
             ]
