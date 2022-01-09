@@ -211,8 +211,8 @@ class MPNNRunner(ABC):
         python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
         if os.path.exists(python):
             pass
-        else:
-            python = "/usr/bin/env python"
+        else: # crispy env must be installed in envs/crispy or must be used on DIGS
+            python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = " ".join(
             [
                 f"{python} {str(Path(__file__).resolve().parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
@@ -352,8 +352,8 @@ class MPNNDesign(MPNNRunner):
         python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
         if os.path.exists(python):
             pass
-        else:
-        python = "/usr/bin/env python"
+        else: # crispy env must be installed in envs/crispy or must be used on DIGS
+            python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = (
             f"{python} {self.script}"
             + " "

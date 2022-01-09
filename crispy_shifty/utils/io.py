@@ -613,8 +613,8 @@ def gen_array_tasks(
     python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
     if os.path.exists(python):
         pass
-    else:
-        python = "/usr/bin/env python"
+    else: # crispy env must be installed in envs/crispy or must be used on DIGS
+        python = "/projects/crispy_shifty/envs/crispy/bin/python"
 
     os.makedirs(output_path, exist_ok=True)
 
