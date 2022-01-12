@@ -732,7 +732,7 @@ def make_free_states(
     import pyrosetta.distributed.io as io
 
     # insert the root of the repo into the sys.path
-    sys.path.insert(0, str(Path(pyrosetta.__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
