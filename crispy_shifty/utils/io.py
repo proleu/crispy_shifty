@@ -69,32 +69,50 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
     else:
         return
 
-def df_to_fasta(df: pd.DataFrame, prefix:str, out_path: Optional[str] = None) -> None:
+
+def df_to_fastas(
+    df: pd.DataFrame, prefix: str, out_path: Optional[str] = None
+) -> pd.DataFrame:
     """
     :param: df: pandas dataframe.
     :param: prefix: prefix for column names to pull sequence from.
     :param: out_path: path to write fasta to.
     :return: None.
-    Write a pandas dataframe to a fasta file.
+    Generate fastas from each row of a df. If `out_path` is not specified, assume the
+    index of the dataframe is absolute paths to pdb.bz2 files, a la PyRosettaCluster.
     """
     import sys
+    from pathlib import Path
     import pandas as pd
+    from tqdm.auto import tqdm
 
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.mpnn import dict_to_fasta
+
+    tqdm.pandas()
 
     # get columns that have sequences based on prefix
     sequence_cols = [col for col in df.columns if prefix in col]
-    df = df.loc[:, sequence_cols]
-    for i, row in df.iterrows():
-        if out_path is None:
-            # assume the index is abspaths to pdb.bz2 files
-            # mirror the fastas in the same directory as the pdb.bz2 files
-            fasta_path = f"{i.replace('decoys', 'fastas').replace('pdb.bz2','')}.fa"
-            print(dict_to_fasta(row))
-        else:
 
+    def mask(row: pd.Series, out_path: Optional[str] = None) -> str:
+        name = row.name
+        seq_dict = {col: row[col] for col in sequence_cols}
+        if out_path is None:  # assume the index of the dataframe is abspaths to pdb.bz2
+            # use pathlib sorcery to get the basename
+            out_path = f"{Path(name).with_suffix('').with_suffix('')}.fa"
+            if "decoys" in out_path:
+                out_path = out_path.replace("decoys", "fastas")
+            else:
+                pass
+        else:  # assume the user knows what they're doing :(
+            pass
+        dict_to_fasta(seq_dict, out_path)
 
+        return out_path
+
+    df["fasta_path"] = df.progress_apply(mask, args=(out_path), axis=1)
+    return df
 
 
 def get_yml() -> str:
@@ -103,9 +121,11 @@ def get_yml() -> str:
     Works on jupyterhub
     """
     import subprocess, sys
+    from pathlib import Path
     from pyrosetta.distributed.cluster.config import source_domains
 
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.utils.io import cmd
 
     conda_path = f"{sys.prefix}/bin/conda"
@@ -124,7 +144,7 @@ def get_yml() -> str:
                     for line in raw_yml.split(os.linesep)
                     if all(
                         source_domain not in line for source_domain in source_domains
-                    ) 
+                    )
                     and all(not line.startswith(s) for s in ["name:", "prefix:"])
                     and line
                 ]
@@ -134,6 +154,7 @@ def get_yml() -> str:
         if raw_yml
         else raw_yml
     )
+
 
 def parse_scorefile_oneshot(scores: str) -> pd.DataFrame:
     """
@@ -227,7 +248,8 @@ def get_instance_and_metadata(
     """
     import pyrosetta
 
-    # Deleted a bunch of instance stuff from the original function here. Could add back in if helpful later, particularly if returning this to object-oriented structure.
+    # Deleted a bunch of instance stuff from the original function here.
+    # Could add back in if helpful later, particularly if returning this to object-oriented structure.
     instance_kwargs = {}
     # tracking with kwargs instead of class attributes
     instance_kwargs["compressed"] = kwargs.pop("compressed")
@@ -540,14 +562,59 @@ def gen_array_tasks(
     nstruct: int = 1,
     nstruct_per_task: int = 1,
     options: str = "",  # options for pyrosetta initialization
+    sha1: str = "",
     simulation_name: str = "crispy_shifty",
     extra_kwargs: dict = {},  # kwargs to pass to crispy_shifty_func. keys and values must be strings containing no spaces
 ):
+    """
+    :param: distribute_func: function to distribute, formatted as a string:
+    "module.function". The function must be a function that takes a list of pdb paths
+    and returns or yields a list of poses.
+    :param: design_list_file: path to a file containing a list of pdb paths.
+    :param: output_path: path to the directory where the results will be saved.
+    :param: queue: name of the queue to submit to on SLURM.
+    :param: memory: amount of memory to request for each task.
+    :param: nstruct: number of structures to generate per input.
+    :param: nstruct_per_task: number of structures to generate per task generated.
+    :param: options: options for pyrosetta initialization.
+    :param: sha1: A `str` or `NoneType` object specifying the git SHA1 hash string of
+    the particular git commit being simulated. If a non-empty `str` object is provided,
+    then it is validated to match the SHA1 hash string of the current HEAD,
+    and then it is added to the simulation record for accounting. If an empty string
+    is provided, then ensure that everything in the working directory is committed
+    to the repository. If `None` is provided, then bypass SHA1 hash string
+    validation and set this attribute to an empty string. From PyRosettaCluster.
+    Defaults to "".
+    :param: simulation_name: A `str` or `NoneType` object specifying the name of the
+    specific simulation being run.
+    :param: extra_kwargs: A `dict` object specifying extra kwargs to pass to the
+    function being distributed.
+    TODO: docstring.
+    TODO: option to simultaneously iterate through a second file at the same time.
+    TODO: if its a one for one iteration, then just zip the lines together and wrap the
+    function being distributed to unpack the lines into the seperate arguments.
+    TODO: GRES and multicore support?
+    """
     import os, stat, sys
+    import git
     from more_itertools import ichunked
+    from pathlib import Path
+    from pyrosetta.distributed.cluster.converters import _parse_sha1 as parse_sha1
     from tqdm.auto import tqdm
-    sys.path.insert(0, "/projects/crispy_shifty")
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.utils.io import get_yml
+
+    sha1 = parse_sha1(sha1)
+    # use git to find the root of the repo
+    repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
+    root = repo.git.rev_parse("--show-toplevel")
+    python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+    if os.path.exists(python):
+        pass
+    else: # crispy env must be installed in envs/crispy or must be used on DIGS
+        python = "/projects/crispy_shifty/envs/crispy/bin/python"
 
     os.makedirs(output_path, exist_ok=True)
 
@@ -561,6 +628,7 @@ def gen_array_tasks(
         :param: nstruct_per_task: number of structures to generate per task
         :return: an iterator of task dicts.
         Generates tasks for pyrosetta distributed.
+        TODO: docstring, better type annotations.
         """
         with open(design_list_file, "r") as f:
             # returns an iteratable with nstruct_per_task elements: lines of design_list_file
@@ -610,11 +678,11 @@ def gen_array_tasks(
     func_name = func_split[-1]
     run_py = "".join(
         [
-            # "#!/usr/bin/env python\n",
-            # this is less flexible than /usr/bin/env python TODO
-            "#!/projects/crispy_shifty/envs/crispy/bin/python\n",
+            # TODO: try to infer the python path (path to crispy env, wherever it is)
+            f"#!{python} \n",
             "import sys\n",
-            "sys.path.insert(0, '/projects/crispy_shifty')\n",
+            # use the root of the repo location to import the module
+            f"sys.path.insert(0, '{root}')\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
             f"from {'.'.join(func_split[:-1])} import {func_name}\n",
             f"wrapper_for_array_tasks({func_name}, sys.argv)",
@@ -632,7 +700,8 @@ def gen_array_tasks(
         "output_path": output_path,
         "simulation_name": simulation_name,
         "environment": env_file,
-    }  # TODO: environment here?
+        "sha1": sha1,
+    }
 
     instance_str = "-instance " + " ".join(
         [" ".join([k, str(v)]) for k, v in instance_dict.items()]
@@ -679,13 +748,13 @@ def test_func(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
 
-    # test env
-    import pycorn
-
     import sys
+    from pathlib import Path
+    import pycorn  # test env
     import pyrosetta.distributed.io as io
 
-    sys.path.insert(0, "/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose

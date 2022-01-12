@@ -727,10 +727,12 @@ def make_free_states(
     :return: An iterator of PackedPoses.
     """
     import sys
+    from pathlib import Path
     import pyrosetta
     import pyrosetta.distributed.io as io
 
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
@@ -760,10 +762,12 @@ def make_bound_states(
     :return: An iterator of PackedPoses.
     """
     import sys
+    from pathlib import Path
     import pyrosetta
     import pyrosetta.distributed.io as io
 
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose

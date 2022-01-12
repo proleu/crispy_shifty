@@ -71,11 +71,13 @@ def remove_terminal_loops(
     """
 
     import sys
+    from pathlib import Path
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.scoring.dssp import Dssp
 
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # generate poses or convert input packed pose into pose
@@ -177,15 +179,16 @@ def redesign_disulfides(
     -detect_disulf false
     -holes:dalphaball /software/rosetta/DAlphaBall.gcc
     """
-
+    from pathlib import Path
+    import sys
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed.tasks.rosetta_scripts import (
         SingleoutputRosettaScriptsTask,
     )
-    import sys
 
-    sys.path.insert(0, "/mnt/projects/crispy_shifty")
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import (
         path_to_pose_or_ppose,
         break_all_disulfides,
