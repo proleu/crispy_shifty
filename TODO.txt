@@ -33,8 +33,7 @@ order chB and do SEC / expression screening too?
 
 dev TODOs:
     - refilter l0 and l1 junctions
-    - finalize env.yml and build envs on digs, perlmutter, and janelia
-    - add test_env.py to git and run with new envs
+    - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, perlmutter, and janelia
     - add crispy kernel to ipython kernelspecs on perlmutter and janelia
     - test python interpreter finding with git root on perlmutter and janelia
     - run_superfold_devel.py needs to work with turbo, initial guess, fasta and reference pdb all at once
