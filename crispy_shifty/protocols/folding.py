@@ -1,5 +1,5 @@
 # Python standard library
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -11,7 +11,35 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 # Custom library imports
 
 
-class SuperfoldRunner():
+def process_results_json(path: str) -> Tuple[str, str, Dict[Any, Any]]:
+    """
+    :param: path: The path to the JSON to process.
+    :return: A tuple containing the name/tag of the prediction target, the name of the 
+    model/seed that generated the results and the dictionary of results.
+    Load a JSON as a dict. Return the name of the prediction target, the name of the
+    model/seed that generated the results and the dictionary of results.
+    """
+    import json
+    
+    with open(path, "r") as f:
+        scores = json.load(f)
+
+    model = scores["model"]
+    seed = scores["seed"]
+    if "ptm" in scores["type"]:
+        ptm = "_ptm"
+    else:
+        ptm = ""
+    # results json filenames have the format: 
+    # {pymol_name}_model_{model}{""|"ptm"}_seed_{seed}_prediction_results.json
+    # if we work backwards, after loading the json, we can get the pymol_name
+    filename = path.split("/")[-1]
+    model_seed = f"model_{model}{ptm}_seed_{seed}"
+    pymol_name = filename.replace(f"_{model_seed}_prediction_results.json", "")
+    return pymol_name, model_seed, scores
+
+
+class SuperfoldRunner:
     """
     Class for running AF2 on any cluster with @rdkibler's Superfold.
     """
@@ -28,7 +56,7 @@ class SuperfoldRunner():
         initial_guess: Optional[Union[bool, str]] = None,
         max_recycles: Optional[int] = 3,
         model_type: Optional[str] = "monomer_ptm",
-        models : Optional[Union[int, List[int], str]] = "all",
+        models: Optional[Union[int, List[int], str]] = "all",
         recycle_tol: Optional[float] = 0.0,
         reference_pdb: Optional[str] = None,
         **kwargs,
@@ -57,10 +85,10 @@ class SuperfoldRunner():
             "--mock_msa_depth": "1",
             "--nstruct": "1",
             "--num_ensemble": "1",
-            "--pad_lengths": " ", # store_true flag
+            "--pad_lengths": " ",  # store_true flag
             "--pct_seq_mask": "0.15",
             "--seed_start": "0",
-            "--turbo": " ", # store_true flag
+            "--turbo": " ",  # store_true flag
             "--version": "monomer",
         }
         # add the flags provided by the user
@@ -95,7 +123,7 @@ class SuperfoldRunner():
         )
         # 21 total flags plus input_files
         self.allowed_flags = [
-            # flags that have default values 
+            # flags that have default values
             "--mock_msa_depth",
             "--nstruct",
             "--num_ensemble",
@@ -123,12 +151,14 @@ class SuperfoldRunner():
         # use git to find the root of the repo
         repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
         root = repo.git.rev_parse("--show-toplevel")
-        self.python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+        self.python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
         if os.path.exists(self.python):
             pass
-        else: # crispy env must be installed in envs/crispy or must be used on DIGS
+        else:  # crispy env must be installed in envs/crispy or must be used on DIGS
             self.python = "/projects/crispy_shifty/envs/crispy/bin/python"
-        self.script = str(Path(__file__).parent.parent.parent / "superfold" / "run_crispy.py") # TODO
+        self.script = str(
+            Path(__file__).parent.parent.parent / "superfold" / "run_superfold_devel.py"
+        )
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.command = None  # this will be updated by the setup_runner method.
         self.is_setup = False  # this will be updated by the setup_runner method.
@@ -161,7 +191,7 @@ class SuperfoldRunner():
         """
         :return: None
         Create a temporary directory for the SuperfoldRunner. Checks for various best
-        practice locations for the tmpdir in the following order: PSCRATCH, TMPDIR, 
+        practice locations for the tmpdir in the following order: PSCRATCH, TMPDIR,
         /net/scratch. Uses the cwd if none of these are available.
         """
         import os, pwd, uuid
@@ -189,7 +219,7 @@ class SuperfoldRunner():
         if self.tmpdir is not None:
             shutil.rmtree(self.tmpdir)
         return
-    
+
     def update_command(self) -> None:
         """
         :return: None
@@ -219,30 +249,30 @@ class SuperfoldRunner():
         self.flags.update(update_dict)
         return
 
-    def setup_runner(self, file: str, flag_update: Optional[Dict[str, str]] = None) -> None:
+    def setup_runner(
+        self, file: Optional[str] = None, flag_update: Optional[Dict[str, str]] = None
+    ) -> None:
         """
+        :param: file: path to input file. If None, use the dumped tmp.pdb.
+        :param: flag_update: dictionary of flags to update, if any.
         :return: None
         Setup the SuperfoldRunner.
         Create a temporary directory for the SuperfoldRunner.
         Dump the pose temporarily to a PDB file in the temporary directory.
+        Update the flags dictionary with the provided dictionary if any.
         Setup the command line arguments for the SuperfoldRunner.
-        Run the SuperfoldRunner, and store the results in the temporary directory.
-        Read the results from the temporary directory and store them in the pose.
-        Remove the temporary directory.
         """
         import json, os, subprocess, sys
         import pyrosetta.distributed.io as io
 
-        # # insert the root of the repo into the sys.path
-        # sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        # from crispy_shifty.utils.io import cmd_no_stderr
-
-        # set input_file
-        self.input_file = file
-
         # setup the tmpdir
         self.setup_tmpdir()
         out_path = self.tmpdir
+        # set input_file
+        if file is not None:
+            self.input_file = file
+        else:
+            self.input_file = os.path.join(out_path, "tmp.pdb")
         # write the pose to a clean PDB file of only ATOM coordinates.
         tmp_pdb_path = os.path.join(out_path, "tmp.pdb")
         pdbstring = io.to_pdbstring(self.pose)
@@ -258,58 +288,43 @@ class SuperfoldRunner():
         self.is_setup = True
         return
 
-#     def apply(self, pose: Pose) -> None:
-#         """
-#         :param: pose: Pose object to run MPNN on.
-#         :return: None
-#         Run MPNN on the provided pose.
-#         Setup the MPNNRunner using the provided pose.
-#         Run MPNN in a subprocess using the provided flags and tmpdir.
-#         Read in and parse the output fasta file to get the sequences.
-#         Each sequence designed by MPNN is then appended to the pose datacache.
-#         """
-#         import os, subprocess, sys
-#         import git
-#         from pathlib import Path
-#         import pyrosetta
-#         from pyrosetta.rosetta.core.pose import setPoseExtraScore
-#         import pyrosetta.distributed.io as io
-# 
-#         # insert the root of the repo into the sys.path
-#         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-#         from crispy_shifty.protocols.mpnn import fasta_to_dict, thread_full_sequence
-#         from crispy_shifty.utils.io import cmd
-# 
-#         # setup runner
-#         self.setup_runner(pose)
-#         self.update_flags({"--out_folder": self.tmpdir})
-#         self.update_script()
-# 
-#         # run mpnn by calling self.script and providing the flags
-#         # use git to find the root of the repo
-#         repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
-#         root = repo.git.rev_parse("--show-toplevel")
-#         python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
-#         if os.path.exists(python):
-#             pass
-#         else: # crispy env must be installed in envs/crispy or must be used on DIGS
-#             python = "/projects/crispy_shifty/envs/crispy/bin/python"
-#         run_cmd = (
-#             f"{python} {self.script}"
-#             + " "
-#             + " ".join([f"{k} {v}" for k, v in self.flags.items()])
-#         )
-#         out_err = cmd(run_cmd)
-#         print(out_err)
-#         alignments_path = os.path.join(self.tmpdir, "alignments/tmp.fa")
-#         # parse the alignments fasta into a dictionary
-#         alignments = fasta_to_dict(alignments_path, new_tags=True)
-#         for i, (tag, seq) in enumerate(alignments.items()):
-#             index = str(i).zfill(4)
-#             setPoseExtraScore(pose, f"mpnn_seq_{index}", seq)
-#         # clean up the temporary files
-#         self.teardown_tmpdir()
-#         return
+    def apply(self, pose: Pose) -> None:
+        """
+        :param: pose: Pose object to run Superfold on.
+        :return: None
+        Run Superfold on the provided pose in a subprocess.
+        Read the results from the temporary directory and store them in the pose.
+        Remove the temporary directory.
+        """
+        import json, os, subprocess, sys
+        from glob import glob
+        from pathlib import Path
+        import pyrosetta
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
+        import pyrosetta.distributed.io as io
+
+        # insert the root of the repo into the sys.path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from crispy_shifty.utils.io import cmd
+
+        assert self.is_setup, "SuperfoldRunner is not setup."
+
+        # run the command in a subprocess
+        out_err = cmd(self.command)
+        print(out_err)
+        json_files = glob(os.path.join(self.tmpdir, "*.json"))
+        # read the json files into dicts of scores
+        scores = {}
+        # assume that all json files in the tmpdir are the results
+        # for i, (tag, seq) in enumerate(alignments.items()):
+        #     index = str(i).zfill(4)
+        #     setPoseExtraScore(pose, f"mpnn_seq_{index}", seq)
+        # clean up the temporary files
+        self.teardown_tmpdir()
+        return
+
+
+# TODO: utility functions for generating decoy outputs from the SuperfoldRunner
 
 
 @requires_init
@@ -361,8 +376,8 @@ def fold_bound_state(
         }
         runner.update_flags(flag_update)
         runner.update_command()
-        print(runner.get_command())
-
+        print_timestamp("Running AF2", start_time)
+        runner.apply(pose)
         print_timestamp("AF2 complete, updating pose datacache", start_time)
         # update the scores dict
         scores.update(pose.scores)
