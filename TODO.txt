@@ -26,7 +26,7 @@ If disulfide stapled states are needed or wanted, just staple and predict
 
 Pipeline:
 make bound states ~180k
-probably split into junctions x 1-3, non-junctions x 5-10, check lengths of non-junctions to make sure there's nothing too huge
+
 loop, allow extension, mpnn
 order chA and do SEC / expression screening 
 order chB and do SEC / expression screening too?
@@ -43,14 +43,18 @@ dev TODOs:
 
 
 TODO: 
-    01 loop bound_states #0-1,2,3 adjustment per side comparison
-    02 MPNN bound states
-    03 fold bound states # folding.py # cluster by length?
-    04 loop parents # lookup in free state df for common pdb parent, state 0? then use remodel
-    05 design paired states # almost linkres in msd.py
-    06 MPNN paired states 
-    07 fold paired states # folding.py Y first then X.
-    08 detail and filter # staple? peptide resurf? refold?
+    00 filter scaffold sets # check lengths of non-junctions to make sure there's nothing above 240? 220? # run
+    01 prep inputs # run
+    02 make states # change to array tasks? # run
+    00 design bound states # probably split into junctions x 1-3, non-junctions x 5-10 # run
+    01 loop bound_states # test 0-1,2,3 adjustment per side comparison # run
+    02 MPNN bound states # test how many fold in the next step # run
+    03 fold bound states # get working on perlmutter # turn off initial guess if not needed # run
+    04 loop parents # lookup in free state df for common pdb parent, state 0? then use remodel only design around loop # run
+    05 design paired states # almost linkres in msd.py # run
+    06 MPNN paired states # make MPNN msd # run
+    07 fold paired states # reuse folding.py Y first then X. # run
+    08 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
     09 order and analyze
 
 

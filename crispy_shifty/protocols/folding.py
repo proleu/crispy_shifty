@@ -22,12 +22,13 @@ class SuperfoldRunner():
     def __init__(
         self,
         pose: Union[Pose, PackedPose],
+        input_file: Optional[str] = None,
         amber_relax: bool = False,
         fasta_path: Optional[str] = None,
         initial_guess: Optional[Union[bool, str]] = None,
         max_recycles: Optional[int] = 3,
         model_type: Optional[str] = "monomer_ptm",
-        models = Optional[Union[int, List[int], str]] = "all",
+        models : Optional[Union[int, List[int], str]] = "all",
         recycle_tol: Optional[float] = 0.0,
         reference_pdb: Optional[str] = None,
         **kwargs,
@@ -37,10 +38,12 @@ class SuperfoldRunner():
         TODO params and docstring.
         """
 
+        import git
         import os
         from pathlib import Path
 
         self.pose = pose
+        self.input_file = input_file
         self.amber_relax = amber_relax
         self.fasta_path = fasta_path
         self.initial_guess = initial_guess
@@ -70,22 +73,28 @@ class SuperfoldRunner():
                 self.flags[initial_guess_flag] = self.initial_guess
         else:
             pass
+        # the amber_relax and reference_pdb flags are special cases as well
+        if self.amber_relax:
+            # store_true flag
+            self.flags["--amber_relax"] = " "
+        else:
+            pass
+        if self.reference_pdb is not None:
+            self.flags["--reference_pdb"] = self.reference_pdb
+        else:
+            pass
         self.flags.update(
             {
-                # store_true flag
-                "--amber_relax": " " if self.amber_relax else "": "",
                 "--max_recycles": str(self.max_recycles),
                 # cast models to a list (they may already be a list, that's fine)
                 # and concatenate the list with spaces as a string
                 "--models": " ".join([str(x) for x in list(self.models)]),
                 "--recycle_tol": str(self.recycle_tol),
-                "--reference_pdb": self.reference_pdb if self.reference_pdb is not None else "": "",
                 "--type": self.model_type,
             }
         )
         # 21 total flags plus input_files
         self.allowed_flags = [
-            "" # placeholder
             # flags that have default values 
             "--mock_msa_depth",
             "--nstruct",
@@ -111,10 +120,24 @@ class SuperfoldRunner():
             "--save_intermediates",
             "--show_images",
         ]
-        self.script = str(Path(__file__).parent.parent / "superfold" / "run_crispy.py") # TODO
+        # use git to find the root of the repo
+        repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
+        root = repo.git.rev_parse("--show-toplevel")
+        self.python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+        if os.path.exists(self.python):
+            pass
+        else: # crispy env must be installed in envs/crispy or must be used on DIGS
+            self.python = "/projects/crispy_shifty/envs/crispy/bin/python"
+        self.script = str(Path(__file__).parent.parent.parent / "superfold" / "run_crispy.py") # TODO
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.command = None  # this will be updated by the setup_runner method.
         self.is_setup = False  # this will be updated by the setup_runner method.
+
+    def get_command(self) -> str:
+        """
+        :return: command to run.
+        """
+        return self.command
 
     def get_flags(self) -> Dict[str, str]:
         """
@@ -166,6 +189,19 @@ class SuperfoldRunner():
         if self.tmpdir is not None:
             shutil.rmtree(self.tmpdir)
         return
+    
+    def update_command(self) -> None:
+        """
+        :return: None
+        Update the command to run.
+        """
+        self.command = " ".join(
+            [
+                f"{self.python} {self.script}",
+                f"{self.input_file}",
+                " ".join([f"{k} {v}" for k, v in self.flags.items()]),
+            ]
+        )
 
     def update_flags(self, update_dict: Dict[str, str]) -> None:
         """
@@ -183,7 +219,7 @@ class SuperfoldRunner():
         self.flags.update(update_dict)
         return
 
-    def setup_runner(self, file: str) -> None:
+    def setup_runner(self, file: str, flag_update: Optional[Dict[str, str]] = None) -> None:
         """
         :return: None
         Setup the SuperfoldRunner.
@@ -195,13 +231,14 @@ class SuperfoldRunner():
         Remove the temporary directory.
         """
         import json, os, subprocess, sys
-        import git
-        from pathlib import Path
         import pyrosetta.distributed.io as io
 
         # # insert the root of the repo into the sys.path
         # sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         # from crispy_shifty.utils.io import cmd_no_stderr
+
+        # set input_file
+        self.input_file = file
 
         # setup the tmpdir
         self.setup_tmpdir()
@@ -211,25 +248,13 @@ class SuperfoldRunner():
         pdbstring = io.to_pdbstring(self.pose)
         with open(tmp_pdb_path, "w") as f:
             f.write(pdbstring)
-        # use git to find the root of the repo
-        repo = git.Repo(str(Path(_file__).resolve()), search_parent_directories=True)
-        root = repo.git.rev_parse("--show-toplevel")
-        python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
-        if os.path.exists(python):
-            pass
-        else: # crispy env must be installed in envs/crispy or must be used on DIGS
-            python = "/projects/crispy_shifty/envs/crispy/bin/python"
         # update the flags with the path to the tmpdir
         self.update_flags({"--out_dir": out_path})
-        run_cmd = " ".join(
-            [
-                f"{python} {self.script}",
-                f"{file}",
-                " ".join([f"{k} {v}" for k, v in self.flags.items()]),
-            ]
-        )
-        self.command = run_cmd
-        print(f"Running command: {run_cmd}") # TODO
+        if flag_update is not None:
+            self.update_flags(flag_update)
+        else:
+            pass
+        self.update_command()
         self.is_setup = True
         return
 
@@ -320,18 +345,23 @@ def fold_bound_state(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
 
-    # constants TODO
-
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         print_timestamp("Setting up for AF2", start_time)
         # TODO run the superfold script and get the best decoy, set pose = best decoy
         runner = SuperfoldRunner(pose=pose, **kwargs)
+        runner.setup_runner(file=kwargs["fasta_path"])
         # TODO initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
         reference_pdb = initial_guess
-        runner.setup_runner(file=kwargs["fasta_path"])
+        flag_update = {
+            "--initial_guess": initial_guess,
+            "--reference_pdb": reference_pdb,
+        }
+        runner.update_flags(flag_update)
+        runner.update_command()
+        print(runner.get_command())
 
         print_timestamp("AF2 complete, updating pose datacache", start_time)
         # update the scores dict
