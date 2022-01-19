@@ -37,9 +37,12 @@ dev TODOs:
     - add crispy kernel to ipython kernelspecs on perlmutter and janelia
     - test python interpreter finding with git root on perlmutter and janelia
     - run_superfold_devel.py needs to work with turbo, initial guess, fasta and reference pdb all at once
-    - if TMPDIR and /net/scratch and PSCRATCH don't exist, create a tmpdir in cwd with uuid for anything that has to cache temp files
+    - Use if elif elif else tmpdir construction for mpnn? 
+    - gen_parallel_array_tasks? I think all it would need to do would be to change the .sh file to use GNU parallel (need to add GPU support anyway)
     - test PAE summarization in fasta mode
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
+
+    - Example notebooks for MPNN and superfold in crispy_shifty/examples
 
 
 TODO: 
