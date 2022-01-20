@@ -529,7 +529,7 @@ def fold_bound_state(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         print_timestamp("Setting up for AF2", start_time)
-        runner = SuperfoldRunner(pose=pose, **kwargs)
+        runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, **kwargs)
         runner.setup_runner(file=fasta_path)
         # initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
