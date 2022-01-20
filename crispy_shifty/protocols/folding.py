@@ -57,7 +57,7 @@ class SuperfoldRunner:
         initial_guess: Optional[Union[bool, str]] = None,
         max_recycles: Optional[int] = 3,
         model_type: Optional[str] = "monomer_ptm",
-        models: Optional[Union[int, List[int], str]] = "all",
+        models: Optional[Union[int, List[int], List[str], str]] = "all",
         recycle_tol: Optional[float] = 0.0,
         reference_pdb: Optional[str] = None,
         **kwargs,
@@ -124,12 +124,28 @@ class SuperfoldRunner:
             self.flags["--reference_pdb"] = self.reference_pdb
         else:
             pass
+        # the models flag is a special case as well because it is either an int, a list
+        # of ints, a list of strings, or a string
+        if type(self.models) == int: # convert to string
+            self.flags["--models"] = str(self.models)
+        elif type(self.models) == list: # check if list of ints
+            if type(self.models[0]) == int: # convert to string
+                self.flags["--models"] = " ".join(str(x) for x in self.models)
+            elif type(self.models[0]) == str: # join with space
+                self.flags["--models"] = " ".join(self.models)
+            else:
+                raise TypeError(
+                    "The models param must be either a list of ints/strings or a single int/string."
+                )
+        elif type(self.models) == str: # probably good to go
+            self.flags["--models"] = self.models
+        else:
+            raise TypeError(
+                "The models param must be either a list of ints/strings or a single int/string."
+            )
         self.flags.update(
             {
                 "--max_recycles": str(self.max_recycles),
-                # cast models to a list (they may already be a list, that's fine)
-                # and concatenate the list with spaces as a string
-                "--models": " ".join([str(x) for x in list(self.models)]),
                 "--recycle_tol": str(self.recycle_tol),
                 "--type": self.model_type,
             }
