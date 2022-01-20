@@ -32,11 +32,12 @@ order chA and do SEC / expression screening
 order chB and do SEC / expression screening too?
 
 dev TODOs:
-    - refilter l0 and l1 junctions
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, perlmutter, and janelia
     - add crispy kernel to ipython kernelspecs on perlmutter and janelia
     - test python interpreter finding with git root on perlmutter and janelia
     - run_superfold_devel.py needs to work with turbo, initial guess, fasta and reference pdb all at once
+    - test with single pdb no fasta, pdb+fasta, and ...? TODO
+    - test gen_array_tasks with perlmutter mode, GPU mode, and CPU mode
     - Use if elif elif else tmpdir construction for mpnn? 
     - gen_parallel_array_tasks? I think all it would need to do would be to change the .sh file to use GNU parallel (need to add GPU support anyway)
     - test PAE summarization in fasta mode

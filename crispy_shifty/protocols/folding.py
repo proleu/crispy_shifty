@@ -15,13 +15,13 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 def process_results_json(path: str) -> Tuple[str, str, Dict[Any, Any]]:
     """
     :param: path: The path to the JSON to process.
-    :return: A tuple containing the name/tag of the prediction target, the name of the 
+    :return: A tuple containing the name/tag of the prediction target, the name of the
     model/seed that generated the results and the dictionary of results.
     Load a JSON as a dict. Return the name of the prediction target, the name of the
     model/seed that generated the results and the dictionary of results.
     """
     import json
-    
+
     with open(path, "r") as f:
         scores = json.load(f)
 
@@ -31,7 +31,7 @@ def process_results_json(path: str) -> Tuple[str, str, Dict[Any, Any]]:
         ptm = "_ptm"
     else:
         ptm = ""
-    # results json filenames have the format: 
+    # results json filenames have the format:
     # {pymol_name}_model_{model}{""|"ptm"}_seed_{seed}_prediction_results.json
     # if we work backwards, after loading the json, we can get the pymol_name
     filename = path.split("/")[-1]
@@ -63,8 +63,22 @@ class SuperfoldRunner:
         **kwargs,
     ):
         """
+        :param: pose: The pose to run Superfold on.
+        :param: input_file: The path to the input file. If none, the pose will be used 
+        on its own.
+        :param: amber_relax: Whether to run AMBER relaxation.
+        :param: fasta_path: The path to the FASTA file, if any.
+        :param: initial_guess: Whether to use an initial guess. If True, the pose will 
+        be used as an initial guess. If a string, the string will be used as the path
+        to the initial guess.
+        :param: max_recycles: The maximum number of cycles to run Superfold.
+        :param: model_type: The type of model to run.
+        :param: models: The models to run.
+        :param: recycle_tol: The tolerance for recycling. If the difference between
+        mean plddt changes less than this value since the last recycle, the model will 
+        stop early.
+        :param: reference_pdb: The path to the reference PDB for RMSD calculation.
         Initialize the class with the provided attributes.
-        TODO params and docstring.
         """
 
         import git
@@ -303,50 +317,171 @@ class SuperfoldRunner:
 
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from crispy_shifty.protocols.mpnn import fasta_to_dict
         from crispy_shifty.utils.io import cmd
 
         assert self.is_setup, "SuperfoldRunner is not setup."
 
+        scores = dict(pose.scores)
         # run the command in a subprocess
         out_err = cmd(self.command)
         print(out_err)
         json_files = glob(os.path.join(self.tmpdir, "*_prediction_results.json"))
         # read the json files and update a dict of dicts of dicts of scores
         # the outer dict is keyed by the pymol_name, values are all model/seed results
-        # the inner dict is keyed by the model and seed, and the value is the scores 
+        # the inner dict is keyed by the model and seed, and the value is the scores
         results = defaultdict(dict)
         for json_file in json_files:
-            pymol_name, model_seed, scores = process_results_json(json_file)
-            results[pymol_name].update({model_seed: scores})
-        # update the pose with the scores
-        for pymol_name, model_scores in results.items():
-            setPoseExtraScore(pose, pymol_name, json.dumps(model_scores))
+            pymol_name, model_seed, result = process_results_json(json_file)
+            results[pymol_name].update({model_seed: result})
+        # turn results back into a regular dict
+        results = dict(results)
+        # check if there were already sequences in the pose datacache
+        seqs = {k: {"seq": v} for k, v in scores.items() if k in results.keys()}
+        # check if a fasta was provided
+        if self.fasta_path is not None:
+            # check if the fasta is the same as the input file
+            if self.fasta_path == self.input_file:
+                # if so, make a dict of the sequences in the fasta
+                tag_seq_dict = fasta_to_dict(self.fasta_path)
+                # and nest the sequences in that dict
+                tag_seq_dict = {k: {"seq": v} for k, v in tag_seq_dict.items()}
+            else:
+                raise NotImplementedError(
+                    "Fasta path is not the same as the input file."
+                )
+
+            if len(seqs) > 0:  # check that the seqs dict matches the fasta dict
+                if seqs == tag_seq_dict:
+                    pass
+                else:
+                    seqs = tag_seq_dict  # we want the seqs we did predictions on
+            else:
+                seqs = tag_seq_dict  # we want the seqs we did predictions on
+
+        elif len(seqs) == 0 and len(results) == 1:
+            # then this was a single sequence run
+            seqs = {"tmp": {"seq": pose.sequence}}
+
+        else:
+            raise NotImplementedError("I am not sure how this behaves with silents")
+
+        # update the results with the sequences and update the pose with those results
+        for tag, result in results.items():
+            result.update(seqs[tag])
+            setPoseExtraScore(pose, tag, json.dumps(result))
         # clean up the temporary files
         self.teardown_tmpdir()
         return
 
 
-# TODO: utility functions for generating decoy outputs from the SuperfoldRunner
-def update_seq_entry_with_results():
-    """
-    :return: None TODO
-    Update the sequence entry with the results from Superfold.
-    """
-    return
-
-
-def generate_decoys_from_pose(pose: Pose, filter_dict: Dict[str, Tuple[Union[eq, ge, gt, le, lt, ne], Union[int, float, str]]]) -> Iterator[Pose]:
+def generate_decoys_from_pose(
+    pose: Pose,
+    filter_dict: Dict[
+        str, Tuple[Union[eq, ge, gt, le, lt, ne], Union[int, float, str]]
+    ],
+    prefix: Optional[str] = "tmp",
+    rank_on: Optional[Union["mean_plddt", "pTMscore", "rmsd_to_input", "rmsd_to_reference"]] = "mean_plddt",
+    **kwargs,
+) -> Iterator[Pose]:
     """
     :param: pose: Pose object to generate decoys from.
-    :param: filter_dict: dictionary of filters to apply to the decoys. This is supplied 
+    :param: filter_dict: dictionary of filters to apply to the decoys. This is supplied
     as a dictionary of the form {'score_name': (operator, value)} where the operator is
-    one of the following: eq, ge, gt, le, lt, ne.
+    one of the following: eq, ge, gt, le, lt, ne. Example: {'mean_plddt': (ge, 0.9)}
+    prefix: for poses with many tags/pymol_names in results, get all results with the
+    same prefix
+    rank_on: the score to rank multiple model results for the same tag/pymol_name on. 
+    kwargs: keyword arguments (if they are not in the named arguments they will be ignored)
     :return: iterator of poses
-    The decoys are generated by applying the filters to the pose.
-    TODO
+    The decoys are generated by applying the filters to the model results in the pose.
     """
-    return
+    import json, sys
+    from pathlib import Path
+    import pyrosetta
+    from pyrosetta.rosetta.core.pose import setPoseExtraScore
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.mpnn import thread_full_sequence
 
+    # get the scores from the pose that have the prefix
+    scores = {k: v for k, v in pose.scores.items() if prefix in k}
+    # get the scores from the pose that don't have the prefix
+    pose_scores = {k: v for k, v in pose.scores.items() if prefix not in k}
+    # the format we expect is 
+    # {'tag1': {'model_seed': json_string of scores dict, 'seq': sequence}, tag2: ...}
+    # for each tag, check that the format is correct then:
+    # 1. get the sequence
+    # 2. get the (possibly multiple) model/seed results by loading the json_string
+    # 3. sort the model/seed results by the rank_on score and take the top result only
+    # 4. apply the filter(s) that result
+    for tag, result in scores.items():
+        # try to load the json string
+        try:
+            results = json.loads(result)
+        # fail gracefully if it can't be loaded
+        except json.decoder.JSONDecodeError:
+            print(f"Could not load json string for {tag}")
+            continue
+        # anything that doesn't have a seq or results is a problem, once loaded
+        if "seq" not in results.keys():
+            raise ValueError(
+                f"{tag} does not have a sequence in the pose datacache. "
+                "This is required for generating decoys."
+            )
+        else:
+            sequence = results.pop("seq")
+        # remaining should be model/seed results
+        if "model_" not in list(results.keys())[0]:
+            raise ValueError(
+                f"{tag} does not have a model/seed in the pose datacache. "
+                "This is required for generating decoys."
+            )
+        else:
+            pass
+        # sort the model/seed results by the rank_on score and take the top result only
+        # this is a bit tricky because higher is better for mean_plddt and pTMscore
+        # and lower is better for rmsd_to_input and rmsd_to_reference
+        if rank_on == "mean_plddt" or rank_on == "pTMscore":
+            # higher is better
+            model_seed_results = sorted(
+                results.items(), key=lambda x: x[1][rank_on], reverse=True
+            )
+        elif rank_on == "rmsd_to_input" or rank_on == "rmsd_to_reference":
+            # lower is better
+            model_seed_results = sorted(
+                results.items(), key=lambda x: x[1][rank_on], reverse=False
+            )
+        else:
+            raise ValueError(
+                f"{rank_on} is not a valid rank_on score. "
+                "This is required for generating decoys."
+            )
+        # get the top result
+        top_result = model_seed_results[0][1]
+        # setup flag: the decoy hasn't been discarded yet
+        keep_decoy = True
+        # apply the filter(s)
+        for score_name, (operator, value) in filter_dict.items():
+            if operator(top_result[score_name], value):
+                pass
+            else:
+                # if the filter fails, don't keep the decoy
+                keep_decoy = False
+                continue
+        # if the decoy passes all filters, yield it
+        if keep_decoy:
+            decoy = thread_full_sequence(
+                pose, sequence,
+            )
+            # add the scores from the top result to the decoy
+            pose_scores.update(top_result)
+            for k, v in pose_scores.items():
+                setPoseExtraScore(decoy, k, v)
+
+            yield decoy
+        else:
+            pass
+    return
 
 
 @requires_init
@@ -386,11 +521,9 @@ def fold_bound_state(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         print_timestamp("Setting up for AF2", start_time)
-        # TODO run the superfold script and get the best decoy, 
-        # TODO set pose = best decoy?
         runner = SuperfoldRunner(pose=pose, **kwargs)
         runner.setup_runner(file=kwargs["fasta_path"])
-        # TODO initial_guess, reference_pdb both are the tmp.pdb
+        # initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
         reference_pdb = initial_guess
         flag_update = {
@@ -402,10 +535,12 @@ def fold_bound_state(
         print_timestamp("Running AF2", start_time)
         runner.apply(pose)
         print_timestamp("AF2 complete, updating pose datacache", start_time)
-        # update the scores dict # TODO we actually want to add the seq to the existing dict
+        # update the scores dict
         scores.update(pose.scores)
         # update the pose with the updated scores dict
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-        ppose = io.to_packed(pose)
-        yield ppose
+        # get prefix, rank_on, filter_dict from kwargs
+        for decoy in generate_decoys_from_pose(pose, **kwargs): 
+            packed_decoy = io.to_packed(decoy)
+            yield packed_decoy
