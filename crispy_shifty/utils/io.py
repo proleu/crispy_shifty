@@ -580,8 +580,8 @@ def gen_array_tasks(
     :param: nstruct: number of structures to generate per input.
     :param: nstruct_per_task: number of structures to generate per task generated.
     :param: options: options for pyrosetta initialization.
-    :param: perlmutter_mode: whether to use the Perlmutter mode. Perlmutter mode 
-    grabs entire nodes at a time and uses GNU parallel to run the tasks on the nodes. 
+    :param: perlmutter_mode: whether to use the Perlmutter mode. Perlmutter mode
+    grabs entire nodes at a time and uses GNU parallel to run the tasks on the nodes.
     It assumes you will be using GPU nodes. It therefore also does not support the
     cores, gres, memory and queue arguments.
     :param: sha1: A `str` or `NoneType` object specifying the git SHA1 hash string of
@@ -615,10 +615,10 @@ def gen_array_tasks(
     # use git to find the root of the repo
     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
     root = repo.git.rev_parse("--show-toplevel")
-    python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+    python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
     if os.path.exists(python):
         pass
-    else: # crispy env must be installed in envs/crispy or must be used on DIGS
+    else:  # crispy env must be installed in envs/crispy or must be used on DIGS
         python = "/projects/crispy_shifty/envs/crispy/bin/python"
 
     os.makedirs(output_path, exist_ok=True)
@@ -658,7 +658,7 @@ def gen_array_tasks(
         f.write(env_str)
 
     # run_sh format is the only difference in perlmutter mode vs non-perlmutter mode
-    if perlmutter_mode: # perlmutter mode ignores cores, gres, memory and queue.
+    if perlmutter_mode:  # perlmutter mode ignores cores, gres, memory and queue.
         run_sh = "".join(
             [
                 "#!/bin/bash\n",
@@ -672,7 +672,7 @@ def gen_array_tasks(
                 f"#SBATCH -e {slurm_dir}/{simulation_name}-%A_%a.err \n",
                 f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
                 "#SBATCH -p regular\n",
-                "#SBATCH --time=1:00:00\n", # the shorter the better within reason
+                "#SBATCH --time=1:00:00\n",  # the shorter the better within reason
                 "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
                 "N2=$(( N + 1 ))\n",
                 "start_idx=$(( N*4 + 1 ))\n",

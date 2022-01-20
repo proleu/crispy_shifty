@@ -126,18 +126,18 @@ class SuperfoldRunner:
             pass
         # the models flag is a special case as well because it is either an int, a list
         # of ints, a list of strings, or a string
-        if type(self.models) == int: # convert to string
+        if type(self.models) == int:  # convert to string
             self.flags["--models"] = str(self.models)
-        elif type(self.models) == list: # check if list of ints
-            if type(self.models[0]) == int: # convert to string
+        elif type(self.models) == list:  # check if list of ints
+            if type(self.models[0]) == int:  # convert to string
                 self.flags["--models"] = " ".join(str(x) for x in self.models)
-            elif type(self.models[0]) == str: # join with space
+            elif type(self.models[0]) == str:  # join with space
                 self.flags["--models"] = " ".join(self.models)
             else:
                 raise TypeError(
                     "The models param must be either a list of ints/strings or a single int/string."
                 )
-        elif type(self.models) == str: # probably good to go
+        elif type(self.models) == str:  # probably good to go
             self.flags["--models"] = self.models
         else:
             raise TypeError(
@@ -396,6 +396,7 @@ def generate_decoys_from_pose(
     filter_dict: Dict[
         str, Tuple[Union[eq, ge, gt, le, lt, ne], Union[int, float, str]]
     ],
+    label_first: Optional[bool] = False,
     prefix: Optional[str] = "tmp",
     rank_on: Optional[
         Union["mean_plddt", "pTMscore", "rmsd_to_input", "rmsd_to_reference"]
@@ -433,7 +434,7 @@ def generate_decoys_from_pose(
     # 2. get the (possibly multiple) model/seed results by loading the json_string
     # 3. sort the model/seed results by the rank_on score and take the top result only
     # 4. apply the filter(s) that result
-    for tag, result in scores.items():
+    for i, (tag, result) in enumerate(sorted(scores.items())):
         # try to load the json string
         try:
             results = json.loads(result)
@@ -495,6 +496,13 @@ def generate_decoys_from_pose(
             )
             # add the scores from the top result to the decoy
             pose_scores.update(top_result)
+            if label_first:
+                if i == 0:
+                    pose_scores["designed_by"] = "rosetta"
+                else:
+                    pose_scores["designed_by"] = "mpnn"
+            else:
+                pass
             for k, v in pose_scores.items():
                 setPoseExtraScore(decoy, k, v)
 
@@ -573,7 +581,11 @@ def fold_bound_state(
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         for decoy in generate_decoys_from_pose(
-            pose, filter_dict=filter_dict, prefix=prefix, rank_on=rank_on
+            pose,
+            filter_dict=filter_dict,
+            label_first=True,
+            prefix=prefix,
+            rank_on=rank_on,
         ):
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
