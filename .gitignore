@@ -1,4 +1,4 @@
-__pycache__
+__pycache__/
 *~
 .backup
 .examples
@@ -31,7 +31,6 @@ figs
 *.log
 *.err
 *.json*
-*.py*
 *.sh
 *.yml
 *.silent

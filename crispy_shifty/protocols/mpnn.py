@@ -105,9 +105,7 @@ class MPNNRunner(ABC):
             "--pssm_threshold",
         ]
         # this updates to mpnn_run_tied.py if there is the --tied_positions_jsonl flag
-        self.script = (
-            f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run.py')}"
-        )
+        self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run.py')}"
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.is_setup = False  # this will be updated by the setup_runner method.
 
@@ -213,10 +211,10 @@ class MPNNRunner(ABC):
         # use git to find the root of the repo
         repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
         root = repo.git.rev_parse("--show-toplevel")
-        python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+        python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
         if os.path.exists(python):
             pass
-        else: # crispy env must be installed in envs/crispy or must be used on DIGS
+        else:  # crispy env must be installed in envs/crispy or must be used on DIGS
             python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = " ".join(
             [
@@ -354,10 +352,10 @@ class MPNNDesign(MPNNRunner):
         # use git to find the root of the repo
         repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
         root = repo.git.rev_parse("--show-toplevel")
-        python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+        python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
         if os.path.exists(python):
             pass
-        else: # crispy env must be installed in envs/crispy or must be used on DIGS
+        else:  # crispy env must be installed in envs/crispy or must be used on DIGS
             python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = (
             f"{python} {self.script}"

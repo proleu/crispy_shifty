@@ -509,7 +509,6 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
             for i in range(0, len(args.extra_options), 2)
         },
     }
-    # print(pyro_kwargs)
     pyrosetta.distributed.maybe_init(**pyro_kwargs)
 
     # Get kwargs to pass to the function from the extra kwargs
@@ -524,7 +523,6 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
     for pdb_path in args.pdb_path:
         # Add the required kwargs
         func_kwargs["pdb_path"] = pdb_path
-        # print(func_kwargs)
 
         datetime_start = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
@@ -548,8 +546,6 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
             "crispy_shifty_datetime_start": datetime_start,
         }
         save_kwargs.update(instance_kwargs)
-        # print(save_kwargs)
-
         save_results(pposes, save_kwargs)
 
 
@@ -558,13 +554,16 @@ def gen_array_tasks(
     design_list_file: str,
     output_path: str,
     queue: str,
+    extra_kwargs: dict = {},
+    cores: Optional[int] = None,
+    gres: Optional[str] = None,
     memory: str = "4G",
     nstruct: int = 1,
     nstruct_per_task: int = 1,
     options: str = "",  # options for pyrosetta initialization
+    perlmutter_mode: bool = False,
     sha1: str = "",
     simulation_name: str = "crispy_shifty",
-    extra_kwargs: dict = {},  # kwargs to pass to crispy_shifty_func. keys and values must be strings containing no spaces
 ):
     """
     :param: distribute_func: function to distribute, formatted as a string:
@@ -573,10 +572,18 @@ def gen_array_tasks(
     :param: design_list_file: path to a file containing a list of pdb paths.
     :param: output_path: path to the directory where the results will be saved.
     :param: queue: name of the queue to submit to on SLURM.
+    :param: extra_kwargs: A `dict` object specifying extra kwargs to pass to the
+    function being distributed.
+    :param: cores: number of cores to use per task.
+    :param: gres: string specifying the gres to use, if any, e.g. "--gres=gpu:1".
     :param: memory: amount of memory to request for each task.
     :param: nstruct: number of structures to generate per input.
     :param: nstruct_per_task: number of structures to generate per task generated.
     :param: options: options for pyrosetta initialization.
+    :param: perlmutter_mode: whether to use the Perlmutter mode. Perlmutter mode
+    grabs entire nodes at a time and uses GNU parallel to run the tasks on the nodes.
+    It assumes you will be using GPU nodes. It therefore also does not support the
+    cores, gres, memory and queue arguments.
     :param: sha1: A `str` or `NoneType` object specifying the git SHA1 hash string of
     the particular git commit being simulated. If a non-empty `str` object is provided,
     then it is validated to match the SHA1 hash string of the current HEAD,
@@ -587,13 +594,11 @@ def gen_array_tasks(
     Defaults to "".
     :param: simulation_name: A `str` or `NoneType` object specifying the name of the
     specific simulation being run.
-    :param: extra_kwargs: A `dict` object specifying extra kwargs to pass to the
-    function being distributed.
     TODO: docstring.
     TODO: option to simultaneously iterate through a second file at the same time.
     TODO: if its a one for one iteration, then just zip the lines together and wrap the
     function being distributed to unpack the lines into the seperate arguments.
-    TODO: GRES and multicore support?
+    TODO: GRES and GNU parallel support? Maybe a GNU parallel mode or a perlmutter mode?
     """
     import os, stat, sys
     import git
@@ -610,10 +615,10 @@ def gen_array_tasks(
     # use git to find the root of the repo
     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
     root = repo.git.rev_parse("--show-toplevel")
-    python = str(Path(root) / "envs"/ "crispy" / "bin" / "python")
+    python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
     if os.path.exists(python):
         pass
-    else: # crispy env must be installed in envs/crispy or must be used on DIGS
+    else:  # crispy env must be installed in envs/crispy or must be used on DIGS
         python = "/projects/crispy_shifty/envs/crispy/bin/python"
 
     os.makedirs(output_path, exist_ok=True)
@@ -652,20 +657,57 @@ def gen_array_tasks(
     with open(env_file, "w") as f:
         f.write(env_str)
 
-    run_sh = "".join(
-        [
-            "#!/usr/bin/env bash \n",
-            f"#SBATCH -J {simulation_name} \n",
-            f"#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n",
-            f"#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n",
-            f"#SBATCH -p {queue} \n",
-            f"#SBATCH --mem={memory} \n",
-            "\n",
-            f"JOB_ID=${jid} \n",
-            f"""CMD=$(sed -n "${sid}" {tasklist}) \n""",
-            f"""echo "${{CMD}}" | bash""",
-        ]  # TODO GRES support, maybe multicore support
-    )
+    # run_sh format is the only difference in perlmutter mode vs non-perlmutter mode
+    if perlmutter_mode:  # perlmutter mode ignores cores, gres, memory and queue.
+        run_sh = "".join(
+            [
+                "#!/bin/bash\n",
+                "#SBATCH --account=m3962_g\n",
+                "#SBATCH --constraint=gpu\n",
+                f"#SBATCH --job-name={simulation_name}\n",
+                "#SBATCH --gpus=4\n",
+                "#SBATCH --gpu-bind=map_gpu:0,1,2,3\n",
+                "#SBATCH --nodes=1\n",
+                "#SBATCH --ntasks=4\n",
+                f"#SBATCH -e {slurm_dir}/{simulation_name}-%A_%a.err \n",
+                f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
+                "#SBATCH -p regular\n",
+                "#SBATCH --time=1:00:00\n",  # the shorter the better within reason
+                "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
+                "N2=$(( N + 1 ))\n",
+                "start_idx=$(( N*4 + 1 ))\n",
+                "end_idx=$(( N2*4 ))\n",
+                # "source ~/.bashrc" # TODO needed for conda?
+                "source activate /global/cfs/cdirs/m3962/projects/crispy_shifty/envs/crispy\n",
+                "head -n $end_idx {tasklist} | tail -n +$start_idx | parallel",
+            ]
+        )
+    else:
+        if cores is not None:
+            cores_string = f"#SBATCH -c {cores}\n"
+        else:
+            cores_string = "\n"
+        if gres is not None:
+            gres_string = f"#SBATCH {gres}\n"
+        else:
+            gres_string = "\n"
+
+        run_sh = "".join(
+            [
+                "#!/usr/bin/env bash \n",
+                f"#SBATCH -J {simulation_name} \n",
+                cores_string,
+                f"#SBATCH -e {slurm_dir}/{simulation_name}-%J.err \n",
+                f"#SBATCH -o {slurm_dir}/{simulation_name}-%J.out \n",
+                f"#SBATCH -p {queue} \n",
+                f"#SBATCH --mem={memory} \n",
+                gres_string,
+                "\n",
+                f"JOB_ID=${jid} \n",
+                f"""CMD=$(sed -n "${sid}" {tasklist}) \n""",
+                f"""echo "${{CMD}}" | bash""",
+            ]
+        )
     # Write the run.sh file
     run_sh_file = os.path.join(output_path, "run.sh")
     with open(run_sh_file, "w+") as f:
@@ -678,7 +720,6 @@ def gen_array_tasks(
     func_name = func_split[-1]
     run_py = "".join(
         [
-            # TODO: try to infer the python path (path to crispy env, wherever it is)
             f"#!{python} \n",
             "import sys\n",
             # use the root of the repo location to import the module

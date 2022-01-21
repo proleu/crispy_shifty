@@ -24,31 +24,54 @@ Look for complex prediction on AF2 then fold state X
 Increase SAP tolerance somewhat
 If disulfide stapled states are needed or wanted, just staple and predict
 
-Pipeline:
-make bound states ~180k
-probably split into junctions x 1-3, non-junctions x 5-10, check lengths of non-junctions to make sure there's nothing too huge
+Back of the napkin numbers:
+    ~2100 non-junctions
+    *~17=34000 bound states,
+    *75=2.6M designed bound states,
+    *~.25=640k folded bound states,
+    *~.5=320k paired bound states,
+    *37=11.8M designed paired bound states,
+    *~.05=592k folded paired bound states, (Y)
+    *~.33=195k folded paired bound states, (X)
+
+
+    ~44000 junctions
+
+
 loop, allow extension, mpnn
 order chA and do SEC / expression screening 
 order chB and do SEC / expression screening too?
 
 dev TODOs:
+    - compare one more time DHR82 with FF74 (seq length difference)
+    - extend loop_remodel based on docstring TODO
+    - finish and test pair_bound_states 
+    - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, perlmutter, and janelia
     - add crispy kernel to ipython kernelspecs on perlmutter and janelia
     - test python interpreter finding with git root on perlmutter and janelia
     - run_superfold_devel.py needs to work with turbo, initial guess, fasta and reference pdb all at once
-    - if TMPDIR and /net/scratch and PSCRATCH don't exist, create a tmpdir in cwd with uuid for anything that has to cache temp files
-    - test PAE summarization in fasta mode
+    - test with single pdb no fasta, pdb+fasta, and ...? TODO
+    - test gen_array_tasks with perlmutter mode
+    - Use if elif elif else tmpdir construction for mpnn and loop_remodel? 
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
+
+    - Example notebooks for MPNN and superfold in crispy_shifty/examples
+    - if really bored, add documentation to the InsertResMover and PR
 
 
 TODO: 
-    01 loop bound_states #0-1,2,3 adjustment per side comparison
-    02 MPNN bound states
-    03 fold bound states # folding.py # cluster by length?
-    04 loop parents # lookup in free state df for common pdb parent, state 0? then use remodel
-    05 design paired states # almost linkres in msd.py
-    06 MPNN paired states 
-    07 fold paired states # folding.py Y first then X.
-    08 detail and filter # staple? peptide resurf? refold?
+    00 filter scaffold sets # run
+    01 prep inputs # run
+    02 make states # change to array tasks? # run
+    00 design bound states # probably split into junctions x 1-3, non-junctions x 5-10 # run
+    01 loop bound_states # test 0-1,2,3 adjustment per side comparison # run
+    02 MPNN bound states # test how many fold in the next step # run
+    03 fold bound states # get working on perlmutter # turn off initial guess if not needed # run
+    04 pair bound states # loop free state 0 with bp builder (match pre-break hlx) # run
+    05 design paired states # almost linkres in msd.py # run
+    06 MPNN paired states # make MPNN msd # run
+    07 fold paired states # reuse folding.py Y first then X. # run
+    08 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
     09 order and analyze
 
 
