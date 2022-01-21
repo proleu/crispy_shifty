@@ -160,6 +160,7 @@ def loop_remodel(
     :return: Whether the loop was successfully inserted.
     Remodel a new loop using Blueprint Builder. Expects a pose with two chains.
     DSSP and SS agnostic in principle but in practice more or less matches.
+    TODO enable dssp, improve tmpfile handling (use uuid)
     """
     import os
     import numpy as np

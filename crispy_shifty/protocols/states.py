@@ -891,3 +891,61 @@ def make_bound_states(
         # generate states
         for ppose in state_maker.generate_states():
             yield ppose
+
+
+@requires_init
+def pair_bound_states(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    # TODO Wrapper for distributing BoundStateMaker.
+    # TODO :param packed_pose_in: The input pose.
+    # TODO :param kwargs: The keyword arguments to pass to BoundStateMaker.
+    # TODO :return: An iterator of PackedPoses.
+    """
+    import sys
+    from pathlib import Path
+    import pandas as pd
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    # TODO import yeet pose xyz
+    # TODO from crispy_shifty.protocols.looping import loop_from_blueprint
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
+        )
+
+    reference_csv = pd.read_csv(kwargs["reference_csv"], index_col="Unnamed: 0")
+    final_pposes = []
+    for pose in poses:
+        # get scores
+        scores = dict(pose.scores)
+        pdb = scores["pdb"]
+        pre_break_helix = scores["pre_break_helix"]
+        # find a state 0 from the same parent pdb with the same pre-break helix
+        state_0 = reference_csv.loc[
+            (reference_csv["pdb"] == pdb)
+            & (reference_csv["pre_break_helix"] == pre_break_helix)
+            & (reference_csv["shift"] == 0)
+        ]
+        # load the state 0 pose
+        x_pose = next(path_to_pose_or_ppose(path=state_0.name, cluster_scores=True, pack_result=False))
+        # get the dssp string of the pose
+        dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
+        dssp_string = dssp.get_dssp_secstruct()
+        # try to loop the state 0 with blueprint builder and the dssp string
+        # TODO
+        # if successful, check chain A and chain C match length
+        # yeet the state 0 pose
+        # then add it to pose
+        # then rechain
+        # yield the pose
+
