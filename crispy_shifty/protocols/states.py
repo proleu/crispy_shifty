@@ -123,6 +123,113 @@ def grow_terminal_helices(
     return pose
 
 
+def extend_helix_termini(
+    pose: Pose,
+    chain: int,
+    extend_c_term: int = 0,
+    extend_n_term: int = 0,
+    idealize: bool = False,
+) -> Pose:
+    """
+    :param: extend_c_term: Number of residues to extend the C-terminal helix.
+    :param: extend_n_term: Number of residues to extend the N-terminal helix.
+    :param: pose: Pose to extend the terminal helices of.
+    :param: chain: Chain to extend the terminal helices of.
+    :return: Pose with the terminal helices extended.
+    Extend the terminal helices of a pose by a specified number of residues at the 
+    provided chain. The new residues are valines.
+    """
+
+    import pyrosetta
+    from pyrosetta.rosetta.core.pose import append_pose_to_pose, Pose
+    from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
+
+    # get the scores of the pose
+    scores = dict(pose.scores)
+    # Get the chains of the pose
+    chains = pose.num_chains()
+    # make a SwitchChainOrderMover to rebuild the pose
+    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    chain_order = "".join(str(i) for i in range(1, chains + 1))
+    sw.chain_order(chain_order)
+    sw.apply(pose)
+    # make a dictionary of the chains
+    chain_dict = {}
+    for i, subpose in enumerate(pose.split_by_chain(), start=1):
+        chain_dict[i] = subpose.clone()
+    # get the chain we want to extend
+    slicer = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    slicer.chain_order(str(chain))
+    pose_to_extend = pose.clone()
+    slicer.apply(pose_to_extend)
+    # fix the phi/psi/omega of the first and last residues of the chain
+    # steal them from the next (for the first) and previous (for the last) residues
+    last_res = pose_to_extend.total_residue()
+    pose_to_extend.set_phi(1, pose_to_extend.phi(2))
+    pose_to_extend.set_psi(1, pose_to_extend.psi(2))
+    pose_to_extend.set_omega(1, pose_to_extend.omega(2))
+    pose_to_extend.set_phi(last_res, pose_to_extend.phi(last_res - 1))
+    pose_to_extend.set_psi(last_res, pose_to_extend.psi(last_res - 1))
+    pose_to_extend.set_omega(last_res, pose_to_extend.omega(last_res - 1))
+    # f-strings for inserters
+    inserter_c_term = f"""
+    <MOVERS>
+        <InsertResMover 
+            name="cterm" 
+            chain="A" 
+            residue="{pose_to_extend.chain_end(1)}"
+            steal_angles_from_res="{pose_to_extend.chain_end(1)}"
+            grow_toward_Nterm="false"
+            additionalResidue="{extend_c_term}" />
+    </MOVERS>
+    """
+    inserter_n_term = f"""
+    <MOVERS>
+        <InsertResMover 
+            name="nterm" 
+            chain="A" 
+            residue="1"
+            steal_angles_from_res="2"
+            grow_toward_Nterm="true"
+            additionalResidue="{extend_n_term}" />
+    </MOVERS>
+    """
+    if extend_c_term > 0:
+        c_term_extender = XmlObjects.create_from_string(inserter_c_term)
+        c_term_extender = c_term_extender.get_mover("cterm")
+        c_term_extender.apply(pose_to_extend)
+    else:
+        pass
+    if extend_n_term > 0:
+        n_term_extender = XmlObjects.create_from_string(inserter_n_term)
+        n_term_extender = n_term_extender.get_mover("nterm")
+        n_term_extender.apply(pose_to_extend)
+    else:
+        pass
+    pose = Pose()
+    pre_extended_chain = chain_dict[chain]
+
+    range_CA_align(
+        pose_to_extend, 
+        pre_extended_chain, 
+        extend_n_term + 1, 
+        extend_n_term + len(pre_extended_chain.residues),
+        pre_extended_chain.chain_begin(1),
+        pre_extended_chain.chain_end(1),
+    )
+    chain_dict[chain] = pose_to_extend
+    for i, subpose in chain_dict.items():
+        append_pose_to_pose(pose, subpose, new_chain=True)
+    sw.apply(pose)
+    if idealize:
+        idealize_mover = pyrosetta.rosetta.protocols.idealize.IdealizeMover()
+        idealize_mover.apply(pose)
+    else:
+        pass
+    for key, value in scores.items():
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+    return pose
+
 def range_CA_align(
     pose_a: Pose,
     pose_b: Pose,
@@ -662,7 +769,7 @@ class BoundStateMaker(StateMaker):
                     # fix PDBInfo and chain numbering
                     rechain.apply(dock)
                     # extend the bound helix
-                    dock = grow_terminal_helices(
+                    dock = extend_helical_termini(
                         pose=dock,
                         chain=3,
                         extend_n_term=5,
