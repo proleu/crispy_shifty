@@ -613,7 +613,7 @@ def gen_array_tasks(
     distribute_func: str,
     design_list_file: str,
     output_path: str,
-    queue: str,
+    queue: Optional[str] = "medium",
     extra_kwargs: dict = {},
     cores: Optional[int] = None,
     gres: Optional[str] = None,
