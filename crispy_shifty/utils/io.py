@@ -70,6 +70,66 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
         return
 
 
+def fix_path_prefixes(
+    find: str, replace: str, file: str, overwrite: Optional[bool] = False
+    ) -> Union[pd.DataFrame, List[str], str, None]:
+    """
+    :param: find: path prefix to find and replace.
+    :param: replace: path prefix to replace with.
+    :param: file: path to file to fix.
+    :param: overwrite: overwrite file if it exists.
+    :return: A pandas dataframe, a list of paths, or a string, depending on the file 
+    type of input, or None if overwrite is True.
+    When rsyncing lists or scorefiles from one cluster to another, the paths in the 
+    lists or index of the scorefile need to be fixed. This function fixes them, and 
+    can either return a python object (dataframe, list, or string) of the fixed file,
+    or overwrite the file in place.
+    """
+    import os
+    import pandas as pd
+
+    # infer what to do with the file
+    if ".json" in file:
+        try: # this one will often fail as scores.json is usually formatted differently
+            df = pd.read_json(file)
+        except ValueError:
+            df = parse_scorefile_linear(file)
+        # fix df index and return df
+        df.set_index(df.index.astype(str).str.replace(find, replace), inplace=True)
+        if overwrite:
+            df.to_json(file, orient="records")
+            return None
+        else:
+            return df
+    elif ".csv" in file:
+        df = pd.read_csv(file)
+        # fix df index and return df
+        df.set_index(df.index.astype(str).str.replace(find, replace), inplace=True)
+        if overwrite:
+            df.to_json(file, orient="records")
+            return None
+        else:
+            return df
+    elif ".list" in file or ".pair" in file:
+        # fix and return list or overwrite file
+        out_lines = []
+        with open(file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if find in line:
+                    line = line.replace(find, replace)
+                out_lines.append(line)
+        if overwrite:
+            with open(file, "w") as f:
+                for line in out_lines:
+                    print(line, file=f)
+            return None
+        else:
+            return out_lines
+    else: # assume it's a single path, fix and return
+        fixed_path = file.replace(find, replace)
+        return fixed_path
+
 def df_to_fastas(
     df: pd.DataFrame, prefix: str, out_path: Optional[str] = None
 ) -> pd.DataFrame:
@@ -662,7 +722,7 @@ def gen_array_tasks(
         run_sh = "".join(
             [
                 "#!/bin/bash\n",
-                "#SBATCH --account=m3962_g\n",
+                "#SBATCH --account=m4129_g\n",
                 "#SBATCH --constraint=gpu\n",
                 f"#SBATCH --job-name={simulation_name}\n",
                 "#SBATCH --gpus=4\n",
