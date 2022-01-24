@@ -1,6 +1,6 @@
 # Python standard library
 from abc import ABC, abstractmethod
-from typing import Iterator, List, Optional, Union
+from typing import Iterator, List, Optional, Tuple, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -10,6 +10,36 @@ from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
+
+
+def yeet_pose_xyz(
+    pose: Pose,
+    xyz: Tuple[Union[int, float], Union[int, float], Union[int, float]] = (1, 0, 0),
+) -> Pose:
+    """
+    :param: pose: Pose to yeet
+    :param: xyz: x, y, z coordinates to yeet to
+    :return: yeeted pose
+    Given a pose and a cartesian 3D unit vector, translates the pose
+    according to 100 * the unit vector without applying a rotation:
+    @pleung @bcov @flop
+    """
+    from pyrosetta.rosetta.core.select.residue_selector import TrueResidueSelector
+    from pyrosetta.rosetta.protocols.toolbox.pose_manipulation import (
+        rigid_body_move,
+    )
+
+    assert len(xyz) == 3
+    pose = pose.clone()
+    entire = TrueResidueSelector()
+    subset = entire.apply(pose)
+    # get which direction in cartesian unit vectors (xyz) to yeet pose
+    unit = pyrosetta.rosetta.numeric.xyzVector_double_t(*xyz)
+    scaled_xyz = tuple([100 * x for x in xyz])
+    far_away = pyrosetta.rosetta.numeric.xyzVector_double_t(*scaled_xyz)
+    # yeet
+    rigid_body_move(unit, 0, far_away, pose, subset)
+    return pose
 
 
 def grow_terminal_helices(
@@ -136,7 +166,7 @@ def extend_helix_termini(
     :param: pose: Pose to extend the terminal helices of.
     :param: chain: Chain to extend the terminal helices of.
     :return: Pose with the terminal helices extended.
-    Extend the terminal helices of a pose by a specified number of residues at the 
+    Extend the terminal helices of a pose by a specified number of residues at the
     provided chain. The new residues are valines.
     """
 
@@ -210,9 +240,9 @@ def extend_helix_termini(
     pre_extended_chain = chain_dict[chain]
 
     range_CA_align(
-        pose_to_extend, 
-        pre_extended_chain, 
-        extend_n_term + 1, 
+        pose_to_extend,
+        pre_extended_chain,
+        extend_n_term + 1,
         extend_n_term + len(pre_extended_chain.residues),
         pre_extended_chain.chain_begin(1),
         pre_extended_chain.chain_end(1),
@@ -229,6 +259,7 @@ def extend_helix_termini(
     for key, value in scores.items():
         pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
     return pose
+
 
 def range_CA_align(
     pose_a: Pose,
@@ -912,6 +943,7 @@ def pair_bound_states(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+
     # TODO import yeet pose xyz
     # TODO from crispy_shifty.protocols.looping import loop_from_blueprint
 
@@ -937,7 +969,11 @@ def pair_bound_states(
             & (reference_csv["shift"] == 0)
         ]
         # load the state 0 pose
-        x_pose = next(path_to_pose_or_ppose(path=state_0.name, cluster_scores=True, pack_result=False))
+        x_pose = next(
+            path_to_pose_or_ppose(
+                path=state_0.name, cluster_scores=True, pack_result=False
+            )
+        )
         # get the dssp string of the pose
         dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
         dssp_string = dssp.get_dssp_secstruct()
@@ -948,4 +984,3 @@ def pair_bound_states(
         # then add it to pose
         # then rechain
         # yield the pose
-

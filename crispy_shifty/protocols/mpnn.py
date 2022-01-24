@@ -402,6 +402,7 @@ class MPNNDesign(MPNNRunner):
         :param: pose: Pose object to generate poses from.
         :return: Iterator of Pose objects.
         Generate poses from the provided pose with the newly designed sequences.
+        Maintain the scores of the provided pose in the new poses.
         """
         from pathlib import Path
         import sys
@@ -412,11 +413,15 @@ class MPNNDesign(MPNNRunner):
 
         # get the mpnn_seq_* sequences from the pose
         seqs_dict = {tag: seq for tag, seq in pose.scores.items() if "mpnn_seq_" in tag}
+        # get the non-mpnn_seq_* scores from the pose
+        scores_dict = {key: val for key, val in pose.scores.items() if "mpnn_seq_" not in key}
         # generate the poses from the seqs_dict
         for _, seq in seqs_dict.items():
-            # print(f"{tag}: {seq}")
             # thread the full sequence
             threaded_pose = thread_full_sequence(pose, seq)
+            # set the scores
+            for key, val in scores_dict.items():
+                setPoseExtraScore(threaded_pose, key, val)
             yield threaded_pose
 
 
@@ -505,7 +510,7 @@ def mpnn_bound_state(
 ) -> Iterator[PackedPose]:
     """
     :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
-    :param: kwargs: keyword arguments to be passed to MPNNDesign.
+    :param: kwargs: keyword arguments to be passed to MPNNDesign, or this function.
     :return: an iterator of PackedPose objects.
     """
 
@@ -558,5 +563,12 @@ def mpnn_bound_state(
         # update the pose with the updated scores dict
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-        ppose = io.to_packed(pose)
-        yield ppose
+        if kwargs["generate_all_poses"]:
+            # generate all poses, each with a sequence threaded
+            for threaded_pose in mpnn_design.generate_all_poses(pose):
+                ppose = io.to_packed(threaded_pose)
+                yield ppose
+        else:
+            # generate the original pose, with the sequences written to the datacache
+            ppose = io.to_packed(pose)
+            yield ppose

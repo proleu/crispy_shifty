@@ -56,6 +56,8 @@ dev TODOs:
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
+        - finish mpnn_example.ipynb with Abbas?
+
     - if really bored, add documentation to the InsertResMover and PR
 
 
