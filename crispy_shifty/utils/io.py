@@ -672,6 +672,11 @@ def gen_array_tasks(
     from crispy_shifty.utils.io import get_yml
 
     sha1 = parse_sha1(sha1)
+    # if the user provided None then sha1 is still an empty string, this fixes that 
+    if sha1 == "":
+        sha1 = "untracked"
+    else:
+        pass
     # use git to find the root of the repo
     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
     root = repo.git.rev_parse("--show-toplevel")
@@ -732,14 +737,14 @@ def gen_array_tasks(
                 f"#SBATCH -e {slurm_dir}/{simulation_name}-%A_%a.err \n",
                 f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
                 "#SBATCH -p regular\n",
-                "#SBATCH --time=1:00:00\n",  # the shorter the better within reason
+                "#SBATCH --time=55:00\n",  # the shorter the better within reason TODO
                 "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
                 "N2=$(( N + 1 ))\n",
                 "start_idx=$(( N*4 + 1 ))\n",
                 "end_idx=$(( N2*4 ))\n",
                 # "source ~/.bashrc" # TODO needed for conda?
                 "source activate /global/cfs/cdirs/m3962/projects/crispy_shifty/envs/crispy\n",
-                "head -n $end_idx {tasklist} | tail -n +$start_idx | parallel",
+                f"head -n $end_idx {tasklist} | tail -n +$start_idx | parallel",
             ]
         )
     else:

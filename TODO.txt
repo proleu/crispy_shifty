@@ -8,6 +8,7 @@ how to do better than last round, chA:
 
 how to do better than last round, chB:
     - longer chB, all have 27 except 63 which had 21 (as opposed to 17-25)
+    -     check results of the chB order4
     - charges? + C term, - N term
     -     check results of the chB order4
     - FF129 has a very polar interface, Cterm sequence is QLQKKNKKQQK
@@ -33,7 +34,7 @@ Back of the napkin numbers:
     *37=11.8M designed paired bound states,
     *~.05=592k folded paired bound states, (Y)
     *~.33=195k folded paired bound states, (X)
-
+	TODO
 
     ~44000 junctions
 
@@ -47,11 +48,10 @@ dev TODOs:
     - extend loop_remodel based on docstring TODO
     - finish and test pair_bound_states 
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, perlmutter, and janelia
-    - add crispy kernel to ipython kernelspecs on perlmutter and janelia
-    - test python interpreter finding with git root on perlmutter and janelia
+    - add crispy kernel to ipython kernelspecs on janelia
+    - test python interpreter finding with git root on janelia
     - run_superfold_devel.py needs to work with turbo, initial guess, fasta and reference pdb all at once
-    - test with single pdb no fasta, pdb+fasta, and ...? TODO
-    - test gen_array_tasks with perlmutter mode
+    	- test with single pdb no fasta, pdb+fasta, and ...? TODO
     - Use if elif elif else tmpdir construction for mpnn and loop_remodel? 
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
 
