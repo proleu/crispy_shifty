@@ -693,11 +693,11 @@ def gen_array_tasks(
         design_list_file, options, nstruct_per_task
     ) -> Iterator[Dict[Any, Any]]:
         """
-        :param: design_list_file: path to a file containing a list of pdb files inputs
+        :param: design_list_file: path to a file containing a list of input files
         :param: options: options for pyrosetta initialization
         :param: nstruct_per_task: number of structures to generate per task
         :return: an iterator of task dicts.
-        Generates tasks for pyrosetta distributed.
+        Generates tasks for pyrosetta distributed-style array tasks
         TODO: docstring, better type annotations.
         """
         with open(design_list_file, "r") as f:
@@ -738,11 +738,11 @@ def gen_array_tasks(
                 f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
                 "#SBATCH -p regular\n",
                 "#SBATCH --time=55:00\n",  # the shorter the better within reason TODO
+                "module load cudatoolkit/21.9_11.4",
                 "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
                 "N2=$(( N + 1 ))\n",
                 "start_idx=$(( N*4 + 1 ))\n",
                 "end_idx=$(( N2*4 ))\n",
-                # "source ~/.bashrc" # TODO needed for conda?
                 "source activate /global/cfs/cdirs/m3962/projects/crispy_shifty/envs/crispy\n",
                 f"head -n $end_idx {tasklist} | tail -n +$start_idx | parallel",
             ]
