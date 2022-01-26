@@ -79,6 +79,9 @@ Paper TODOs:
 What will fig. 4 be:
 FRET? NMR? photoswitching? negative cooperativity? 
 crowdsource cool tricks, maybe ask some synbio people
+use symbolic regression on flexdock trajectory datasets? 
+networks learn to summarize rules about biophysical mechanics, 
+then we use a seperate layer to regress equations
 
 crispy snippy TODOs:
 fluo polarization for protease or fluorophore/quencher?
