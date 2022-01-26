@@ -148,6 +148,7 @@ def remodel_helper(
     loop_dssp: Optional[str] = None,
     remodel_before_loop: int = 1,
     remodel_after_loop: int = 1,
+    surround_loop_with_helix: bool = False,
 ) -> str:
     """
     :param: pose: The pose to insert the loop into.
@@ -157,7 +158,6 @@ def remodel_helper(
     :param: remodel_after_loop: The number of residues to remodel after the loop.
     :return: The filename of the blueprint file to be used to remodel the pose.
     Writes a blueprint file to the current directory or TMPDIR and returns the filename.
-    TODO uuid, test loop_dssp.
     """
 
     import os, uuid
@@ -187,10 +187,14 @@ def remodel_helper(
         end2 = pose.chain_end(2)
         for i in range(1, end1 + 1):
             if i >= end1 - (remodel_before_loop - 1):
+                if surround_loop_with_helix:
+                    position_dssp = "H"
+                else:
+                    position_dssp = dssp[i-1]
                 print(
                     str(i),
                     pose.residue(i).name1(),
-                    dssp[i - 1] + "X",
+                    position_dssp + "X",
                     "R",
                     file=f,
                 )
@@ -224,10 +228,14 @@ def remodel_helper(
                 )
         for i in range(begin2, end2 + 1):
             if i <= begin2 + (remodel_after_loop - 1):
+                if surround_loop_with_helix:
+                    position_dssp = "H"
+                else:
+                    position_dssp = dssp[i-1]
                 print(
                     str(i),
                     pose.residue(i).name1(),
-                    dssp[i - 1] + "X",
+                    position_dssp + "X",
                     "R",
                     file=f,
                 )
@@ -251,6 +259,7 @@ def loop_remodel(
     remodel_before_loop: int = 1,
     remodel_after_loop: int = 1,
     remodel_lengths_by_vector: bool = False,
+    surround_loop_with_helix: bool = False,
 ) -> str:
     """
     :param: pose: The pose to insert the loop into.
@@ -262,7 +271,6 @@ def loop_remodel(
     :return: Whether the loop was successfully inserted.
     Remodel a new loop using Blueprint Builder. Expects a pose with two chains.
     DSSP and SS agnostic in principle but in practice more or less matches.
-    TODO enable dssp, improve tmpfile handling (use uuid)
     """
     import os
     import numpy as np
@@ -297,7 +305,7 @@ def loop_remodel(
                 remodel_after_loop = i + 1
 
     if loop_dssp is None:
-        bp_file = remodel_helper(pose, length, remodel_before_loop=remodel_before_loop, remodel_after_loop=remodel_after_loop)
+        bp_file = remodel_helper(pose, length, remodel_before_loop=remodel_before_loop, remodel_after_loop=remodel_after_loop, surround_loop_with_helix=surround_loop_with_helix)
     else:
         bp_file = remodel_helper(
             pose,
@@ -305,6 +313,7 @@ def loop_remodel(
             loop_dssp=loop_dssp,
             remodel_before_loop=remodel_before_loop,
             remodel_after_loop=remodel_after_loop,
+            surround_loop_with_helix=surround_loop_with_helix,
         )
 
     bp_sfxn = pyrosetta.create_score_function("fldsgn_cen.wts")
@@ -536,7 +545,9 @@ def loop_bound_state(
     :param: kwargs: keyword arguments to be passed to looping protocol.
     :return: an iterator of PackedPose objects.
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
-    TODO rerun bb_clash after loop closure.
+    `-indexed_structure_store:fragment_store \
+    /net/databases/VALL_clustered/connect_chains/ss_grouped_vall_helix_shortLoop.h5`
+    TODO check if this is the correct fragment store
     """
 
     import sys
@@ -559,6 +570,7 @@ def loop_bound_state(
         score_wnm,
         struct_profile,
     )
+    from crispy_shifty.protocols.states import clash_check
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
@@ -577,6 +589,7 @@ def loop_bound_state(
     sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
     for pose in poses:
         scores = dict(pose.scores)
+        bb_clash_pre = clash_check(pose)
         # get parent length from the scores
         parent_length = int(float(scores["trimmed_length"]))
         looped_poses = []
@@ -603,6 +616,8 @@ def loop_bound_state(
             new_loop_str = ",".join(
                 [str(i) for i in range(loop_start, loop_start + new_loop_length)]
             )
+            bb_clash_post = clash_check(pose)
+            scores["bb_clash_delta"] = bb_clash_post - bb_clash_pre
             scores["new_loop_str"] = new_loop_str
             scores["looped_length"] = pose.chain_end(1)
             for key, value in scores.items():
