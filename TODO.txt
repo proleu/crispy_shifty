@@ -45,14 +45,12 @@ order chB and do SEC / expression screening too?
 
 dev TODOs:
     - compare one more time DHR82 with FF74 (seq length difference)
-    - extend loop_remodel based on docstring TODO
-    - finish and test pair_bound_states 
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, perlmutter, and janelia
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
     - run_superfold_devel.py needs to work with turbo, initial guess, fasta and reference pdb all at once
     	- test with single pdb no fasta, pdb+fasta, and ...? TODO
-    - Use if elif elif else tmpdir construction for mpnn and loop_remodel? 
+    - Use if elif elif else tmpdir construction for mpnn?
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
@@ -66,10 +64,10 @@ TODO:
     01 prep inputs # run
     02 make states # change to array tasks? # run
     00 design bound states # probably split into junctions x 1-3, non-junctions x 5-10 # run
-    01 loop bound_states # test 0-1,2,3 adjustment per side comparison # run
-    02 MPNN bound states # test how many fold in the next step # run
-    03 fold bound states # get working on perlmutter # turn off initial guess if not needed # run
-    04 pair bound states # loop free state 0 with bp builder (match pre-break hlx) # run
+    01 loop bound_states # test 0-1,2,3 adjustment per side comparison # probably want 0-2 # run
+    02 MPNN bound states # when generating passing ones, clear other mpnn_seq scores # run
+    03 fold bound states # get working on perlmutter # run
+    04 pair bound states # run
     05 design paired states # almost linkres in msd.py # run
     06 MPNN paired states # make MPNN msd # run
     07 fold paired states # reuse folding.py Y first then X. # run

@@ -397,7 +397,7 @@ class MPNNDesign(MPNNRunner):
 
         return
 
-    def generate_poses(self, pose: Pose) -> Iterator[Pose]:
+    def generate_all_poses(self, pose: Pose) -> Iterator[Pose]:
         """
         :param: pose: Pose object to generate poses from.
         :return: Iterator of Pose objects.
