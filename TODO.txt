@@ -58,6 +58,8 @@ dev TODOs:
 
     - if really bored, add documentation to the InsertResMover and PR
 
+    - DOTFILES - check init.vim is working, then version control
+
 
 TODO: 
     00 filter scaffold sets # run
