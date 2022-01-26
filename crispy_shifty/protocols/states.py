@@ -925,7 +925,7 @@ def make_bound_states(
 
 
 @requires_init
-def pair_bound_states(
+def pair_bound_state(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
@@ -943,9 +943,9 @@ def pair_bound_states(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-
-    # TODO import yeet pose xyz
-    # TODO from crispy_shifty.protocols.looping import loop_from_blueprint
+    from crispy_shifty.protocols.looping import loop_remodel
+    # TODO import yeet pose xyz?
+    # TODO run some filters
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -962,12 +962,16 @@ def pair_bound_states(
         scores = dict(pose.scores)
         pdb = scores["pdb"]
         pre_break_helix = scores["pre_break_helix"]
+
+        print(f"{pdb} pre_break_helix: {pre_break_helix} shift: {scores['shift']}") # TODO remove
         # find a state 0 from the same parent pdb with the same pre-break helix
+        # TODO this is a hacky way to do this
         state_0 = reference_csv.loc[
             (reference_csv["pdb"] == pdb)
             & (reference_csv["pre_break_helix"] == pre_break_helix)
             & (reference_csv["shift"] == 0)
         ]
+        print(state_0) # TODO remove
         # load the state 0 pose
         x_pose = next(
             path_to_pose_or_ppose(
@@ -977,10 +981,44 @@ def pair_bound_states(
         # get the dssp string of the pose
         dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
         dssp_string = dssp.get_dssp_secstruct()
-        # try to loop the state 0 with blueprint builder and the dssp string
-        # TODO
+        # infer the length of the region to be inserted
+        region_length = len(dssp_string) - len(x_pose.sequence)
+        # get the start and end of the loop
+        start = x_pose.chain_end(1) + 1
+        end = start + region_length
+        # python indexing starts at 0
+        start -= 1
+        end -= 1
+        # get the dssp of the region to be inserted
+        region_dssp = dssp_string[start:end]
+        print(region_dssp) # TODO remove
+        # try to loop the state 0 with loop_remodel and the region dssp
+        maybe_closed_x_pose = x_pose.clone()
+        closure_type = loop_remodel(
+            pose=maybe_closed_x_pose,
+            length=region_length,
+            loop_dssp=region_dssp,
+        )
         # if successful, check chain A and chain C match length
+        if closure_type == "loop_remodel":
+            try:
+                assert pose.chain_end(1) == len(maybe_closed_x_pose.sequence)
+            except AssertionError:
+                raise RuntimeError(
+                    "The length of the X pose after looping is not the same as the length of the Y pose chA."
+                )
+        else:
+            continue
         # yeet the state 0 pose
+        yeet_pose_xyz(
+            maybe_closed_x_pose,
+        )
         # then add it to pose
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            pose, maybe_closed_x_pose, new_chain=True,
+        )
         # then rechain
+        sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sc.chain_order("123")
+        sc.apply(pose)
         # yield the pose

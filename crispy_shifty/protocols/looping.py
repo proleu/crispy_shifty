@@ -142,10 +142,112 @@ def get_torsions(pose: Pose) -> List[Tuple[float]]:
     return torsions
 
 
+def remodel_helper(
+    pose: Pose,
+    loop_length: int,
+    loop_dssp: Optional[str] = None,
+    remodel_before_loop: int = 1,
+    remodel_after_loop: int = 1,
+) -> str:
+    """
+    :param: pose: The pose to insert the loop into.
+    :param: loop_length: The length of the fragment to insert.
+    :param: loop_dssp: The dssp string of the fragment to insert.
+    :param: remodel_before_loop: The number of residues to remodel before the loop.
+    :param: remodel_after_loop: The number of residues to remodel after the loop.
+    :return: The filename of the blueprint file to be used to remodel the pose.
+    Writes a blueprint file to the current directory or TMPDIR and returns the filename.
+    TODO uuid, test loop_dssp.
+    """
+
+    import os, uuid
+    import pyrosetta
+
+    tors = get_torsions(pose)
+    abego_str = abego_string(tors)
+    dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(pose)
+    # name blueprint a random 32 long hex string
+    if "TMPDIR" in os.environ:
+        tmpdir_root = os.environ["TMPDIR"]
+    else:
+        tmpdir_root = os.getcwd()
+    filename = os.path.join(
+        tmpdir_root, uuid.uuid4().hex + ".bp"
+    )
+    # write a temporary blueprint file
+    if not os.path.exists(tmpdir_root):
+        os.makedirs(tmpdir_root, exist_ok=True)
+    else:
+        pass
+    with open(filename, "w+") as f:
+        end1, begin2 = (
+            pose.chain_end(1),
+            pose.chain_begin(2),
+        )
+        end2 = pose.chain_end(2)
+        for i in range(1, end1 + 1):
+            if i >= end1 - (remodel_before_loop - 1):
+                print(
+                    str(i),
+                    pose.residue(i).name1(),
+                    dssp[i - 1] + "X",
+                    "R",
+                    file=f,
+                )
+            else:
+                print(
+                    str(i),
+                    pose.residue(i).name1(),
+                    dssp[i - 1] + abego_str[i - 1],
+                    ".",
+                    file=f,
+                )
+        if loop_dssp is None:
+            for i in range(loop_length):
+                print(
+                    "0", "V", "LX", "R", file=f
+                )
+        else:
+            try:
+                assert len(loop_dssp) == loop_length
+            except AssertionError:
+                raise ValueError(
+                    "loop_dssp must be the same length as loop_length"
+                )
+            for i in range(loop_length):
+                print(
+                    "0",
+                    "V",
+                    f"{loop_dssp[i]}X",
+                    "R",
+                    file=f,
+                )
+        for i in range(begin2, end2 + 1):
+            if i <= begin2 + (remodel_after_loop - 1):
+                print(
+                    str(i),
+                    pose.residue(i).name1(),
+                    dssp[i - 1] + "X",
+                    "R",
+                    file=f,
+                )
+            else:
+                print(
+                    str(i),
+                    pose.residue(i).name1(),
+                    dssp[i - 1] + abego_str[i - 1],
+                    ".",
+                    file=f,
+                )
+
+    return filename
+
+
 def loop_remodel(
     pose: Pose,
     length: int,
     attempts: int = 10,
+    loop_dssp: Optional[str] = None,
     remodel_before_loop: int = 1,
     remodel_after_loop: int = 1,
     remodel_lengths_by_vector: bool = False,
@@ -167,84 +269,6 @@ def loop_remodel(
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
 
-    def remodel_helper(
-        pose: Pose,
-        loop_length: int,
-        remodel_before_loop: int = 1,
-        remodel_after_loop: int = 1,
-    ) -> str:
-        """
-        :param: pose: The pose to insert the loop into.
-        :param: loop_length: The length of the loop.
-        :param: remodel_before_loop: The number of residues to remodel before the loop.
-        :param: remodel_after_loop: The number of residues to remodel after the loop.
-        :return: The filename of the blueprint file to be used to remodel the loop.
-        Writes a blueprint file to the current directory or TMPDIR and returns the filename.
-        """
-
-        import binascii, os
-        import pyrosetta
-
-        tors = get_torsions(pose)
-        abego_str = abego_string(tors)
-        dssp = pyrosetta.rosetta.protocols.simple_filters.dssp(pose)
-        # name blueprint a random 32 long hex string
-        if "TMPDIR" in os.environ:
-            tmp_path = os.environ["TMPDIR"]
-        else:
-            tmp_path = os.getcwd()
-        filename = os.path.join(
-            tmp_path, str(binascii.b2a_hex(os.urandom(16)).decode("utf-8")) + ".bp"
-        )
-        # write a temporary blueprint file
-        if not os.path.exists(tmp_path):
-            os.makedirs(tmp_path, exist_ok=True)
-        with open(filename, "w+") as f:
-            end1, begin2 = (
-                pose.chain_end(1),
-                pose.chain_begin(2),
-            )
-            end2 = pose.chain_end(2)
-            for i in range(1, end1 + 1):
-                if i >= end1 - (remodel_before_loop - 1):
-                    print(
-                        str(i),
-                        pose.residue(i).name1(),
-                        dssp[i - 1] + "X",
-                        "R",
-                        file=f,
-                    )
-                else:
-                    print(
-                        str(i),
-                        pose.residue(i).name1(),
-                        dssp[i - 1] + abego_str[i - 1],
-                        ".",
-                        file=f,
-                    )
-            for i in range(loop_length):
-                print(
-                    "0", "V", "LX", "R", file=f
-                )  # DX is bad, causes rare error sometimes
-            for i in range(begin2, end2 + 1):
-                if i <= begin2 + (remodel_after_loop - 1):
-                    print(
-                        str(i),
-                        pose.residue(i).name1(),
-                        dssp[i - 1] + "X",
-                        "R",
-                        file=f,
-                    )
-                else:
-                    print(
-                        str(i),
-                        pose.residue(i).name1(),
-                        dssp[i - 1] + abego_str[i - 1],
-                        ".",
-                        file=f,
-                    )
-
-        return filename
 
     # computes the number of residues to remodel before and after the loop by finding which residue-residue vectors point towards the helix to loop to
     # probably works best for building a loop between two helices
@@ -272,7 +296,16 @@ def loop_remodel(
                 max_dot_2 = dot_2
                 remodel_after_loop = i + 1
 
-    bp_file = remodel_helper(pose, length, remodel_before_loop, remodel_after_loop)
+    if loop_dssp is None:
+        bp_file = remodel_helper(pose, length, remodel_before_loop=remodel_before_loop, remodel_after_loop=remodel_after_loop)
+    else:
+        bp_file = remodel_helper(
+            pose,
+            length,
+            loop_dssp=loop_dssp,
+            remodel_before_loop=remodel_before_loop,
+            remodel_after_loop=remodel_after_loop,
+        )
 
     bp_sfxn = pyrosetta.create_score_function("fldsgn_cen.wts")
     bp_sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.hbond_sr_bb, 1.0)
