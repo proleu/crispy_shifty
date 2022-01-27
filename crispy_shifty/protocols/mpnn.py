@@ -124,17 +124,22 @@ class MPNNRunner(ABC):
     def setup_tmpdir(self) -> None:
         """
         :return: None
-        Create a temporary directory for the MPNNRunner.
-        TODO: try use TMPDIR environment variable as the root. if that fails, check if
-        /net/scratch is available. if that fails, check if $PSCRATCH is available. if
-        that fails, use cwd as the root
+        Create a temporary directory for the MPNNRunner. Checks for various best 
+        practice locations for the tmpdir in the following order: TMPDIR, PSCRATCH,
+        CSCRATCH, /net/scratch. Uses the cwd if none of these are available.
         """
         import os, pwd, uuid
 
         if os.environ.get("TMPDIR") is not None:
             tmpdir_root = os.environ.get("TMPDIR")
-        else:
+        elif os.environ.get("PSCRATCH") is not None:
+            tmpdir_root = os.environ.get("PSCRATCH")
+        elif os.environ.get("CSCRATCH") is not None:
+            tmpdir_root = os.environ.get("CSCRATCH")
+        elif os.path.exists("/net/scratch"):
             tmpdir_root = f"/net/scratch/{pwd.getpwuid(os.getuid()).pw_name}"
+        else:
+            tmpdir_root = os.getcwd()
 
         self.tmpdir = os.path.join(tmpdir_root, uuid.uuid4().hex)
         os.makedirs(self.tmpdir, exist_ok=True)

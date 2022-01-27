@@ -48,13 +48,11 @@ dev TODOs:
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, perlmutter, and janelia
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
-    - run_superfold_devel.py needs to work with turbo, initial guess, fasta and reference pdb all at once
-    	- test with single pdb no fasta, pdb+fasta, and ...? TODO
-    - Use if elif elif else tmpdir construction for mpnn?
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
         - finish mpnn_example.ipynb with Abbas?
+    	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
 
     - if really bored, add documentation to the InsertResMover and PR
 

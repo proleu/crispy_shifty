@@ -218,15 +218,17 @@ class SuperfoldRunner:
         """
         :return: None
         Create a temporary directory for the SuperfoldRunner. Checks for various best
-        practice locations for the tmpdir in the following order: PSCRATCH, TMPDIR,
-        /net/scratch. Uses the cwd if none of these are available.
+        practice locations for the tmpdir in the following order: TMPDIR, PSCRATCH,
+        CSCRATCH, /net/scratch. Uses the cwd if none of these are available.
         """
         import os, pwd, uuid
 
-        if os.environ.get("PSCRATCH") is not None:
-            tmpdir_root = os.environ.get("PSCRATCH")
-        elif os.environ.get("TMPDIR") is not None:
+        if os.environ.get("TMPDIR") is not None:
             tmpdir_root = os.environ.get("TMPDIR")
+        elif os.environ.get("PSCRATCH") is not None:
+            tmpdir_root = os.environ.get("PSCRATCH")
+        elif os.environ.get("CSCRATCH") is not None:
+            tmpdir_root = os.environ.get("CSCRATCH")
         elif os.path.exists("/net/scratch"):
             tmpdir_root = f"/net/scratch/{pwd.getpwuid(os.getuid()).pw_name}"
         else:
@@ -395,7 +397,7 @@ def generate_decoys_from_pose(
     pose: Pose,
     filter_dict: Dict[
         str, Tuple[Union[eq, ge, gt, le, lt, ne], Union[int, float, str]]
-    ],
+    ] = {},
     label_first: Optional[bool] = False,
     prefix: Optional[str] = "tmp",
     rank_on: Optional[
@@ -407,7 +409,8 @@ def generate_decoys_from_pose(
     :param: pose: Pose object to generate decoys from.
     :param: filter_dict: dictionary of filters to apply to the decoys. This is supplied
     as a dictionary of the form {'score_name': (operator, value)} where the operator is
-    one of the following: eq, ge, gt, le, lt, ne. Example: {'mean_plddt': (ge, 0.9)}
+    one of the following: eq, ge, gt, le, lt, ne. Example: {'mean_plddt': (ge, 0.9)} .
+    Note that this defaults to an empty dict, which will simply return all decoys.
     prefix: for poses with many tags/pymol_names in results, get all results with the
     same prefix
     rank_on: the score to rank multiple model results for the same tag/pymol_name on.
