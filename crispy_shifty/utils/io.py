@@ -727,11 +727,10 @@ def gen_array_tasks(
         run_sh = "".join(
             [
                 "#!/bin/bash\n",
-                "#SBATCH --account=m4129_g\n",
-                "#SBATCH --constraint=gpu\n",
+                "#SBATCH --account=m4129_g\n", # equivalent to -A
+                "#SBATCH --constraint=gpu\n", # equivalent to -C
                 f"#SBATCH --job-name={simulation_name}\n",
-                "#SBATCH --gpus=4\n",
-                "#SBATCH --gpu-bind=map_gpu:0,1,2,3\n",
+                "#SBATCH --gpus=4\n", # equivalent to -G
                 "#SBATCH --nodes=1\n",
                 "#SBATCH --ntasks=4\n",
                 f"#SBATCH -e {slurm_dir}/{simulation_name}-%A_%a.err \n",
@@ -744,7 +743,7 @@ def gen_array_tasks(
                 "start_idx=$(( N*4 + 1 ))\n",
                 "end_idx=$(( N2*4 ))\n",
                 "source activate /global/cfs/cdirs/m3962/projects/crispy_shifty/envs/crispy\n",
-                f"head -n $end_idx {tasklist} | tail -n +$start_idx | parallel",
+                f"""head -n $end_idx {tasklist} | tail -n +$start_idx | parallel 'CUDA_VISIBLE_DEVICES=$(("{{%}}" - 1)) && bash -c {{}}'""",
             ]
         )
     else:
