@@ -881,7 +881,6 @@ def make_free_states(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-    final_pposes = []
     for pose in poses:
         # make a new FreeStateMaker for each pose
         state_maker = FreeStateMaker(pose, **kwargs)
@@ -916,7 +915,6 @@ def make_bound_states(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-    final_pposes = []
     for pose in poses:
         # make a new BoundStateMaker for each pose
         state_maker = BoundStateMaker(pose, **kwargs)
@@ -974,7 +972,6 @@ def pair_bound_state(
 
     start_time = time()
     reference_csv = pd.read_csv(kwargs["reference_csv"], index_col="Unnamed: 0")
-    final_pposes = []
     for pose in poses:
         # get scores
         scores = dict(pose.scores)
@@ -1029,7 +1026,7 @@ def pair_bound_state(
                 raise RuntimeError(
                     "The length of the X pose after looping is not the same as the length of the Y pose chA."
                 )
-        else:
+        else: # skip if unsuccessful and don't yield
             continue
         print_timestamp("Setting up for design", start_time)
         layer_design = gen_std_layer_design()
