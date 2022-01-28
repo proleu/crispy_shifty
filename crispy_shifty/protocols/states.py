@@ -978,6 +978,7 @@ def pair_bound_state(
     for pose in poses:
         # get scores
         scores = dict(pose.scores)
+        scores = {k:v for k, v in scores.items() if "mpnn_seq_" not in k} # TODO just for pilotrun
         pdb = scores["pdb"]
         pre_break_helix = scores["pre_break_helix"]
         # find a state 0 from the same parent pdb with the same pre-break helix

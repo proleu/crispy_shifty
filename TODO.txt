@@ -45,9 +45,10 @@ order chB and do SEC / expression screening too?
 
 dev TODOs:
     - compare one more time DHR82 with FF74 (seq length difference)
-    - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, perlmutter, and janelia
+    - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
+    - fix mpnn_seq entries in scores when the decoys are being generated from folding.py
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
@@ -57,6 +58,7 @@ dev TODOs:
     - if really bored, add documentation to the InsertResMover and PR
 
     - DOTFILES - check init.vim is working, then version control
+    - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
 
 
 TODO: 
