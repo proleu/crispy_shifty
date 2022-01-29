@@ -59,6 +59,7 @@ dev TODOs:
 
     - DOTFILES - check init.vim is working, then version control
     - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
+    - check for unused final_pposes lists and remove them
 
 
 TODO: 
