@@ -655,10 +655,6 @@ def gen_array_tasks(
     :param: simulation_name: A `str` or `NoneType` object specifying the name of the
     specific simulation being run.
     TODO: docstring.
-    TODO: option to simultaneously iterate through a second file at the same time.
-    TODO: if its a one for one iteration, then just zip the lines together and wrap the
-    function being distributed to unpack the lines into the seperate arguments.
-    TODO: GRES and GNU parallel support? Maybe a GNU parallel mode or a perlmutter mode?
     """
     import os, stat, sys
     import git
@@ -815,16 +811,28 @@ def gen_array_tasks(
         [" ".join([k, str(v)]) for k, v in extra_kwargs.items()]
     )
 
+    # Track the number of tasks in the tasklist
+    count = 0
     with open(tasklist, "w+") as f:
         for i in range(0, nstruct):
             for tasks in create_tasks(design_list_file, options, nstruct_per_task):
                 task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
                 cmd = f"{run_py_file} {task_str} {extra_kwargs_str} {instance_str}"
                 print(cmd, file=f)
+                count += 1
+
+    # the number of tasks for the array depends on whether it is perlmutter mode or not
+    if not perlmutter_mode:
+        array_len = count
+    else: # in perlmutter mode we run tasks in chunks of 4, so we need to divide by 4 
+        if count % 4 == 0:
+            array_len = count / 4
+        else: # and if there are any left over, we need to add 1 to the array length
+            array_len = (count / 4) + 1
 
     # Let's go
     print("Run the following command with your desired environment active:")
-    print(f"sbatch -a 1-$(cat {tasklist} | wc -l) {run_sh_file}")
+    print(f"sbatch -a 1-{array_len} {run_sh_file}")
 
 
 def collect_score_file(output_path: str, score_dir_name: str = "scores") -> None:

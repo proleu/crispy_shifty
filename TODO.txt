@@ -49,6 +49,7 @@ dev TODOs:
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
     - fix mpnn_seq entries in scores when the decoys are being generated from folding.py
+    - check that gen_array_tasks sbatch command is fixed
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
