@@ -379,7 +379,7 @@ def gen_movemap(
     return movemap
 
 
-def fastdesign(
+def fast_design(
     pose: Pose,
     task_factory: TaskFactory,
     scorefxn: ScoreFunction,
@@ -412,7 +412,7 @@ def fastdesign(
     return
 
 
-def packrotamers(
+def pack_rotamers(
     pose: Pose, task_factory: TaskFactory, scorefxn: ScoreFunction
 ) -> None:
     """
@@ -750,7 +750,7 @@ def one_state_design_unlooped_dimer(
         print("complete.")
 
         print_timestamp("Starting 1 round of fixed backbone design...", end="")
-        fastdesign(
+        fast_design(
             pose=pose,
             task_factory=task_factory,
             scorefxn=design_sfxn,
@@ -759,7 +759,7 @@ def one_state_design_unlooped_dimer(
         )
         print("complete.")
         print_timestamp("Starting 2 rounds of flexible backbone design...", end="")
-        fastdesign(
+        fast_design(
             pose=pose,
             task_factory=task_factory,
             scorefxn=design_sfxn,
@@ -888,7 +888,7 @@ def one_state_design_bound_state(
             end="",
             start_time=start_time,
         )
-        fastdesign(
+        fast_design(
             pose=pose,
             task_factory=task_factory,
             scorefxn=design_sfxn,
@@ -901,7 +901,7 @@ def one_state_design_bound_state(
             end="",
             start_time=start_time,
         )
-        fastdesign(
+        fast_design(
             pose=pose,
             task_factory=task_factory,
             scorefxn=design_sfxn,

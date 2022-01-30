@@ -381,7 +381,7 @@ def loop_dimer(
     from crispy_shifty.protocols.design import (
         gen_std_layer_design,
         gen_task_factory,
-        packrotamers,
+        pack_rotamers,
         struct_profile,
         clear_constraints,
         score_wnm,
@@ -491,7 +491,7 @@ def loop_dimer(
             struct_profile(
                 looped_pose, design_sel
             )  # Phil's code used eliminate_background=False...
-            packrotamers(looped_pose, task_factory, design_sfxn)
+            pack_rotamers(looped_pose, task_factory, design_sfxn)
             clear_constraints(looped_pose)
             print("complete.")
 
@@ -565,7 +565,7 @@ def loop_bound_state(
         clear_terms_from_scores,
         gen_std_layer_design,
         gen_task_factory,
-        packrotamers,
+        pack_rotamers,
         score_ss_sc,
         score_wnm,
         struct_profile,
@@ -660,7 +660,7 @@ def loop_bound_state(
             looped_pose,
             design_sel,
         )
-        packrotamers(
+        pack_rotamers(
             looped_pose,
             task_factory,
             design_sfxn,

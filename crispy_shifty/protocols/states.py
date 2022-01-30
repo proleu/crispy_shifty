@@ -954,7 +954,7 @@ def pair_bound_state(
         clear_constraints,
         gen_std_layer_design,
         gen_task_factory,
-        packrotamers,
+        pack_rotamers,
         score_per_res,
         score_wnm_all,
         struct_profile,
@@ -1062,7 +1062,7 @@ def pair_bound_state(
             closed_x_pose,
             design_sel,
         )
-        packrotamers(
+        pack_rotamers(
             closed_x_pose,
             task_factory,
             sfxn,
