@@ -171,9 +171,7 @@ def remodel_helper(
         tmpdir_root = os.environ["TMPDIR"]
     else:
         tmpdir_root = os.getcwd()
-    filename = os.path.join(
-        tmpdir_root, uuid.uuid4().hex + ".bp"
-    )
+    filename = os.path.join(tmpdir_root, uuid.uuid4().hex + ".bp")
     # write a temporary blueprint file
     if not os.path.exists(tmpdir_root):
         os.makedirs(tmpdir_root, exist_ok=True)
@@ -190,7 +188,7 @@ def remodel_helper(
                 if surround_loop_with_helix:
                     position_dssp = "H"
                 else:
-                    position_dssp = dssp[i-1]
+                    position_dssp = dssp[i - 1]
                 print(
                     str(i),
                     pose.residue(i).name1(),
@@ -208,16 +206,12 @@ def remodel_helper(
                 )
         if loop_dssp is None:
             for i in range(loop_length):
-                print(
-                    "0", "V", "LX", "R", file=f
-                )
+                print("0", "V", "LX", "R", file=f)
         else:
             try:
                 assert len(loop_dssp) == loop_length
             except AssertionError:
-                raise ValueError(
-                    "loop_dssp must be the same length as loop_length"
-                )
+                raise ValueError("loop_dssp must be the same length as loop_length")
             for i in range(loop_length):
                 print(
                     "0",
@@ -231,7 +225,7 @@ def remodel_helper(
                 if surround_loop_with_helix:
                     position_dssp = "H"
                 else:
-                    position_dssp = dssp[i-1]
+                    position_dssp = dssp[i - 1]
                 print(
                     str(i),
                     pose.residue(i).name1(),
@@ -277,7 +271,6 @@ def loop_remodel(
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
 
-
     # computes the number of residues to remodel before and after the loop by finding which residue-residue vectors point towards the helix to loop to
     # probably works best for building a loop between two helices
     # still uses the default lengths to remodel if none of the vectors are good (dot>0)
@@ -305,7 +298,13 @@ def loop_remodel(
                 remodel_after_loop = i + 1
 
     if loop_dssp is None:
-        bp_file = remodel_helper(pose, length, remodel_before_loop=remodel_before_loop, remodel_after_loop=remodel_after_loop, surround_loop_with_helix=surround_loop_with_helix)
+        bp_file = remodel_helper(
+            pose,
+            length,
+            remodel_before_loop=remodel_before_loop,
+            remodel_after_loop=remodel_after_loop,
+            surround_loop_with_helix=surround_loop_with_helix,
+        )
     else:
         bp_file = remodel_helper(
             pose,

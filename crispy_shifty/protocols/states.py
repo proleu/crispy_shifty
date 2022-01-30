@@ -975,7 +975,9 @@ def pair_bound_state(
     for pose in poses:
         # get scores
         scores = dict(pose.scores)
-        scores = {k:v for k, v in scores.items() if "mpnn_seq_" not in k} # TODO just for pilotrun
+        scores = {
+            k: v for k, v in scores.items() if "mpnn_seq_" not in k
+        }  # TODO just for pilotrun
         pdb = scores["pdb"]
         pre_break_helix = scores["pre_break_helix"]
         # find a state 0 from the same parent pdb with the same pre-break helix
@@ -986,7 +988,9 @@ def pair_bound_state(
         if len(state_0) == 0:
             continue
         else:
-            state_0 = state_0.iloc[0] # if there are multiple, take the first (there shouldn't be multiple)
+            state_0 = state_0.iloc[
+                0
+            ]  # if there are multiple, take the first (there shouldn't be multiple)
         # load the state 0 pose
         x_pose = next(
             path_to_pose_or_ppose(
@@ -997,7 +1001,7 @@ def pair_bound_state(
         dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
         dssp_string = dssp.get_dssp_secstruct()
         # infer the length of the region to be inserted
-        region_length =  pose.chain_end(1) - len(x_pose.sequence())
+        region_length = pose.chain_end(1) - len(x_pose.sequence())
         # get the start and end of the loop
         start = x_pose.chain_end(1) + 1
         end = start + region_length
@@ -1014,7 +1018,7 @@ def pair_bound_state(
             pose=maybe_closed_x_pose,
             length=region_length,
             loop_dssp=region_dssp,
-            surround_loop_with_helix = True,
+            surround_loop_with_helix=True,
         )
         # if successful, check chain A and chain C match length
         if closure_type == "loop_remodel":
@@ -1026,12 +1030,14 @@ def pair_bound_state(
                 raise RuntimeError(
                     "The length of the X pose after looping is not the same as the length of the Y pose chA."
                 )
-        else: # skip if unsuccessful and don't yield
+        else:  # skip if unsuccessful and don't yield
             continue
         print_timestamp("Setting up for design", start_time)
         layer_design = gen_std_layer_design()
         # hardcode precompute_ig
-        pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
+        pyrosetta.rosetta.basic.options.set_boolean_option(
+            "packing:precompute_ig", True
+        )
         # make sfxn
         sfxn = pyrosetta.create_score_function("beta_nov16.wts")
         # get the residue numbers of the loop
@@ -1081,7 +1087,9 @@ def pair_bound_state(
         )
         # then add it to pose
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
-            pose, closed_x_pose, new_chain=True,
+            pose,
+            closed_x_pose,
+            new_chain=True,
         )
         # then rechain
         sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()

@@ -124,7 +124,7 @@ class MPNNRunner(ABC):
     def setup_tmpdir(self) -> None:
         """
         :return: None
-        Create a temporary directory for the MPNNRunner. Checks for various best 
+        Create a temporary directory for the MPNNRunner. Checks for various best
         practice locations for the tmpdir in the following order: TMPDIR, PSCRATCH,
         CSCRATCH, /net/scratch. Uses the cwd if none of these are available.
         """
@@ -419,7 +419,9 @@ class MPNNDesign(MPNNRunner):
         # get the mpnn_seq_* sequences from the pose
         seqs_dict = {tag: seq for tag, seq in pose.scores.items() if "mpnn_seq_" in tag}
         # get the non-mpnn_seq_* scores from the pose
-        scores_dict = {key: val for key, val in pose.scores.items() if "mpnn_seq_" not in key}
+        scores_dict = {
+            key: val for key, val in pose.scores.items() if "mpnn_seq_" not in key
+        }
         # generate the poses from the seqs_dict
         for _, seq in seqs_dict.items():
             # thread the full sequence

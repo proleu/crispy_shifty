@@ -72,16 +72,16 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
 
 def fix_path_prefixes(
     find: str, replace: str, file: str, overwrite: Optional[bool] = False
-    ) -> Union[pd.DataFrame, List[str], str, None]:
+) -> Union[pd.DataFrame, List[str], str, None]:
     """
     :param: find: path prefix to find and replace.
     :param: replace: path prefix to replace with.
     :param: file: path to file to fix.
     :param: overwrite: overwrite file if it exists.
-    :return: A pandas dataframe, a list of paths, or a string, depending on the file 
+    :return: A pandas dataframe, a list of paths, or a string, depending on the file
     type of input, or None if overwrite is True.
-    When rsyncing lists or scorefiles from one cluster to another, the paths in the 
-    lists or index of the scorefile need to be fixed. This function fixes them, and 
+    When rsyncing lists or scorefiles from one cluster to another, the paths in the
+    lists or index of the scorefile need to be fixed. This function fixes them, and
     can either return a python object (dataframe, list, or string) of the fixed file,
     or overwrite the file in place.
     """
@@ -90,7 +90,7 @@ def fix_path_prefixes(
 
     # infer what to do with the file
     if ".json" in file:
-        try: # this one will often fail as scores.json is usually formatted differently
+        try:  # this one will often fail as scores.json is usually formatted differently
             df = pd.read_json(file)
         except ValueError:
             df = parse_scorefile_linear(file)
@@ -126,9 +126,10 @@ def fix_path_prefixes(
             return None
         else:
             return out_lines
-    else: # assume it's a single path, fix and return
+    else:  # assume it's a single path, fix and return
         fixed_path = file.replace(find, replace)
         return fixed_path
+
 
 def df_to_fastas(
     df: pd.DataFrame, prefix: str, out_path: Optional[str] = None
@@ -668,7 +669,7 @@ def gen_array_tasks(
     from crispy_shifty.utils.io import get_yml
 
     sha1 = parse_sha1(sha1)
-    # if the user provided None then sha1 is still an empty string, this fixes that 
+    # if the user provided None then sha1 is still an empty string, this fixes that
     if sha1 == "":
         sha1 = "untracked"
     else:
@@ -723,16 +724,16 @@ def gen_array_tasks(
         run_sh = "".join(
             [
                 "#!/bin/bash\n",
-                "#SBATCH --account=m4129_g\n", # equivalent to -A
-                "#SBATCH --constraint=gpu\n", # equivalent to -C
+                "#SBATCH --account=m4129_g\n",  # equivalent to -A
+                "#SBATCH --constraint=gpu\n",  # equivalent to -C
                 f"#SBATCH --job-name={simulation_name}\n",
-                "#SBATCH --gpus=4\n", # equivalent to -G
+                "#SBATCH --gpus=4\n",  # equivalent to -G
                 "#SBATCH --nodes=1\n",
                 "#SBATCH --ntasks=4\n",
                 f"#SBATCH -e {slurm_dir}/{simulation_name}-%A_%a.err \n",
                 f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
                 "#SBATCH -p regular\n",
-                "#SBATCH --time=55:00\n",  # the shorter the better within reason 
+                "#SBATCH --time=55:00\n",  # the shorter the better within reason
                 "module load cudatoolkit/21.9_11.4\n",
                 "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
                 "N2=$(( N + 1 ))\n",
@@ -824,10 +825,10 @@ def gen_array_tasks(
     # the number of tasks for the array depends on whether it is perlmutter mode or not
     if not perlmutter_mode:
         array_len = count
-    else: # in perlmutter mode we run tasks in chunks of 4, so we need to divide by 4 
+    else:  # in perlmutter mode we run tasks in chunks of 4, so we need to divide by 4
         if count % 4 == 0:
             array_len = count / 4
-        else: # and if there are any left over, we need to add 1 to the array length
+        else:  # and if there are any left over, we need to add 1 to the array length
             array_len = (count / 4) + 1
 
     # Let's go
