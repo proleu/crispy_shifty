@@ -1,5 +1,5 @@
 # Python standard library
-from typing import Iterator, List, Optional, Union
+from typing import Iterator, List, Optional, Tuple, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -30,6 +30,9 @@ def almost_linkres(
     from pathlib import Path
     import pyrosetta
 
+    # TODO
+    import time
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.design import fast_design
@@ -39,14 +42,43 @@ def almost_linkres(
     linkres_op.set_setting(True)
     # push back the taskop to the task factory
     task_factory.push_back(linkres_op)
+    # make a dict of the residue selectors as index strings
+    index_selectors = {}
+    for i, selector in enumerate(residue_selectors):
+        index_selectors[f"sel_{i}"] = ",".join(
+            [str(j) for j, pos in list(enumerate(selector.apply(pose), start=1)) if pos]
+        )
+    pre_xml_string = """
+    <RESIDUE_SELECTORS>
+        {index_selectors_str}
+    </RESIDUE_SELECTORS>
+    <MOVERS>
+        <SetupForSequenceSymmetryMover name="almost_linkres" sequence_symmetry_behaviour="2state" >
+            <SequenceSymmetry residue_selectors="{selector_keys}" />
+        </SetupForSequenceSymmetryMover>
+    </MOVERS>
+    """
+    index_selectors_str = "\n".join(
+        [f"""<Index name="{key}" resnums="{value}" />""" for key, value in index_selectors.items()]
+    )
+    # autogenerate an xml string
+    xml_string = pre_xml_string.format(
+        index_selectors_str=index_selectors_str, selector_keys=",".join(index_selectors.keys())
+    )
+    print(xml_string) # TODO
     # setup the SetupForSequenceSymmetryMover using the residue selectors
+    objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
+        xml_string
+    )
     pre_linkres = pyrosetta.rosetta.protocols.symmetry.SetupForSequenceSymmetryMover()
-    # TODO pretty sure we can just add a new region for each selector
     # TODO other option is to get the residue indices and build an xml string
+    print("DEBUG: almost_linkres")  # TODO
+    time.sleep(3)  # TODO
     for i, selector in enumerate(residue_selectors, start=1):
         pre_linkres.add_residue_selector(i, selector)
     # apply to the pose
     pre_linkres.apply(pose)
+    print("DEBUG: almost_linkres")  # TODO
     # setup fast_design with the pose, movemap, scorefxn, task_factory
     fast_design(
         pose=pose,
@@ -86,7 +118,16 @@ def two_state_design_paired_state(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import *  # TODO explicitly import only what is needed
+    from crispy_shifty.protocols.design import (
+        add_metadata_to_pose,
+        fast_design,
+        interface_among_chains,
+        gen_movemap,
+        gen_score_filter,
+        gen_std_layer_design,
+        gen_task_factory,
+        score_per_res,
+    )
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
@@ -129,7 +170,7 @@ def two_state_design_paired_state(
         # get any residues that differ between chA and chC
         difference_indices = [
             i
-            for i in range(1, pose.chain_end(2) + 1)
+            for i in range(1, pose.chain_end(1) + 1)
             if pose.residue(i).name() != pose.residue(i + offset).name()
         ]
         difference_sel = ResidueIndexSelector(",".join(map(str, difference_indices)))
@@ -143,7 +184,7 @@ def two_state_design_paired_state(
         layer_design = gen_std_layer_design()
         task_factory_1 = gen_task_factory(
             design_sel=design_sel,
-            pack_nbhd=True,
+            pack_nbhd=False,
             extra_rotamers_level=2,
             limit_arochi=True,
             prune_buns=True,
@@ -166,7 +207,7 @@ def two_state_design_paired_state(
             movemap=fixbb_mm,
             residue_selectors=residue_selectors,
             scorefxn=design_sfxn,
-            task_factory=task_factory,
+            task_factory=task_factory_1,
             repeats=1,
         )
         print_timestamp(
@@ -190,7 +231,7 @@ def two_state_design_paired_state(
             movemap=flexbb_mm,
             residue_selectors=residue_selectors,
             scorefxn=design_sfxn,
-            task_factory=task_factory,
+            task_factory=task_factory_2,
             repeats=1,
         )
         print_timestamp("Scoring...", start_time=start_time)
