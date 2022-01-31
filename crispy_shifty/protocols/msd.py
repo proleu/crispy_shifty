@@ -135,8 +135,7 @@ def two_state_design_paired_state(
         pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0  # TODO
     )
     print_timestamp("Generated score functions", start_time=start_time)
-    # setup movemaps
-    fixbb_mm = gen_movemap(jump=True, chi=True, bb=False)
+    # setup movemap
     flexbb_mm = gen_movemap(jump=True, chi=True, bb=True)
     print_timestamp("Generated movemaps", start_time=start_time)
     # generate poses or convert input packed pose into pose
@@ -153,6 +152,8 @@ def two_state_design_paired_state(
         start_time = time()
         # get the scores from the pose
         scores = dict(pose.scores)
+        # make a list to append designed poses to
+        designed_poses = []
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
         # get the chains
@@ -177,52 +178,55 @@ def two_state_design_paired_state(
             chB_interface_sel, difference_sel
         )
         # we want to design the peptide (chB) interface + anything that differs between the states
-        # and maybe the neighborhood of that as well ? TODO
         print_timestamp("Generated selectors", start_time=start_time)
         layer_design = gen_std_layer_design()
         task_factory_1 = gen_task_factory(
             design_sel=design_sel,
-            pack_nbhd=False,
+            pack_nbhd=True,
             extra_rotamers_level=2,
             limit_arochi=True,
             prune_buns=True,
             upweight_ppi=True,
             restrict_pro_gly=True,
-            ifcl=True,  # so that it respects precompute_ig if it is passed as an flag
+            ifcl=True,
             layer_design=layer_design,
         )
         print_timestamp(
-            "Generated interface design task factory", start_time=start_time
+            "Generated interface design task factory with upweighted interface", start_time=start_time
         )
         # setup the linked selectors
         residue_selectors = chA, chC
         print_timestamp(
-            "Starting 1 round of fixbb msd with neighborhood",
+            "Starting 1 round of flexbb msd with upweighted interface",
             start_time=start_time,
         )
         almost_linkres(
             pose=pose,
-            movemap=fixbb_mm,
+            movemap=flexbb_mm,
             residue_selectors=residue_selectors,
             scorefxn=design_sfxn,
             task_factory=task_factory_1,
             repeats=1,
         )
+        add_metadata_to_pose(pose, "interface", "upweight")
+        designed_poses.append(pose.clone())
         print_timestamp(
-            "Starting 1 round of flexbb design without neighborhood",
-            end="",
+            "Starting 1 round of flexbb design and non-upweighted interface",
             start_time=start_time,
         )
         task_factory_2 = gen_task_factory(
             design_sel=design_sel,
-            pack_nbhd=False,
+            pack_nbhd=True,
             extra_rotamers_level=2,
             limit_arochi=True,
             prune_buns=True,
-            upweight_ppi=True,
+            upweight_ppi=False,
             restrict_pro_gly=True,
-            ifcl=True,  # so that it respects precompute_ig if it is passed as an flag
+            ifcl=True,
             layer_design=layer_design,
+        )
+        print_timestamp(
+            "Generated interface design task factory with upweighted interface", start_time=start_time
         )
         almost_linkres(
             pose=pose,
@@ -232,16 +236,19 @@ def two_state_design_paired_state(
             task_factory=task_factory_2,
             repeats=1,
         )
-        print_timestamp("Scoring...", start_time=start_time)
-        score_per_res(pose, clean_sfxn)
-        score_filter = gen_score_filter(clean_sfxn)
-        add_metadata_to_pose(pose, "path_in", pdb_path)
-        end_time = time()
-        total_time = end_time - start_time
-        print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
-        add_metadata_to_pose(pose, "time", total_time)
-        scores.update(pose.scores)
-        for key, value in scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-        ppose = io.to_packed(pose)
-        yield ppose
+        add_metadata_to_pose(pose, "interface", "normal")
+        designed_poses.append(pose.clone())
+        for pose in designed_poses:
+            print_timestamp("Scoring...", start_time=start_time)
+            score_per_res(pose, clean_sfxn)
+            score_filter = gen_score_filter(clean_sfxn)
+            add_metadata_to_pose(pose, "path_in", pdb_path)
+            end_time = time()
+            total_time = end_time - start_time
+            print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
+            add_metadata_to_pose(pose, "time", total_time)
+            scores.update(pose.scores)
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+            ppose = io.to_packed(pose)
+            yield ppose
