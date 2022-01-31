@@ -7,7 +7,7 @@ from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
-from pyrosetta.rosetta.protocols.filters import Filter
+from pyrosetta.rosetta.protocols.filters import Filter # TODO
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.kinematics import MoveMap
@@ -24,14 +24,17 @@ def almost_linkres(
     repeats: int = 1,
 ) -> None:
     """
-    TODO
+    This function does fast design using a linkres-style approach.
+    It requires at minimum a pose, movemap, scorefxn, and task_factory.
+    The pose will be modified in place with fast_design, and the movemap and scorefxn 
+    will be passed directly to fast_design. The task_factory will have a sequence 
+    symmetry taskop added before it will be passed to fast_design. The residue_selectors 
+    will be used to determine which residues to pseudosymmetrize, and need to specify
+    equal numbers of residues for each selector.
     """
     import sys
     from pathlib import Path
     import pyrosetta
-
-    # TODO
-    import time
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -39,6 +42,7 @@ def almost_linkres(
 
     # setup KeepSequenceSymmetry taskop
     linkres_op = pyrosetta.rosetta.core.pack.task.operation.KeepSequenceSymmetry()
+    # hopefully we don't have to extract from xml # TODO
     linkres_op.set_setting(True)
     # push back the taskop to the task factory
     task_factory.push_back(linkres_op)
@@ -52,6 +56,9 @@ def almost_linkres(
     <RESIDUE_SELECTORS>
         {index_selectors_str}
     </RESIDUE_SELECTORS>
+    <TASKOPERATIONS>
+        <KeepSequenceSymmetry name="2state" setting="true"/>
+    </TASKOPERATIONS>
     <MOVERS>
         <SetupForSequenceSymmetryMover name="almost_linkres" sequence_symmetry_behaviour="2state" >
             <SequenceSymmetry residue_selectors="{selector_keys}" />
@@ -65,20 +72,14 @@ def almost_linkres(
     xml_string = pre_xml_string.format(
         index_selectors_str=index_selectors_str, selector_keys=",".join(index_selectors.keys())
     )
-    print(xml_string) # TODO
-    # setup the SetupForSequenceSymmetryMover using the residue selectors
+    # setup the xml_object
     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
         xml_string
     )
-    pre_linkres = pyrosetta.rosetta.protocols.symmetry.SetupForSequenceSymmetryMover()
-    # TODO other option is to get the residue indices and build an xml string
-    print("DEBUG: almost_linkres")  # TODO
-    time.sleep(3)  # TODO
-    for i, selector in enumerate(residue_selectors, start=1):
-        pre_linkres.add_residue_selector(i, selector)
+    # setup the mover
+    pre_linkres = objs.get_mover("almost_linkres")
     # apply to the pose
     pre_linkres.apply(pose)
-    print("DEBUG: almost_linkres")  # TODO
     # setup fast_design with the pose, movemap, scorefxn, task_factory
     fast_design(
         pose=pose,
@@ -112,8 +113,6 @@ def two_state_design_paired_state(
         OrResidueSelector,
         ResidueIndexSelector,
     )
-
-    # TODO residue selector imports
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -167,12 +166,15 @@ def two_state_design_paired_state(
         # get the chB interface
         chB_interface_sel = AndResidueSelector(chB, interface_sel)
         offset = pose.chain_end(2)
-        # get any residues that differ between chA and chC
+        # get any residues that differ between chA and chC - starts as a list of tuples
         difference_indices = [
-            i
+            (i, i + offset)
             for i in range(1, pose.chain_end(1) + 1)
             if pose.residue(i).name() != pose.residue(i + offset).name()
         ]
+        # flatten the list of tuples into a sorted list of indices
+        difference_indices = sorted(sum(difference_indices, ()))
+        # make a residue selector for the difference indices
         difference_sel = ResidueIndexSelector(",".join(map(str, difference_indices)))
         # use OrResidueSelector to combine the two
         design_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(
@@ -243,7 +245,6 @@ def two_state_design_paired_state(
         print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
         add_metadata_to_pose(pose, "time", total_time)
         scores.update(pose.scores)
-        # TODO check scores
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         ppose = io.to_packed(pose)
