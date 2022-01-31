@@ -40,12 +40,6 @@ def almost_linkres(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.design import fast_design
 
-    # setup KeepSequenceSymmetry taskop
-    linkres_op = pyrosetta.rosetta.core.pack.task.operation.KeepSequenceSymmetry()
-    # hopefully we don't have to extract from xml # TODO
-    linkres_op.set_setting(True)
-    # push back the taskop to the task factory
-    task_factory.push_back(linkres_op)
     # make a dict of the residue selectors as index strings
     index_selectors = {}
     for i, selector in enumerate(residue_selectors):
@@ -57,10 +51,10 @@ def almost_linkres(
         {index_selectors_str}
     </RESIDUE_SELECTORS>
     <TASKOPERATIONS>
-        <KeepSequenceSymmetry name="2state" setting="true"/>
+        <KeepSequenceSymmetry name="linkres_op" setting="true"/>
     </TASKOPERATIONS>
     <MOVERS>
-        <SetupForSequenceSymmetryMover name="almost_linkres" sequence_symmetry_behaviour="2state" >
+        <SetupForSequenceSymmetryMover name="almost_linkres" sequence_symmetry_behaviour="linkres_op" >
             <SequenceSymmetry residue_selectors="{selector_keys}" />
         </SetupForSequenceSymmetryMover>
     </MOVERS>
@@ -76,11 +70,15 @@ def almost_linkres(
     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
         xml_string
     )
-    # setup the mover
+    # get the taskop from the xml_object
+    linkres_op = objs.get_task_operation("linkres_op")
+    # push back the taskop to the task factory
+    task_factory.push_back(linkres_op)
+    # get the mover from the xml_object
     pre_linkres = objs.get_mover("almost_linkres")
-    # apply to the pose
+    # apply the mover to the pose
     pre_linkres.apply(pose)
-    # setup fast_design with the pose, movemap, scorefxn, task_factory
+    # run fast_design with the pose, movemap, scorefxn, task_factory
     fast_design(
         pose=pose,
         movemap=movemap,
@@ -88,8 +86,6 @@ def almost_linkres(
         task_factory=task_factory,
         repeats=repeats,
     )
-    # run fast_design
-    fast_design.apply(pose)
     return
 
 
