@@ -58,7 +58,7 @@ def almost_linkres(
         </SetupForSequenceSymmetryMover>
     </MOVERS>
     """
-    index_selectors_str = "\n".join(
+    index_selectors_str = "\n\t\t".join(
         [f"""<Index name="{key}" resnums="{value}" />""" for key, value in index_selectors.items()]
     )
     # autogenerate an xml string
