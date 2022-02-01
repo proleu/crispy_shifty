@@ -60,7 +60,8 @@ dev TODOs:
 
     - DOTFILES - check init.vim is working, then version control
     - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
-    - check for unused final_pposes lists and remove them
+    - rebalance states/parents after 03_fold or just go crazy?
+    - X Y splitting functions for 06
 
 
 TODO: 
@@ -74,7 +75,7 @@ TODO:
     04 pair bound states # run
     05 design paired states # almost linkres in msd.py # run
     06 MPNN paired states # make MPNN msd # run
-    07 fold paired states # reuse folding.py Y first then X. # run
+    07 fold paired states # reuse folding.py Y first then X will be a little annoying # run
     08 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
     09 order and analyze
 

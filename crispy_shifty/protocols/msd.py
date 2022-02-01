@@ -122,6 +122,7 @@ def two_state_design_paired_state(
         gen_std_layer_design,
         gen_task_factory,
         score_per_res,
+        score_ss_sc,
     )
     from crispy_shifty.utils.io import print_timestamp
 
@@ -257,6 +258,7 @@ def two_state_design_paired_state(
         for pose in designed_poses:
             print_timestamp("Scoring...", start_time=start_time)
             score_per_res(pose, clean_sfxn)
+            score_ss_sc(pose)
             score_filter = gen_score_filter(clean_sfxn)
             add_metadata_to_pose(pose, "path_in", pdb_path)
             end_time = time()

@@ -12,6 +12,84 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 # Custom library imports
 
 
+def dict_to_fasta(
+    seqs_dict: Dict[str, str],
+    out_path: str,
+) -> None:
+    """
+    :param seqs_dict: dictionary of sequences to write to a fasta file.
+    :param out_path: path to write the fasta file to.
+    :return: None
+    Write a fasta file to the provided path with the provided sequence dict.
+    """
+    import os
+    from pathlib import Path
+
+    # make the output path if it doesn't exist
+    if not os.path.exists(Path(out_path).parent):
+        os.makedirs(Path(out_path).parent)
+    else:
+        pass
+    # write the sequences to a fasta file
+    with open(out_path, "w") as f:
+        for i, seq in seqs_dict.items():
+            f.write(f">{i}\n{seq}\n")
+    return
+
+
+def fasta_to_dict(fasta: str, new_tags: bool = False) -> Dict[str, str]:
+    """
+    :param fasta: fasta filepath to read from.
+    :param new_tags: if False, use the sequence tag as the key, if True, use the index.
+    :return: dictionary of tags and sequences.
+    Read in a fasta file and return a dictionary of tags and sequences.
+    """
+    seqs_dict = {}
+
+    with open(fasta, "r") as f:
+        i = 0
+        for line in f:
+            if line.startswith(">"):  # this is a header line
+                if new_tags:
+                    tag = str(i)
+                else:
+                    tag = line.strip().replace(">", "")
+                seqs_dict[tag] = ""
+                i += 1
+            else:  # we can assume this is a sequence line, add the sequence
+                seqs_dict[tag] += line.strip()
+
+    return seqs_dict
+
+@requires_init
+def thread_full_sequence(
+    pose: Pose,
+    sequence: str,
+    start_res: int = 1,
+) -> Pose:
+    """
+    :param: pose: Pose to thread sequence onto.
+    :param: sequence: Sequence to thread onto pose.
+    :return: Pose with threaded sequence.
+    Threads a full sequence onto a pose after cloning the input pose.
+    Doesn't require the chainbreak '/' to be cleaned.
+    """
+    from pyrosetta.rosetta.protocols.simple_moves import SimpleThreadingMover
+
+    try:
+        assert sequence.count("/") == 0
+    except AssertionError:
+        print("Cleaning chain breaks in sequence.")
+        sequence = sequence.replace("/", "")
+
+    pose = pose.clone()
+    stm = SimpleThreadingMover()
+    stm.set_sequence(sequence, start_res)
+    stm.apply(pose)
+
+    return pose
+
+
 class MPNNRunner(ABC):
     """
     Abstract base class for MPNN runners.
@@ -26,7 +104,7 @@ class MPNNRunner(ABC):
         num_sequences: Optional[int] = 64,
         omit_AAs: Optional[str] = "X",
         temperature: Optional[float] = 0.1,
-        selector: Optional[ResidueSelector] = None,
+        design_selector: Optional[ResidueSelector] = None,
         chains_to_mask: Optional[List[str]] = None,
         **kwargs,
     ):
@@ -36,11 +114,11 @@ class MPNNRunner(ABC):
         :param: num_sequences: number of sequences to generate in total.
         :param: omit_AAs: concatenated string of amino acids to omit from the sequence.
         :param: temperature: temperature to use for the MPNN.
-        :param: selector: ResidueSelector that specifies residues to design.
+        :param: design_selector: ResidueSelector that specifies residues to design.
         :param: chains_to_mask: list of chains to mask, these will be designable.
         If no `chains_to_mask` is provided, the runner will run on (mask) all chains.
         If a `chains_to_mask` is provided, the runner will run on (mask) only that chain.
-        If no `selector` is provided, all residues on all masked chains will be designed.
+        If no `design_selector` is provided, all residues on all masked chains will be designed.
         The chain letters in your PDB must be correct. TODO, might want to add a check for this.
         """
 
@@ -50,7 +128,7 @@ class MPNNRunner(ABC):
         self.num_sequences = num_sequences
         self.omit_AAs = omit_AAs
         self.temperature = temperature
-        self.selector = selector
+        self.design_selector = design_selector
         self.chains_to_mask = chains_to_mask
         # setup standard command line flags for MPNN with default values
         self.flags = {
@@ -189,10 +267,8 @@ class MPNNRunner(ABC):
         """
         :param: pose: Pose object to run MPNN on.
         :return: None
-        Setup the MPNNRunner.
-        Output sequences and scores are written temporarily to the tmpdir.
-        They are then read in, and the sequences are appended to the pose datacache.
-        The tmpdir is then removed.
+        Setup the MPNNRunner. Make a tmpdir and write input files to the tmpdir.
+        Output sequences and scores will be written temporarily to the tmpdir as well.
         """
         import json, os, subprocess, sys
         import git
@@ -258,18 +334,18 @@ class MPNNRunner(ABC):
         # make the jsonl file for the fixed_positions
         fixed_positions_path = os.path.join(out_path, "fixed_positions.jsonl")
         fixed_positions_dict = {"tmp": {chain: [] for chain in all_chains}}
-        # get a boolean mask of the residues in the selector
-        if self.selector is not None:
-            designable_filter = list(self.selector.apply(pose))
-        else:  # if no selector is provided, make all residues designable
+        # get a boolean mask of the residues in the design_selector
+        if self.design_selector is not None:
+            designable_filter = list(self.design_selector.apply(pose))
+        else:  # if no design_selector is provided, make all residues designable
             designable_filter = [True] * pose.size()
-        # check the residue selector specifies designability across the entire pose
+        # check the residue design_selector specifies designability across the entire pose
         try:
             assert len(designable_filter) == pose.total_residue()
         except AssertionError:
             print(
                 "Residue selector must specify designability for all residues.\n",
-                f"Selector: {len(list(self.selector.apply(pose)))}\n",
+                f"Selector: {len(list(self.design_selector.apply(pose)))}\n",
                 f"Pose: {pose.size()}",
             )
             raise
@@ -335,6 +411,7 @@ class MPNNDesign(MPNNRunner):
         Run MPNN in a subprocess using the provided flags and tmpdir.
         Read in and parse the output fasta file to get the sequences.
         Each sequence designed by MPNN is then appended to the pose datacache.
+        Cleanup the tmpdir.
         """
         import os, subprocess, sys
         import git
@@ -432,83 +509,138 @@ class MPNNDesign(MPNNRunner):
             yield threaded_pose
 
 
-def dict_to_fasta(
-    seqs_dict: Dict[str, str],
-    out_path: str,
-) -> None:
+class MPNNMultistateDesign(MPNNDesign):
     """
-    :param seqs_dict: dictionary of sequences to write to a fasta file.
-    :param out_path: path to write the fasta file to.
-    :return: None
-    Write a fasta file to the provided path with the provided sequence dict.
+    Class for running MPNN to do multistate or sequence-symmetric design.
     """
-    import os
-    from pathlib import Path
 
-    # make the output path if it doesn't exist
-    if not os.path.exists(Path(out_path).parent):
-        os.makedirs(Path(out_path).parent)
-    else:
-        pass
-    # write the sequences to a fasta file
-    with open(out_path, "w") as f:
-        for i, seq in seqs_dict.items():
-            f.write(f">{i}\n{seq}\n")
-    return
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        """
+        Initialize the base class for MPNN runners with common attributes.
+        """
+        super().__init__(*args, **kwargs)
 
+    # def setup_runner(self, pose: Pose) -> None:
+    #     """
+    #     :param: pose: Pose object to run MPNN on.
+    #     :return: None
+    #     Setup the MPNNRunner.
+    #     Output sequences and scores are written temporarily to the tmpdir.
+    #     They are then read in, and the sequences are appended to the pose datacache.
+    #     The tmpdir is then removed.
+    #     """
+    #     import json, os, subprocess, sys
+    #     import git
+    #     from pathlib import Path
+    #     import pyrosetta.distributed.io as io
 
-def fasta_to_dict(fasta: str, new_tags: bool = False) -> Dict[str, str]:
-    """
-    :param fasta: fasta filepath to read from.
-    :param new_tags: if False, use the sequence tag as the key, if True, use the index.
-    :return: dictionary of tags and sequences.
-    Read in a fasta file and return a dictionary of tags and sequences.
-    """
-    seqs_dict = {}
+    #     # insert the root of the repo into the sys.path
+    #     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    #     from crispy_shifty.utils.io import cmd_no_stderr
 
-    with open(fasta, "r") as f:
-        i = 0
-        for line in f:
-            if line.startswith(">"):  # this is a header line
-                if new_tags:
-                    tag = str(i)
-                else:
-                    tag = line.strip().replace(">", "")
-                seqs_dict[tag] = ""
-                i += 1
-            else:  # we can assume this is a sequence line, add the sequence
-                seqs_dict[tag] += line.strip()
+    #     # setup the tmpdir
+    #     self.setup_tmpdir()
+    #     out_path = self.tmpdir
+    #     # write the pose to a clean PDB file of only ATOM coordinates.
+    #     tmp_pdb_path = os.path.join(out_path, "tmp.pdb")
+    #     pdbstring = io.to_pdbstring(pose)
+    #     with open(tmp_pdb_path, "w") as f:
+    #         f.write(pdbstring)
+    #     # make the jsonl file for the PDB biounits
+    #     biounit_path = os.path.join(out_path, "biounits.jsonl")
+    #     # use git to find the root of the repo
+    #     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
+    #     root = repo.git.rev_parse("--show-toplevel")
+    #     python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
+    #     if os.path.exists(python):
+    #         pass
+    #     else:  # crispy env must be installed in envs/crispy or must be used on DIGS
+    #         python = "/projects/crispy_shifty/envs/crispy/bin/python"
+    #     run_cmd = " ".join(
+    #         [
+    #             f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
+    #             f"--pdb_folder {out_path}",
+    #             f"--out_path {biounit_path}",
+    #         ]
+    #     )
+    #     cmd_no_stderr(run_cmd)
+    #     # make a number to letter dictionary that starts at 1
+    #     num_to_letter = {
+    #         i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
+    #     }
+    #     # make the jsonl file for the chain_ids
+    #     chain_id_path = os.path.join(out_path, "chain_id.jsonl")
+    #     chain_dict = {}
+    #     # make lists of masked and visible chains
+    #     masked, visible = [], []
+    #     # first make a list of all chain letters in the pose
+    #     all_chains = [num_to_letter[i] for i in range(1, pose.num_chains() + 1)]
+    #     # if chains_to_mask is provided, update the masked and visible lists
+    #     if self.chains_to_mask is not None:
+    #         # loop over the chains in the pose and add them to the appropriate list
+    #         for chain in all_chains:
+    #             if chain in self.chains_to_mask:
+    #                 masked.append(i)
+    #             else:
+    #                 visible.append(i)
+    #     else:
+    #         # if chains_to_mask is not provided, mask all chains
+    #         masked = all_chains
+    #     chain_dict["tmp"] = [masked, visible]
+    #     # write the chain_dict to a jsonl file
+    #     with open(chain_id_path, "w") as f:
+    #         f.write(json.dumps(chain_dict))
+    #     # make the jsonl file for the fixed_positions
+    #     fixed_positions_path = os.path.join(out_path, "fixed_positions.jsonl")
+    #     fixed_positions_dict = {"tmp": {chain: [] for chain in all_chains}}
+    #     # get a boolean mask of the residues in the design_selector
+    #     if self.design_selector is not None:
+    #         designable_filter = list(self.design_selector.apply(pose))
+    #     else:  # if no design_selector is provided, make all residues designable
+    #         designable_filter = [True] * pose.size()
+    #     # check the residue selector specifies designability across the entire pose
+    #     try:
+    #         assert len(designable_filter) == pose.total_residue()
+    #     except AssertionError:
+    #         print(
+    #             "Residue selector must specify designability for all residues.\n",
+    #             f"Selector: {len(list(self.design_selector.apply(pose)))}\n",
+    #             f"Pose: {pose.size()}",
+    #         )
+    #         raise
+    #     # make a dict mapping of residue numbers to whether they are designable
+    #     designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
+    #     # loop over the chains and the residues in the pose
+    #     i = 1  # total residue counter
+    #     for chain_number, chain in enumerate(all_chains, start=1):
+    #         j = 1  # chain residue counter
+    #         for res in range(
+    #             pose.chain_begin(chain_number), pose.chain_end(chain_number) + 1
+    #         ):
+    #             # if the residue is on a masked chain but not designable, add it
+    #             if not designable_dict[i] and chain in masked:
+    #                 fixed_positions_dict["tmp"][chain].append(j)
+    #             else:
+    #                 pass
+    #             j += 1
+    #             i += 1
+    #     # write the fixed_positions_dict to a jsonl file
+    #     with open(fixed_positions_path, "w") as f:
+    #         f.write(json.dumps(fixed_positions_dict))
+    #     # update the flags for the biounit, chain_id, and fixed_positions paths
+    #     flag_update = {
+    #         "--jsonl_path": biounit_path,
+    #         "--chain_id_jsonl": chain_id_path,
+    #         "--fixed_positions_jsonl": fixed_positions_path,
+    #     }
+    #     self.update_flags(flag_update)
+    #     self.is_setup = True
+    #     return
 
-    return seqs_dict
-
-
-@requires_init
-def thread_full_sequence(
-    pose: Pose,
-    sequence: str,
-    start_res: int = 1,
-) -> Pose:
-    """
-    :param: pose: Pose to thread sequence onto.
-    :param: sequence: Sequence to thread onto pose.
-    :return: Pose with threaded sequence.
-    Threads a full sequence onto a pose after cloning the input pose.
-    Doesn't require the chainbreak '/' to be cleaned.
-    """
-    from pyrosetta.rosetta.protocols.simple_moves import SimpleThreadingMover
-
-    try:
-        assert sequence.count("/") == 0
-    except AssertionError:
-        print("Cleaning chain breaks in sequence.")
-        sequence = sequence.replace("/", "")
-
-    pose = pose.clone()
-    stm = SimpleThreadingMover()
-    stm.set_sequence(sequence, start_res)
-    stm.apply(pose)
-
-    return pose
 
 
 @requires_init
@@ -558,7 +690,7 @@ def mpnn_bound_state(
         print_timestamp("Designing interface with MPNN", start_time)
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
-            selector=interface_selector,
+            design_selector=interface_selector,
             omit_AAs="CX",
             **kwargs,
         )
