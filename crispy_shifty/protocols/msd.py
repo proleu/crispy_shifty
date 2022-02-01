@@ -179,7 +179,23 @@ def two_state_design_paired_state(
         )
         # we want to design the peptide (chB) interface + anything that differs between the states
         print_timestamp("Generated selectors", start_time=start_time)
-        layer_design = gen_std_layer_design()
+        # we need to add an alanine to all layers of the default list
+        layer_aas_list = [
+            "ADNSTP",  # helix_cap
+            "AFILVWYNQSTHP",  # core AND helix_start
+            "AFILVWM",  # core AND helix
+            "AFILVWY",  # core AND sheet
+            "AFGILPVWYSM",  # core AND loop
+            "ADEHIKLNPQRSTVWY",  # boundary AND helix_start
+            "ADEHIKLNQRSTVWYM",  # boundary AND helix
+            "ADEFHIKLNQRSTVWY",  # boundary AND sheet
+            "ADEFGHIKLNPQRSTVWY",  # boundary AND loop
+            "ADEHKPQR",  # surface AND helix_start
+            "AEHKQR",  # surface AND helix
+            "AEHKNQRST",  # surface AND sheet
+            "ADEGHKNPQRST",  # surface AND loop
+        ]
+        layer_design = gen_std_layer_design(layer_aas_list=layer_aas_list)
         task_factory_1 = gen_task_factory(
             design_sel=design_sel,
             pack_nbhd=True,
@@ -252,3 +268,5 @@ def two_state_design_paired_state(
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
             ppose = io.to_packed(pose)
             yield ppose
+
+
