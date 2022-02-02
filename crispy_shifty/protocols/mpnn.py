@@ -516,6 +516,7 @@ class MPNNMultistateDesign(MPNNDesign):
 
     def __init__(
         self,
+        residue_selectors: List[ResidueSelector],
         *args,
         **kwargs,
     ):
@@ -523,77 +524,31 @@ class MPNNMultistateDesign(MPNNDesign):
         Initialize the base class for MPNN runners with common attributes.
         """
         super().__init__(*args, **kwargs)
+        self.residue_selectors = residue_selectors
 
-    # def setup_runner(self, pose: Pose) -> None:
-    #     """
-    #     :param: pose: Pose object to run MPNN on.
-    #     :return: None
-    #     Setup the MPNNRunner.
-    #     Output sequences and scores are written temporarily to the tmpdir.
-    #     They are then read in, and the sequences are appended to the pose datacache.
-    #     The tmpdir is then removed.
-    #     """
+    def setup_runner(self, pose: Pose) -> None:
+        """
+        :param: pose: Pose object to run MPNN on.
+        :return: None
+        Setup the MPNNRunner. Make a tmpdir and write input files to the tmpdir.
+        Output sequences and scores will be written temporarily to the tmpdir as well.
+        """
+        # TODO don't need imports if running super().setup_runner() ?
     #     import json, os, subprocess, sys
     #     import git
     #     from pathlib import Path
     #     import pyrosetta.distributed.io as io
+        
+        # take advantage of the superclass's setup_runner() to do most of the work
+        super().setup_runner(pose)
+        self.is_setup = False
+        # make the jsonl file for the tied postions
+        tied_positions_path = os.path.join(self.tmpdir, "tied_positions.jsonl")
 
-    #     # insert the root of the repo into the sys.path
-    #     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    #     from crispy_shifty.utils.io import cmd_no_stderr
-
-    #     # setup the tmpdir
-    #     self.setup_tmpdir()
-    #     out_path = self.tmpdir
-    #     # write the pose to a clean PDB file of only ATOM coordinates.
-    #     tmp_pdb_path = os.path.join(out_path, "tmp.pdb")
-    #     pdbstring = io.to_pdbstring(pose)
-    #     with open(tmp_pdb_path, "w") as f:
-    #         f.write(pdbstring)
-    #     # make the jsonl file for the PDB biounits
-    #     biounit_path = os.path.join(out_path, "biounits.jsonl")
-    #     # use git to find the root of the repo
-    #     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
-    #     root = repo.git.rev_parse("--show-toplevel")
-    #     python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
-    #     if os.path.exists(python):
-    #         pass
-    #     else:  # crispy env must be installed in envs/crispy or must be used on DIGS
-    #         python = "/projects/crispy_shifty/envs/crispy/bin/python"
-    #     run_cmd = " ".join(
-    #         [
-    #             f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
-    #             f"--pdb_folder {out_path}",
-    #             f"--out_path {biounit_path}",
-    #         ]
-    #     )
-    #     cmd_no_stderr(run_cmd)
     #     # make a number to letter dictionary that starts at 1
     #     num_to_letter = {
     #         i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
     #     }
-    #     # make the jsonl file for the chain_ids
-    #     chain_id_path = os.path.join(out_path, "chain_id.jsonl")
-    #     chain_dict = {}
-    #     # make lists of masked and visible chains
-    #     masked, visible = [], []
-    #     # first make a list of all chain letters in the pose
-    #     all_chains = [num_to_letter[i] for i in range(1, pose.num_chains() + 1)]
-    #     # if chains_to_mask is provided, update the masked and visible lists
-    #     if self.chains_to_mask is not None:
-    #         # loop over the chains in the pose and add them to the appropriate list
-    #         for chain in all_chains:
-    #             if chain in self.chains_to_mask:
-    #                 masked.append(i)
-    #             else:
-    #                 visible.append(i)
-    #     else:
-    #         # if chains_to_mask is not provided, mask all chains
-    #         masked = all_chains
-    #     chain_dict["tmp"] = [masked, visible]
-    #     # write the chain_dict to a jsonl file
-    #     with open(chain_id_path, "w") as f:
-    #         f.write(json.dumps(chain_dict))
     #     # make the jsonl file for the fixed_positions
     #     fixed_positions_path = os.path.join(out_path, "fixed_positions.jsonl")
     #     fixed_positions_dict = {"tmp": {chain: [] for chain in all_chains}}
@@ -632,14 +587,14 @@ class MPNNMultistateDesign(MPNNDesign):
     #     with open(fixed_positions_path, "w") as f:
     #         f.write(json.dumps(fixed_positions_dict))
     #     # update the flags for the biounit, chain_id, and fixed_positions paths
-    #     flag_update = {
-    #         "--jsonl_path": biounit_path,
-    #         "--chain_id_jsonl": chain_id_path,
-    #         "--fixed_positions_jsonl": fixed_positions_path,
-    #     }
-    #     self.update_flags(flag_update)
-    #     self.is_setup = True
-    #     return
+        flag_update = {
+            "--tied_positions_jsonl": tied_positions_path,
+        }
+        self.update_flags(flag_update)
+        self.is_setup = True
+        out_path = self.tmpdir
+        self.update_script()
+        return
 
 
 
@@ -711,3 +666,72 @@ def mpnn_bound_state(
             # generate the original pose, with the sequences written to the datacache
             ppose = io.to_packed(pose)
             yield ppose
+
+# @requires_init
+# def mpnn_paired_state(
+#     packed_pose_in: Optional[PackedPose] = None, **kwargs
+# ) -> Iterator[PackedPose]:
+#     """
+#     :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
+#     :param: kwargs: keyword arguments to be passed to MPNNDesign, or this function.
+#     :return: an iterator of PackedPose objects.
+#     """
+# 
+#     from pathlib import Path
+#     import sys
+#     from time import time
+#     import pyrosetta
+#     import pyrosetta.distributed.io as io
+#     from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
+# 
+#     # insert the root of the repo into the sys.path
+#     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+#     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+#     from crispy_shifty.protocols.design import interface_between_selectors
+#     from crispy_shifty.protocols.mpnn import MPNNDesign
+#     from crispy_shifty.utils.io import print_timestamp
+# 
+#     start_time = time()
+# 
+#     # generate poses or convert input packed pose into pose
+#     if packed_pose_in is not None:
+#         poses = [io.to_pose(packed_pose_in)]
+#         pdb_path = "none"
+#     else:
+#         pdb_path = kwargs["pdb_path"]
+#         poses = path_to_pose_or_ppose(
+#             path=pdb_path, cluster_scores=True, pack_result=False
+#         )
+# 
+#     for pose in poses:
+#         pose.update_residue_neighbors()
+#         scores = dict(pose.scores)
+#         print_timestamp("Setting up design selector", start_time)
+#         # make a designable residue selector of only the interface residues
+#         chain_a = ChainSelector(1)
+#         chain_b = ChainSelector(2)
+#         interface_selector = interface_between_selectors(chain_a, chain_b)
+#         print_timestamp("Designing interface with MPNN", start_time)
+#         # construct the MPNNDesign object
+#         mpnn_design = MPNNDesign(
+#             selector=interface_selector,
+#             omit_AAs="CX",
+#             **kwargs,
+#         )
+#         # design the pose
+#         mpnn_design.apply(pose)
+#         print_timestamp("MPNN design complete, updating pose datacache", start_time)
+#         # update the scores dict
+#         scores.update(pose.scores)
+#         # update the pose with the updated scores dict
+#         for key, value in scores.items():
+#             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+#         if kwargs["generate_all_poses"]:
+#             # generate all poses, each with a sequence threaded
+#             for threaded_pose in mpnn_design.generate_all_poses(pose):
+#                 ppose = io.to_packed(threaded_pose)
+#                 yield ppose
+#         else:
+#             # generate the original pose, with the sequences written to the datacache
+#             ppose = io.to_packed(pose)
+#             yield ppose

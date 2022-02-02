@@ -44,6 +44,7 @@ order chA and do SEC / expression screening
 order chB and do SEC / expression screening too?
 
 dev TODOs:
+    - fix MPNN API !!!
     - compare one more time DHR82 with FF74 (seq length difference)
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
         - do it when no one is has crispy env active
