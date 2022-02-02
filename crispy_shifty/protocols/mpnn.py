@@ -604,9 +604,9 @@ def mpnn_bound_state(
         scores = dict(pose.scores)
         print_timestamp("Setting up design selector", start_time)
         # make a designable residue selector of only the interface residues
-        chain_a = ChainSelector(1)
-        chain_b = ChainSelector(2)
-        interface_selector = interface_between_selectors(chain_a, chain_b)
+        chA = ChainSelector(1)
+        chB = ChainSelector(2)
+        interface_selector = interface_between_selectors(chA, chB)
         print_timestamp("Designing interface with MPNN", start_time)
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
@@ -667,9 +667,9 @@ def mpnn_bound_state(
 #         scores = dict(pose.scores)
 #         print_timestamp("Setting up design selector", start_time)
 #         # make a designable residue selector of only the interface residues
-#         chain_a = ChainSelector(1)
-#         chain_b = ChainSelector(2)
-#         interface_selector = interface_between_selectors(chain_a, chain_b)
+#         chA = ChainSelector(1)
+#         chB = ChainSelector(2)
+#         interface_selector = interface_between_selectors(chA, chB)
 #         print_timestamp("Designing interface with MPNN", start_time)
 #         # construct the MPNNDesign object
 #         mpnn_design = MPNNDesign(
