@@ -148,10 +148,6 @@ class MPNNRunner(ABC):
                 "--sampling_temp": str(self.temperature),
             }
         )
-        # unset, needed: --jsonl_path --chain_id_jsonl --fixed_positions_jsonl --out_folder
-        # unset, optional: --bias_AA_jsonl --omit_AA_jsonl --tied_positions_jsonl
-        # unset, optional: --pssm_bias_flag, --pssm_jsonl --pssm_log_odds_flag
-        # unset, optional: --pssm_multi --psmm_threshold TODO
         self.allowed_flags = [
             # flags that have default values that are provided by the runner:
             "--backbone_noise",
@@ -265,7 +261,7 @@ class MPNNRunner(ABC):
 
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from crispy_shifty.utils.io import cmd_no_stderr
+        from crispy_shifty.utils.io import cmd
 
         # setup the tmpdir
         self.setup_tmpdir()
@@ -288,11 +284,11 @@ class MPNNRunner(ABC):
         run_cmd = " ".join(
             [
                 f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'helper_scripts' / 'parse_multiple_chains.py')}",
-                f"--in_folder {out_path}",
-                f"--out_folder {biounit_path}",
+                f"--input_path {out_path}",
+                f"--output_path {biounit_path}",
             ]
         )
-        cmd_no_stderr(run_cmd)
+        cmd(run_cmd) 
         # make a number to letter dictionary that starts at 1
         num_to_letter = {
             i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
@@ -433,7 +429,7 @@ class MPNNDesign(MPNNRunner):
         )
         out_err = cmd(run_cmd)
         print(out_err)
-        alignments_path = os.path.join(self.tmpdir, "alignments/tmp.fa")
+        alignments_path = os.path.join(self.tmpdir, "seqs/tmp.fa")
         # parse the alignments fasta into a dictionary
         alignments = fasta_to_dict(alignments_path, new_tags=True)
         for i, (tag, seq) in enumerate(alignments.items()):
@@ -529,57 +525,40 @@ class MPNNMultistateDesign(MPNNDesign):
         # take advantage of the superclass's setup_runner() to do most of the work
         super().setup_runner(pose)
         self.is_setup = False
+        out_path = self.tmpdir
         # make the jsonl file for the tied postions
         tied_positions_path = os.path.join(self.tmpdir, "tied_positions.jsonl")
+        # make a dict keyed by pose residue indices with chains as values
+        # TODO this way needs pdb_info to be set, and correctly set
+        chains_dict = {
+            i: pose.pdb_info().chain(i) for i in range(1, pose.total_residue() + 1)
+        }
 
-    #     # make a number to letter dictionary that starts at 1
-    #     num_to_letter = {
-    #         i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
-    #     }
-    #     # make the jsonl file for the fixed_positions
-    #     fixed_positions_path = os.path.join(out_path, "fixed_positions.jsonl")
-    #     fixed_positions_dict = {"tmp": {chain: [] for chain in all_chains}}
-    #     # get a boolean mask of the residues in the design_selector
-    #     if self.design_selector is not None:
-    #         designable_filter = list(self.design_selector.apply(pose))
-    #     else:  # if no design_selector is provided, make all residues designable
-    #         designable_filter = [True] * pose.size()
-    #     # check the residue selector specifies designability across the entire pose
-    #     try:
-    #         assert len(designable_filter) == pose.total_residue()
-    #     except AssertionError:
-    #         print(
-    #             "Residue selector must specify designability for all residues.\n",
-    #             f"Selector: {len(list(self.design_selector.apply(pose)))}\n",
-    #             f"Pose: {pose.size()}",
-    #         )
-    #         raise
-    #     # make a dict mapping of residue numbers to whether they are designable
-    #     designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
-    #     # loop over the chains and the residues in the pose
-    #     i = 1  # total residue counter
-    #     for chain_number, chain in enumerate(all_chains, start=1):
-    #         j = 1  # chain residue counter
-    #         for res in range(
-    #             pose.chain_begin(chain_number), pose.chain_end(chain_number) + 1
-    #         ):
-    #             # if the residue is on a masked chain but not designable, add it
-    #             if not designable_dict[i] and chain in masked:
-    #                 fixed_positions_dict["tmp"][chain].append(j)
-    #             else:
-    #                 pass
-    #             j += 1
-    #             i += 1
-    #     # write the fixed_positions_dict to a jsonl file
-    #     with open(fixed_positions_path, "w") as f:
-    #         f.write(json.dumps(fixed_positions_dict))
-    #     # update the flags for the biounit, chain_id, and fixed_positions paths
+        tied_positions_dict = {"tmp": []} 
+        # now need the one indexed indices of all the True residues in the residue_selectors
+        residue_indices_lists = [list(enumerate(list(sel.apply(pose)), start=1)) for sel in self.residue_selectors]
+        # flatten the list of lists into a single list of tuples by unpacking the above
+        tied_positions_list = list(zip(*residue_indices_lists))
+        for tied_positions in tied_positions_list:
+            # get the chains for the tied positions
+            tied_position_dict = defaultdict(list)
+            for tied_position in tied_positions:
+                # get the residue index and chain
+                residue_index, chain = tied_position, chains_dict[tied_position]
+                # add the residue index and chain to the dict
+                tied_position_dict[chain].append(residue_index)
+            # the output json should have a single entry with a list of dicts of the tied positions
+            tied_positions_dict["tmp"].append(tied_position_dict)
+
+        # write the tied_positions_dict to a jsonl file
+        with open(tied_positions_path, "w") as f:
+            f.write(json.dumps(tied_positions_dict))
+        # update the flags for the biounit, chain_id, and fixed_positions paths
         flag_update = {
             "--tied_positions_jsonl": tied_positions_path,
         }
         self.update_flags(flag_update)
         self.is_setup = True
-        out_path = self.tmpdir
         return
 
 
@@ -643,9 +622,9 @@ def mpnn_bound_state(
         # update the pose with the updated scores dict
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-            # generate the original pose, with the sequences written to the datacache
-            ppose = io.to_packed(pose)
-            yield ppose
+        # generate the original pose, with the sequences written to the datacache
+        ppose = io.to_packed(pose)
+        yield ppose
 
 # @requires_init
 # def mpnn_paired_state(
