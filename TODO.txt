@@ -45,6 +45,7 @@ order chB and do SEC / expression screening too?
 
 dev TODOs:
     - fix MPNN API !!!
+    - repredict AF2 intial guess folding.py the FF63-129 and cs_0-108 and JHB1-13
     - compare one more time DHR82 with FF74 (seq length difference)
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
         - do it when no one is has crispy env active
