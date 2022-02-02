@@ -132,14 +132,12 @@ class MPNNRunner(ABC):
         self.chains_to_mask = chains_to_mask
         # setup standard command line flags for MPNN with default values
         self.flags = {
-            "--backbone_noise": "0.05", # TODO
-            "--checkpoint_path": "/projects/ml/struc2seq/data_for_complexes/training_scripts/paper_experiments/model_outputs/p10/checkpoints/epoch51_step255000.pt", # TODO
-            "--decoding_order": "random",
-            "--hidden_dim": "192",
-            "--max_length": "10000",
+            "--backbone_noise": "0.0",
+            "--checkpoint_path": "/home/justas/projects/lab_github/mpnn/model_weigths/p17/epoch150_step235456.pt", # TODO
+            "--hidden_dim": "128",
+            "--max_length": "20000",
             "--num_connections": "64",
             "--num_layers": "3",
-            "--protein_features": "full",
         }
         # add the flags that are required by MPNN and provided by the user
         self.flags.update(
@@ -152,16 +150,16 @@ class MPNNRunner(ABC):
         )
         # unset, needed: --jsonl_path --chain_id_jsonl --fixed_positions_jsonl --out_folder
         # unset, optional: --bias_AA_jsonl --omit_AA_jsonl --tied_positions_jsonl
+        # unset, optional: --pssm_bias_flag, --pssm_jsonl --pssm_log_odds_flag
+        # unset, optional: --pssm_multi --psmm_threshold TODO
         self.allowed_flags = [
             # flags that have default values that are provided by the runner:
             "--backbone_noise",
             "--checkpoint_path",
-            "--decoding_order",
             "--hidden_dim",
             "--max_length",
             "--num_connections",
             "--num_layers",
-            "--protein_features",
             # flags that are set by MPNNRunner constructor:
             "--batch_size",
             "--num_seq_per_target",
@@ -176,14 +174,17 @@ class MPNNRunner(ABC):
             "--bias_AA_jsonl",
             "--omit_AA_jsonl",
             "--tied_positions_jsonl",
+            "--pdb_path",
+            "--pdb_path_chains",
             "--pssm_bias_flag",
             "--pssm_jsonl",
             "--pssm_log_odds_flag",
             "--pssm_multi",
             "--pssm_threshold",
+            "--save_score", 
         ]
-        # this updates to mpnn_run_tied.py if there is the --tied_positions_jsonl flag
-        self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run.py')}"
+        # TODO git root?
+        self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'protein_mpnn_run.py')}"
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.is_setup = False  # this will be updated by the setup_runner method.
 
@@ -250,19 +251,6 @@ class MPNNRunner(ABC):
         self.flags.update(update_dict)
         return
 
-    def update_script(self) -> None:
-        """
-        :return: None
-        Update the script path based on whether the --tied_positions_jsonl flag is set.
-        """
-        from pathlib import Path
-
-        if "--tied_positions_jsonl" in self.flags.keys():
-            self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run_tied.py')}"
-        else:
-            self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'mpnn_run.py')}"
-        return
-
     def setup_runner(self, pose: Pose) -> None:
         """
         :param: pose: Pose object to run MPNN on.
@@ -299,9 +287,9 @@ class MPNNRunner(ABC):
             python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = " ".join(
             [
-                f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'mpnn' / 'parse_multiple_chains.py')}",
-                f"--pdb_folder {out_path}",
-                f"--out_path {biounit_path}",
+                f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'helper_scripts' / 'parse_multiple_chains.py')}",
+                f"--in_folder {out_path}",
+                f"--out_folder {biounit_path}",
             ]
         )
         cmd_no_stderr(run_cmd)
@@ -428,7 +416,6 @@ class MPNNDesign(MPNNRunner):
         # setup runner
         self.setup_runner(pose)
         self.update_flags({"--out_folder": self.tmpdir})
-        self.update_script()
 
         # run mpnn by calling self.script and providing the flags
         # use git to find the root of the repo
@@ -593,7 +580,6 @@ class MPNNMultistateDesign(MPNNDesign):
         self.update_flags(flag_update)
         self.is_setup = True
         out_path = self.tmpdir
-        self.update_script()
         return
 
 
@@ -657,12 +643,6 @@ def mpnn_bound_state(
         # update the pose with the updated scores dict
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-        if kwargs["generate_all_poses"]:
-            # generate all poses, each with a sequence threaded
-            for threaded_pose in mpnn_design.generate_all_poses(pose):
-                ppose = io.to_packed(threaded_pose)
-                yield ppose
-        else:
             # generate the original pose, with the sequences written to the datacache
             ppose = io.to_packed(pose)
             yield ppose
@@ -726,12 +706,6 @@ def mpnn_bound_state(
 #         # update the pose with the updated scores dict
 #         for key, value in scores.items():
 #             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-#         if kwargs["generate_all_poses"]:
-#             # generate all poses, each with a sequence threaded
-#             for threaded_pose in mpnn_design.generate_all_poses(pose):
-#                 ppose = io.to_packed(threaded_pose)
-#                 yield ppose
-#         else:
 #             # generate the original pose, with the sequences written to the datacache
 #             ppose = io.to_packed(pose)
 #             yield ppose
