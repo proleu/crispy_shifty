@@ -507,11 +507,7 @@ def generate_decoys_from_pose(
             else:
                 pass
             for k, v in pose_scores.items():
-                if "mpnn_seq_" in k:
-                    continue
-                else:
-                    setPoseExtraScore(decoy, k, v)
-
+                setPoseExtraScore(decoy, k, v)
             yield decoy
         else:
             pass

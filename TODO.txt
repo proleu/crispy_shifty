@@ -44,19 +44,18 @@ order chA and do SEC / expression screening
 order chB and do SEC / expression screening too?
 
 dev TODOs:
-    - fix MPNN API !!!
+    - Example notebooks for MPNN and superfold in crispy_shifty/examples
+        - finish mpnn_example.ipynb with Abbas?
+    	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
     - repredict AF2 intial guess folding.py the FF63-129 and cs_0-108 and JHB1-13
     - compare one more time DHR82 with FF74 (seq length difference)
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
         - do it when no one is has crispy env active
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
-    - fix mpnn_seq entries in scores when the decoys are being generated from folding.py
+    - test fix mpnn_seq entries in folding.py
     - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
 
-    - Example notebooks for MPNN and superfold in crispy_shifty/examples
-        - finish mpnn_example.ipynb with Abbas?
-    	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
 
     - if really bored, add documentation to the InsertResMover and PR
 
