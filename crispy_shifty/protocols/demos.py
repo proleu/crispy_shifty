@@ -1,5 +1,4 @@
 # Python standard library
-from abc import ABC, abstractmethod
 from typing import Dict, Iterator, List, Optional, Union
 
 # 3rd party library imports
@@ -7,7 +6,6 @@ from typing import Dict, Iterator, List, Optional, Union
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
-from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 

@@ -462,9 +462,10 @@ class MPNNDesign(MPNNRunner):
 
         return
 
-    def generate_all_poses(self, pose: Pose) -> Iterator[Pose]:
+    def generate_all_poses(self, pose: Pose, include_native:bool=False) -> Iterator[Pose]:
         """
         :param: pose: Pose object to generate poses from.
+        :param: include_native: Whether to generate the original native sequence.
         :return: Iterator of Pose objects.
         Generate poses from the provided pose with the newly designed sequences.
         Maintain the scores of the provided pose in the new poses.
@@ -483,7 +484,14 @@ class MPNNDesign(MPNNRunner):
             key: val for key, val in pose.scores.items() if "mpnn_seq_" not in key
         }
         # generate the poses from the seqs_dict
-        for _, seq in seqs_dict.items():
+        for tag, seq in seqs_dict.items():
+            if include_native:
+                pass
+            else: # don't include the original pose
+                if tag == "mpnn_seq_0000":
+                    continue
+                else:
+                    pass
             # thread the full sequence
             threaded_pose = thread_full_sequence(pose, seq)
             # set the scores

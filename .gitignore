@@ -12,6 +12,7 @@ __pycache__/
 *.png
 *.pse
 
+demos
 envs
 software
 projects/*/00*/*
@@ -42,4 +43,3 @@ run.py
 run.sh
 
 scaffolds
-.gitignore
