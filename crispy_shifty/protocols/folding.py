@@ -692,6 +692,7 @@ def fold_paired_state(
         else:
             raise ValueError("predict kwarg must be either Y (bound) or X (free)")
 
+        pose = tmp_pose.clone()
         print_timestamp("Setting up for AF2", start_time)
         runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, **kwargs)
         runner.setup_runner(file=fasta_path)
