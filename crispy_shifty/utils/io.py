@@ -829,7 +829,7 @@ def gen_array_tasks(
         if count % 4 == 0:
             array_len = count / 4
         else:  # and if there are any left over, we need to add 1 to the array length
-            array_len = (count / 4) + 1
+            array_len = (count // 4) + 1
 
     # Let's go
     print("Run the following command with your desired environment active:")
