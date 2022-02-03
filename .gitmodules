@@ -1,9 +1,6 @@
 [submodule "crispy_shifty/hashed_loop"]
 	path = crispy_shifty/hashed_loop
 	url = https://github.com/dmitropher/hashed_loop.git
-[submodule "mpnn"]
-	path = mpnn
-	url = https://git.ipd.uw.edu/justas/mpnn.git
 [submodule "superfold"]
 	path = superfold
 	url = git@github.com:rdkibler/superfold.git
