@@ -257,6 +257,7 @@ class MPNNRunner(ABC):
         import json, os, subprocess, sys
         import git
         from pathlib import Path
+        import pyrosetta
         import pyrosetta.distributed.io as io
 
         # insert the root of the repo into the sys.path
@@ -265,14 +266,21 @@ class MPNNRunner(ABC):
 
         # setup the tmpdir
         self.setup_tmpdir()
-        out_path = self.tmpdir
+        # check that the first residue is on chain A, if not we should try to fix it
+        if pose.pdb_info().chain(1) != "A":
+            # ensure the chain numbers are correct by using SwitchChainOrderMover
+            sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+            sc.chain_order("".join([str(c) for c in range(1, pose.num_chains() + 1)]))
+            sc.apply(pose)
+        else:
+            pass
         # write the pose to a clean PDB file of only ATOM coordinates.
-        tmp_pdb_path = os.path.join(out_path, "tmp.pdb")
+        tmp_pdb_path = os.path.join(self.tmpdir, "tmp.pdb")
         pdbstring = io.to_pdbstring(pose)
         with open(tmp_pdb_path, "w") as f:
             f.write(pdbstring)
         # make the jsonl file for the PDB biounits
-        biounit_path = os.path.join(out_path, "biounits.jsonl")
+        biounit_path = os.path.join(self.tmpdir, "biounits.jsonl")
         # use git to find the root of the repo
         repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
         root = repo.git.rev_parse("--show-toplevel")
@@ -284,7 +292,7 @@ class MPNNRunner(ABC):
         run_cmd = " ".join(
             [
                 f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'helper_scripts' / 'parse_multiple_chains.py')}",
-                f"--input_path {out_path}",
+                f"--input_path {self.tmpdir}",
                 f"--output_path {biounit_path}",
             ]
         )
@@ -294,7 +302,7 @@ class MPNNRunner(ABC):
             i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
         }
         # make the jsonl file for the chain_ids
-        chain_id_path = os.path.join(out_path, "chain_id.jsonl")
+        chain_id_path = os.path.join(self.tmpdir, "chain_id.jsonl")
         chain_dict = {}
         # make lists of masked and visible chains
         masked, visible = [], []
@@ -316,7 +324,7 @@ class MPNNRunner(ABC):
         with open(chain_id_path, "w") as f:
             f.write(json.dumps(chain_dict))
         # make the jsonl file for the fixed_positions
-        fixed_positions_path = os.path.join(out_path, "fixed_positions.jsonl")
+        fixed_positions_path = os.path.join(self.tmpdir, "fixed_positions.jsonl")
         fixed_positions_dict = {"tmp": {chain: [] for chain in all_chains}}
         # get a boolean mask of the residues in the design_selector
         if self.design_selector is not None:
@@ -525,38 +533,65 @@ class MPNNMultistateDesign(MPNNDesign):
         Output sequences and scores will be written temporarily to the tmpdir as well.
         """
         # TODO don't need imports if running super().setup_runner() ?
-    #     import json, os, subprocess, sys
-    #     import git
-    #     from pathlib import Path
-    #     import pyrosetta.distributed.io as io
+        import json, os
+        from collections import defaultdict
         
         # take advantage of the superclass's setup_runner() to do most of the work
         super().setup_runner(pose)
         self.is_setup = False
-        out_path = self.tmpdir
         # make the jsonl file for the tied postions
         tied_positions_path = os.path.join(self.tmpdir, "tied_positions.jsonl")
         # make a dict keyed by pose residue indices with chains as values
-        # TODO this way needs pdb_info to be set, and correctly set
         chains_dict = {
             i: pose.pdb_info().chain(i) for i in range(1, pose.total_residue() + 1)
         }
-
+        # make a dict mapping chain letters back to numbers
+        chain_numbers = {letter: number for number, letter in enumerate(sorted(set(chains_dict.values())), start=1)}
+        # get a boolean mask of the residues in the design_selector
+        if self.design_selector is not None:
+            designable_filter = list(self.design_selector.apply(pose))
+        else:  # if no design_selector is provided, make all residues designable
+            designable_filter = [True] * pose.size()
+        # make a dict mapping of residue numbers to whether they are designable
+        designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
         tied_positions_dict = {"tmp": []} 
         # now need the one indexed indices of all the True residues in the residue_selectors
-        residue_indices_lists = [list(enumerate(list(sel.apply(pose)), start=1)) for sel in self.residue_selectors]
+        residue_indices_lists = []
+        for sel in self.residue_selectors:
+            residue_indices_list = []
+            for i, selected in enumerate(sel.apply(pose), start=1):
+                if selected:
+                    residue_indices_list.append(i)
+                else:
+                    pass
+            residue_indices_lists.append(residue_indices_list)
         # flatten the list of lists into a single list of tuples by unpacking the above
         tied_positions_list = list(zip(*residue_indices_lists))
         for tied_positions in tied_positions_list:
             # get the chains for the tied positions
             tied_position_dict = defaultdict(list)
+            # we only tie a position if all the residues are up for design
+            designable = True
             for tied_position in tied_positions:
+                # check if the residue is designable
+                if designable_dict[tied_position]:
+                    pass
+                else:
+                    designable = False
                 # get the residue index and chain
-                residue_index, chain = tied_position, chains_dict[tied_position]
+                chain = chains_dict[tied_position]
+                # we need to offset the residue index by the chain now
+                residue_index = tied_position - pose.chain_begin(chain_numbers[chain]) + 1
                 # add the residue index and chain to the dict
                 tied_position_dict[chain].append(residue_index)
+            # skip this tied position if any of the residues are not designable
+            if not designable: 
+                continue
+            else:
+                pass
             # the output json should have a single entry with a list of dicts of the tied positions
-            tied_positions_dict["tmp"].append(tied_position_dict)
+            tied_positions_dict["tmp"].append(dict(tied_position_dict))
+
 
         # write the tied_positions_dict to a jsonl file
         with open(tied_positions_path, "w") as f:
@@ -634,65 +669,83 @@ def mpnn_bound_state(
         ppose = io.to_packed(pose)
         yield ppose
 
-# @requires_init
-# def mpnn_paired_state(
-#     packed_pose_in: Optional[PackedPose] = None, **kwargs
-# ) -> Iterator[PackedPose]:
-#     """
-#     :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
-#     :param: kwargs: keyword arguments to be passed to MPNNDesign, or this function.
-#     :return: an iterator of PackedPose objects.
-#     """
-# 
-#     from pathlib import Path
-#     import sys
-#     from time import time
-#     import pyrosetta
-#     import pyrosetta.distributed.io as io
-#     from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
-# 
-#     # insert the root of the repo into the sys.path
-#     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-#     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-#     from crispy_shifty.protocols.design import interface_between_selectors
-#     from crispy_shifty.protocols.mpnn import MPNNDesign
-#     from crispy_shifty.utils.io import print_timestamp
-# 
-#     start_time = time()
-# 
-#     # generate poses or convert input packed pose into pose
-#     if packed_pose_in is not None:
-#         poses = [io.to_pose(packed_pose_in)]
-#         pdb_path = "none"
-#     else:
-#         pdb_path = kwargs["pdb_path"]
-#         poses = path_to_pose_or_ppose(
-#             path=pdb_path, cluster_scores=True, pack_result=False
-#         )
-# 
-#     for pose in poses:
-#         pose.update_residue_neighbors()
-#         scores = dict(pose.scores)
-#         print_timestamp("Setting up design selector", start_time)
-#         # make a designable residue selector of only the interface residues
-#         chA = ChainSelector(1)
-#         chB = ChainSelector(2)
-#         interface_selector = interface_between_selectors(chA, chB)
-#         print_timestamp("Designing interface with MPNN", start_time)
-#         # construct the MPNNDesign object
-#         mpnn_design = MPNNDesign(
-#             selector=interface_selector,
-#             omit_AAs="CX",
-#             **kwargs,
-#         )
-#         # design the pose
-#         mpnn_design.apply(pose)
-#         print_timestamp("MPNN design complete, updating pose datacache", start_time)
-#         # update the scores dict
-#         scores.update(pose.scores)
-#         # update the pose with the updated scores dict
-#         for key, value in scores.items():
-#             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-#             # generate the original pose, with the sequences written to the datacache
-#             ppose = io.to_packed(pose)
-#             yield ppose
+
+@requires_init
+def mpnn_paired_state(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
+    :param: kwargs: keyword arguments to be passed to MPNNMultistateDesign, or this function.
+    :return: an iterator of PackedPose objects.
+    """
+
+    from pathlib import Path
+    import sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.select.residue_selector import ChainSelector, OrResidueSelector, ResidueIndexSelector
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.design import interface_between_selectors
+    from crispy_shifty.protocols.mpnn import MPNNMultistateDesign
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        )
+
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        print_timestamp("Setting up design selector", start_time)
+        # make a designable residue selector of only the interface residues
+        chA = ChainSelector(1)
+        chB = ChainSelector(2)
+        chC = ChainSelector(3)
+        # make a list of linked residue selectors, we want to link chA and chC
+        residue_selectors = [chA, chC]
+        # get the length of state Y
+        offset = pose.chain_end(2)
+        # get a boolean mask of the residues in chA
+        chA_filter = list(chA.apply(pose))
+        # make a list of the corresponding residues in state X that are interface in Y
+        X_interface_residues = [
+            i + offset for i, designable in enumerate(chA_filter, start=1) if designable
+        ]
+        X_interface_residues_str = ",".join(str(i) for i in X_interface_residues)
+        # make design selectors TODO
+        interface_selector = interface_between_selectors(chA, chB)
+        X_selector = ResidueIndexSelector(X_interface_residues_str)
+        design_selector = OrResidueSelector(interface_selector, X_selector)
+
+        print_timestamp("Multistate design with MPNN", start_time)
+        # construct the MPNNMultistateDesign object
+        mpnn_design = MPNNMultistateDesign(
+            design_selector=design_selector,
+            residue_selectors=residue_selectors,
+            omit_AAs="CX",
+            **kwargs,
+        )
+        # design the pose
+        mpnn_design.apply(pose)
+        print_timestamp("MPNN design complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        # update the pose with the updated scores dict
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        # generate the original pose, with the sequences written to the datacache
+        ppose = io.to_packed(pose)
+        yield ppose

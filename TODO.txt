@@ -50,7 +50,7 @@ TODO:
     02 make states # change to array tasks? # run
     00 design bound states # determine how many nstruct # linmem_ig and turn off prune # run
     01 loop bound_states # test 0-1,2,3 adjustment per side comparison # probably want 0-2 # run
-    02 MPNN bound states # when generating passing ones, clear other mpnn_seq scores # figure out how many? probably 100 or so # run
+    02 MPNN bound states # figure out how many? probably 100 or so # run
     03 fold bound states # figure out how low to go with pae_interaction # run
     04 pair bound states # run
     05 design paired states # run
