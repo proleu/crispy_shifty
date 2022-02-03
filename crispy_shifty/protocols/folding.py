@@ -195,6 +195,12 @@ class SuperfoldRunner:
         :return: command to run.
         """
         return self.command
+    
+    def get_fasta_path(self) -> str:
+        """
+        :return: fasta path.
+        """
+        return self.fasta_path
 
     def get_flags(self) -> Dict[str, str]:
         """
@@ -213,6 +219,14 @@ class SuperfoldRunner:
         :return: temporary directory path.
         """
         return self.tmpdir
+
+    def set_fasta_path(self, fasta_path: str) -> None:
+        """
+        :param: fasta_path: The path to the fasta file.
+        :return: None.
+        """
+        self.fasta_path = fasta_path
+        return None
 
     def setup_tmpdir(self) -> None:
         """
@@ -611,10 +625,12 @@ def fold_paired_state(
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.pose import Pose
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+        from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
     from crispy_shifty.utils.io import cmd, print_timestamp
 
     start_time = time()
@@ -636,7 +652,36 @@ def fold_paired_state(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         # need to split this pose into either Y or X depending on kwargs
-        pose_chains = pose.split_by_chain()
+        # TODO
+        # load fasta into a dict
+        tmp_fasta_dict = fasta_to_dict(fasta_path)
+        pose_chains = list(pose.split_by_chain())
+        if kwargs["predict"] == "Y":
+            # slice out the bound state, aka chains A and B
+            tmp_pose = Pose()
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                tmp_pose, pose_chains[0], new_chain=True
+            )
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                tmp_pose, pose_chains[1], new_chain=True
+            )
+            # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
+            tmp_fasta_dict = {
+                tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
+            }
+        elif kwargs["predict"] == "X":
+            # slice out the free state, aka chain C
+            tmp_pose = Pose()
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                tmp_pose, pose_chains[2], new_chain=True
+            )
+            # fix the fasta by splitting on chainbreaks '/' and getting the last one
+            tmp_fasta_dict = {
+                tag: "/".join(seq.split("/")[-1]) for tag, seq in tmp_fasta_dict.items()
+            }
+        else:
+            raise ValueError("predict kwarg must be either Y (bound) or X (free)")
+
         print_timestamp("Setting up for AF2", start_time)
         runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, **kwargs)
         runner.setup_runner(file=fasta_path)
@@ -647,6 +692,10 @@ def fold_paired_state(
             "--initial_guess": initial_guess,
             "--reference_pdb": reference_pdb,
         }
+        # TODO now we have to point to the right fasta file
+        new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
+        dict_to_fasta(tmp_fasta_dict, new_fasta_path)
+        runner.set_fasta_path(new_fasta_path)
         runner.update_flags(flag_update)
         runner.update_command()
         print_timestamp("Running AF2", start_time)
