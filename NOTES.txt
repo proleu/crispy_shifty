@@ -1,0 +1,17 @@
+how to do better than last round, chA:
+    - bicistronic screen had high false positives, possibly co-expressed genes resulted in "locked" state Y complexes.
+    - longer loops for state Ys, force state X to have longer (63 and 74-7 have longer than parent, 129 only has match)
+    - torsional space only for backbone generation, later relax into predictions (in torsional space?)
+    - absolutely no disulfides during design >:(
+    - don't over optimize on SAP
+
+how to do better than last round, chB:
+    - longer chB, all have 27 except 63 which had 21 (as opposed to 17-25)
+    -     check results of the chB order4
+    - charges? + C term, - N term
+    -     check results of the chB order4
+    - FF129 has a very polar interface, Cterm sequence is QLQKKNKKQQK
+    - Some have lower helical propensity and most lower coiled-coil propensity at termini (did not quantify)
+    - backside hydrophobics and aromatics may break coiled coil propensity, resurfacing to all polars sometimes seemed to cause issues (also sometimes fixed issues like in FF75) 
+    -     check results of the chB order4
+
