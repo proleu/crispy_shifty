@@ -530,6 +530,8 @@ def generate_decoys_from_pose(
                     pose_scores["designed_by"] = "mpnn"
             else:
                 pass
+            # clear decoy scores
+            pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
             for k, v in pose_scores.items():
                 setPoseExtraScore(decoy, k, v)
             yield decoy

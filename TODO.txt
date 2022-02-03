@@ -35,6 +35,7 @@ dev TODOs:
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
     - test fix mpnn_seq entries in folding.py
+        - generate_decoys leaves in mpnn_seq af2 entries
     - test total vs neighborhood vs difference only MSD with MPNN
 
     - if really bored, add documentation to the InsertResMover and PR
