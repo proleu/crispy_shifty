@@ -170,6 +170,7 @@ class SuperfoldRunner:
             "--type",
             # flags that are optional
             "--enable_dropout",
+            "--keep_chain_order",
             "--output_pae",
             "--overwrite",
             "--save_intermediates",
@@ -219,6 +220,15 @@ class SuperfoldRunner:
         :return: temporary directory path.
         """
         return self.tmpdir
+
+    def override_input_file(self, input_file: str) -> None:
+        """
+        Override the input_file attribute. 
+        :param: input_file: The new input_file.
+        :return: None
+        """
+        self.input_file = input_file
+        return None
 
     def set_fasta_path(self, fasta_path: str) -> None:
         """
@@ -630,7 +640,7 @@ def fold_paired_state(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-        from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
+    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
     from crispy_shifty.utils.io import cmd, print_timestamp
 
     start_time = time()
@@ -696,6 +706,7 @@ def fold_paired_state(
         new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
         dict_to_fasta(tmp_fasta_dict, new_fasta_path)
         runner.set_fasta_path(new_fasta_path)
+        runner.override_input_file(new_fasta_path)
         runner.update_flags(flag_update)
         runner.update_command()
         print_timestamp("Running AF2", start_time)
