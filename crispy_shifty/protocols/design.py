@@ -250,6 +250,7 @@ def gen_task_factory(
     prune_buns: bool = False,
     upweight_ppi: bool = False,
     restrict_pro_gly: bool = False,
+    precompute_ig: bool = False,
     ifcl: bool = False,
     layer_design: dict = None,
 ) -> TaskFactory:
@@ -345,6 +346,10 @@ def gen_task_factory(
         )
         pro_gly_op = OperateOnResidueSubset(PreventRepackingRLT(), pro_gly_sel, False)
         task_factory.push_back(pro_gly_op)
+
+    if precompute_ig:
+        ig_op = pyrosetta.rosetta.protocols.task_operations.SetIGTypeOperation(False, False, False, True)
+        task_factory.push_back(ig_op)
 
     if ifcl:
         ifcl_op = pyrosetta.rosetta.core.pack.task.operation.InitializeFromCommandline()
@@ -682,12 +687,6 @@ def one_state_design_unlooped_dimer(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
-    # TODO: remove below
-    # testing to properly set the TMPDIR on distributed jobs
-    # import os
-    # os.environ['TMPDIR'] = '/scratch'
-    # print(os.environ['TMPDIR'])
-
     start_time = time()
 
     # TODO import print_timestamp
@@ -710,6 +709,7 @@ def one_state_design_unlooped_dimer(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
+        # precompute_ig=True, # possible alternative to hardcoding precompute_ig
         ifcl=True,  # so that it respects precompute_ig if it is passed as a flag
         layer_design=layer_design,
     )
