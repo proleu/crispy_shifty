@@ -33,7 +33,7 @@ figs
 *.silent
 ._*
 .DS_Store
-testing*
+test*
 old*
 run.py
 run.sh
