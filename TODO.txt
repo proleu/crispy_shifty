@@ -37,7 +37,8 @@ dev TODOs:
     - test fix mpnn_seq entries in folding.py
         - generate_decoys leaves in mpnn_seq af2 entries
     - test total vs neighborhood vs difference only MSD with MPNN
-    - add time option to gen_array_tasks
+    - add time and GRES options to gen_array_tasks
+    - dask dataframe implementation in folding notebooks
 
     - if really bored, add documentation to the InsertResMover and PR
 
