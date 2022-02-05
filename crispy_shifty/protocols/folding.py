@@ -524,7 +524,7 @@ def generate_decoys_from_pose(
             # add the scores from the top result to the decoy
             pose_scores.update(top_result)
             if label_first:
-                if tag = "mpnn_seq_0000": #TODO
+                if tag == "mpnn_seq_0000": #TODO
                     pose_scores["designed_by"] = "rosetta"
                 else:
                     pose_scores["designed_by"] = "mpnn"
