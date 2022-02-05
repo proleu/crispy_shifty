@@ -9,6 +9,7 @@ from pyrosetta.rosetta.core.pose import Pose
 
 # Custom library imports
 
+
 @requires_init
 def mpnn_dhr(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -70,4 +71,3 @@ def mpnn_dhr(
         # generate the original pose, with the sequences written to the datacache
         ppose = io.to_packed(pose)
         yield ppose
-

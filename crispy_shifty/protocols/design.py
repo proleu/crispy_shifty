@@ -348,7 +348,9 @@ def gen_task_factory(
         task_factory.push_back(pro_gly_op)
 
     if precompute_ig:
-        ig_op = pyrosetta.rosetta.protocols.task_operations.SetIGTypeOperation(False, False, False, True)
+        ig_op = pyrosetta.rosetta.protocols.task_operations.SetIGTypeOperation(
+            False, False, False, True
+        )
         task_factory.push_back(ig_op)
 
     if ifcl:

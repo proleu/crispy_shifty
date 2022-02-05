@@ -622,7 +622,7 @@ def gen_array_tasks(
     nstruct: Optional[int] = 1,
     nstruct_per_task: Optional[int] = 1,
     options: Optional[str] = "",  # options for pyrosetta initialization
-    perlmutter_mode: Optional[bool]= False,
+    perlmutter_mode: Optional[bool] = False,
     sha1: Optional[str] = "",
     simulation_name: Optional[str] = "crispy_shifty",
     time: Optional[str] = "",
@@ -656,7 +656,7 @@ def gen_array_tasks(
     Defaults to "".
     :param: simulation_name: A `str` or `NoneType` object specifying the name of the
     specific simulation being run.
-    :time: `str` specifying walltime. Must be compatible with queue. Example `55:00` 
+    :time: `str` specifying walltime. Must be compatible with queue. Example `55:00`
     would be 55 min.
     """
     import os, stat, sys

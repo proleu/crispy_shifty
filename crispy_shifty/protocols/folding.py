@@ -196,7 +196,7 @@ class SuperfoldRunner:
         :return: command to run.
         """
         return self.command
-    
+
     def get_fasta_path(self) -> str:
         """
         :return: fasta path.
@@ -223,7 +223,7 @@ class SuperfoldRunner:
 
     def override_input_file(self, input_file: str) -> None:
         """
-        Override the input_file attribute. 
+        Override the input_file attribute.
         :param: input_file: The new input_file.
         :return: None
         """
@@ -524,7 +524,7 @@ def generate_decoys_from_pose(
             # add the scores from the top result to the decoy
             pose_scores.update(top_result)
             if label_first:
-                if tag == "mpnn_seq_0000": #TODO
+                if tag == "mpnn_seq_0000":  # TODO
                     pose_scores["designed_by"] = "rosetta"
                 else:
                     pose_scores["designed_by"] = "mpnn"
@@ -735,7 +735,7 @@ def fold_paired_state_Y(
             # setup SimpleThreadingMover
             stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
             # thread the sequence from chA onto chC
-            stm.set_sequence(chA_seq, start_res=decoy.chain_begin(3))
+            stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
             stm.apply(decoy)
 
             packed_decoy = io.to_packed(decoy)
@@ -768,8 +768,6 @@ def fold_paired_state_X(
     start_time = time()
     # split the string of pdbs paths into a list
     pdb_paths = kwargs.pop("pdb_path").split()
-
-
 
     # this function is special, we don't want a packed_pose_in ever, we maintain it as
     # a kwarg for backward compatibility with PyRosettaCluster

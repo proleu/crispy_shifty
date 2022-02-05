@@ -61,6 +61,7 @@ def fasta_to_dict(fasta: str, new_tags: bool = False) -> Dict[str, str]:
 
     return seqs_dict
 
+
 @requires_init
 def thread_full_sequence(
     pose: Pose,
@@ -133,7 +134,7 @@ class MPNNRunner(ABC):
         # setup standard command line flags for MPNN with default values
         self.flags = {
             "--backbone_noise": "0.0",
-            "--checkpoint_path": "/home/justas/projects/lab_github/mpnn/model_weigths/p17/epoch150_step235456.pt", # TODO
+            "--checkpoint_path": "/home/justas/projects/lab_github/mpnn/model_weigths/p17/epoch150_step235456.pt",  # TODO
             "--hidden_dim": "128",
             "--max_length": "20000",
             "--num_connections": "64",
@@ -177,7 +178,7 @@ class MPNNRunner(ABC):
             "--pssm_log_odds_flag",
             "--pssm_multi",
             "--pssm_threshold",
-            "--save_score", 
+            "--save_score",
         ]
         # TODO git root?
         self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'protein_mpnn_run.py')}"
@@ -296,7 +297,7 @@ class MPNNRunner(ABC):
                 f"--output_path {biounit_path}",
             ]
         )
-        cmd(run_cmd) 
+        cmd(run_cmd)
         # make a number to letter dictionary that starts at 1
         num_to_letter = {
             i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
@@ -470,7 +471,9 @@ class MPNNDesign(MPNNRunner):
 
         return
 
-    def generate_all_poses(self, pose: Pose, include_native:bool=False) -> Iterator[Pose]:
+    def generate_all_poses(
+        self, pose: Pose, include_native: bool = False
+    ) -> Iterator[Pose]:
         """
         :param: pose: Pose object to generate poses from.
         :param: include_native: Whether to generate the original native sequence.
@@ -495,7 +498,7 @@ class MPNNDesign(MPNNRunner):
         for tag, seq in seqs_dict.items():
             if include_native:
                 pass
-            else: # don't include the original pose
+            else:  # don't include the original pose
                 if tag == "mpnn_seq_0000":
                     continue
                 else:
@@ -535,7 +538,7 @@ class MPNNMultistateDesign(MPNNDesign):
         # TODO don't need imports if running super().setup_runner() ?
         import json, os
         from collections import defaultdict
-        
+
         # take advantage of the superclass's setup_runner() to do most of the work
         super().setup_runner(pose)
         self.is_setup = False
@@ -546,7 +549,10 @@ class MPNNMultistateDesign(MPNNDesign):
             i: pose.pdb_info().chain(i) for i in range(1, pose.total_residue() + 1)
         }
         # make a dict mapping chain letters back to numbers
-        chain_numbers = {letter: number for number, letter in enumerate(sorted(set(chains_dict.values())), start=1)}
+        chain_numbers = {
+            letter: number
+            for number, letter in enumerate(sorted(set(chains_dict.values())), start=1)
+        }
         # get a boolean mask of the residues in the design_selector
         if self.design_selector is not None:
             designable_filter = list(self.design_selector.apply(pose))
@@ -554,7 +560,7 @@ class MPNNMultistateDesign(MPNNDesign):
             designable_filter = [True] * pose.size()
         # make a dict mapping of residue numbers to whether they are designable
         designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
-        tied_positions_dict = {"tmp": []} 
+        tied_positions_dict = {"tmp": []}
         # now need the one indexed indices of all the True residues in the residue_selectors
         residue_indices_lists = []
         for sel in self.residue_selectors:
@@ -581,17 +587,18 @@ class MPNNMultistateDesign(MPNNDesign):
                 # get the residue index and chain
                 chain = chains_dict[tied_position]
                 # we need to offset the residue index by the chain now
-                residue_index = tied_position - pose.chain_begin(chain_numbers[chain]) + 1
+                residue_index = (
+                    tied_position - pose.chain_begin(chain_numbers[chain]) + 1
+                )
                 # add the residue index and chain to the dict
                 tied_position_dict[chain].append(residue_index)
             # skip this tied position if any of the residues are not designable
-            if not designable: 
+            if not designable:
                 continue
             else:
                 pass
             # the output json should have a single entry with a list of dicts of the tied positions
             tied_positions_dict["tmp"].append(dict(tied_position_dict))
-
 
         # write the tied_positions_dict to a jsonl file
         with open(tied_positions_path, "w") as f:
@@ -603,7 +610,6 @@ class MPNNMultistateDesign(MPNNDesign):
         self.update_flags(flag_update)
         self.is_setup = True
         return
-
 
 
 @requires_init
@@ -685,7 +691,11 @@ def mpnn_paired_state(
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
-    from pyrosetta.rosetta.core.select.residue_selector import ChainSelector, OrResidueSelector, ResidueIndexSelector
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        ChainSelector,
+        OrResidueSelector,
+        ResidueIndexSelector,
+    )
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

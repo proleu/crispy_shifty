@@ -7,7 +7,7 @@ from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
-from pyrosetta.rosetta.protocols.filters import Filter # TODO
+from pyrosetta.rosetta.protocols.filters import Filter  # TODO
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.kinematics import MoveMap
@@ -34,9 +34,9 @@ def almost_linkres(
 
     This function does fast design using a linkres-style approach.
     It requires at minimum a pose, movemap, scorefxn, and task_factory.
-    The pose will be modified in place with fast_design, and the movemap and scorefxn 
-    will be passed directly to fast_design. The task_factory will have a sequence 
-    symmetry taskop added before it will be passed to fast_design. The residue_selectors 
+    The pose will be modified in place with fast_design, and the movemap and scorefxn
+    will be passed directly to fast_design. The task_factory will have a sequence
+    symmetry taskop added before it will be passed to fast_design. The residue_selectors
     will be used to determine which residues to pseudosymmetrize, and need to specify
     equal numbers of residues for each selector.
     """
@@ -68,11 +68,15 @@ def almost_linkres(
     </MOVERS>
     """
     index_selectors_str = "\n\t\t".join(
-        [f"""<Index name="{key}" resnums="{value}" />""" for key, value in index_selectors.items()]
+        [
+            f"""<Index name="{key}" resnums="{value}" />"""
+            for key, value in index_selectors.items()
+        ]
     )
     # autogenerate an xml string
     xml_string = pre_xml_string.format(
-        index_selectors_str=index_selectors_str, selector_keys=",".join(index_selectors.keys())
+        index_selectors_str=index_selectors_str,
+        selector_keys=",".join(index_selectors.keys()),
     )
     # setup the xml_object
     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
@@ -217,7 +221,8 @@ def two_state_design_paired_state(
             layer_design=layer_design,
         )
         print_timestamp(
-            "Generated interface design task factory with upweighted interface", start_time=start_time
+            "Generated interface design task factory with upweighted interface",
+            start_time=start_time,
         )
         # setup the linked selectors
         residue_selectors = chA, chC
@@ -251,7 +256,8 @@ def two_state_design_paired_state(
             layer_design=layer_design,
         )
         print_timestamp(
-            "Generated interface design task factory with upweighted interface", start_time=start_time
+            "Generated interface design task factory with upweighted interface",
+            start_time=start_time,
         )
         almost_linkres(
             pose=pose,
@@ -271,11 +277,12 @@ def two_state_design_paired_state(
             add_metadata_to_pose(pose, "path_in", pdb_path)
             end_time = time()
             total_time = end_time - start_time
-            print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
+            print_timestamp(
+                f"Total time: {total_time:.2f} seconds", start_time=start_time
+            )
             add_metadata_to_pose(pose, "time", total_time)
             scores.update(pose.scores)
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
             ppose = io.to_packed(pose)
             yield ppose
-
