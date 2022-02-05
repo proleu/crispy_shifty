@@ -622,7 +622,7 @@ def fold_bound_state(
 
 
 @requires_init
-def fold_paired_state(
+def fold_paired_state_Y(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
@@ -663,37 +663,22 @@ def fold_paired_state(
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
-        # need to split this pose into either Y or X depending on kwargs
-        # TODO
+        # need to get Y out of the pose
         # load fasta into a dict
         tmp_fasta_dict = fasta_to_dict(fasta_path)
         pose_chains = list(pose.split_by_chain())
-        if kwargs["predict"] == "Y":
-            # slice out the bound state, aka chains A and B
-            tmp_pose = Pose()
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                tmp_pose, pose_chains[0], new_chain=True
-            )
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                tmp_pose, pose_chains[1], new_chain=True
-            )
-            # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
-            tmp_fasta_dict = {
-                tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
-            }
-        elif kwargs["predict"] == "X":
-            # slice out the free state, aka chain C
-            tmp_pose = Pose()
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                tmp_pose, pose_chains[2], new_chain=True
-            )
-            # fix the fasta by splitting on chainbreaks '/' and getting the last one
-            tmp_fasta_dict = {
-                tag: "/".join(seq.split("/")[-1]) for tag, seq in tmp_fasta_dict.items()
-            }
-        else:
-            raise ValueError("predict kwarg must be either Y (bound) or X (free)")
-
+        # slice out the bound state, aka chains A and B
+        tmp_pose = Pose()
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            tmp_pose, pose_chains[0], new_chain=True
+        )
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            tmp_pose, pose_chains[1], new_chain=True
+        )
+        # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
+        tmp_fasta_dict = {
+            tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
+        }
         pose = tmp_pose.clone()
         print_timestamp("Setting up for AF2", start_time)
         runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, **kwargs)
@@ -705,7 +690,7 @@ def fold_paired_state(
             "--initial_guess": initial_guess,
             "--reference_pdb": reference_pdb,
         }
-        # TODO now we have to point to the right fasta file
+        # now we have to point to the right fasta file
         new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
         dict_to_fasta(tmp_fasta_dict, new_fasta_path)
         runner.set_fasta_path(new_fasta_path)

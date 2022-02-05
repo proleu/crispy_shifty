@@ -20,6 +20,8 @@ Back of the napkin numbers:
     ~44000 junctions
 
 dev TODOs:
+    - fold_paired_states_X and SuperfoldMultiPDB(SuperfoldRunner)
+    - turn off precompute_ig to get deeper sampling and re-prototype
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
         - examples 2-4 with Abbas
