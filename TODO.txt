@@ -36,9 +36,9 @@ dev TODOs:
         - do it when no one is has crispy env active
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
-    - test fix mpnn_seq entries in folding.py
-        - generate_decoys leaves in mpnn_seq af2 entries
-    - test total vs neighborhood vs difference only MSD with MPNN
+    - prototyping/plotting:
+        - test total vs neighborhood vs difference only MSD with MPNN
+        - test 0.1 vs 0.2 vs 0.5 temp for MPNN
     - add time and GRES options to gen_array_tasks
     - dask dataframe implementation in folding notebooks
 
@@ -59,9 +59,10 @@ TODO:
     04 pair bound states # run
     05 design paired states # run
     06 MPNN paired states # make MPNN msd # run
-    07 fold paired states # reuse folding.py Y first then X will be a little annoying # run
-    08 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
-    09 order and analyze
+    07 fold paired states_Y # run
+    08 fold paired states_X # run
+    09 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
+    10 order and analyze
 
 Paper TODOs:
 What will fig. 4 be:

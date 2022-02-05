@@ -524,7 +524,7 @@ def generate_decoys_from_pose(
             # add the scores from the top result to the decoy
             pose_scores.update(top_result)
             if label_first:
-                if i == 0:
+                if tag = "mpnn_seq_0000": #TODO
                     pose_scores["designed_by"] = "rosetta"
                 else:
                     pose_scores["designed_by"] = "mpnn"
@@ -663,22 +663,26 @@ def fold_paired_state_Y(
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
-        # need to get Y out of the pose
         # load fasta into a dict
         tmp_fasta_dict = fasta_to_dict(fasta_path)
         pose_chains = list(pose.split_by_chain())
         # slice out the bound state, aka chains A and B
-        tmp_pose = Pose()
+        tmp_pose, X_pose = Pose(), Pose()
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[0], new_chain=True
         )
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[1], new_chain=True
         )
+        # slice out the free state, aka chain C
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            X_pose, pose_chains[2], new_chain=True
+        )
         # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
         tmp_fasta_dict = {
             tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
         }
+        # change the pose to the modified pose
         pose = tmp_pose.clone()
         print_timestamp("Setting up for AF2", start_time)
         runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, **kwargs)
@@ -722,5 +726,120 @@ def fold_paired_state_Y(
             prefix=prefix,
             rank_on=rank_on,
         ):
+            # add the free state back into the decoy
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                decoy, X_pose, new_chain=True
+            )
+            # get the chA sequence
+            chA_seq = list(decoy.split_by_chain())[0].sequence()
+            # setup SimpleThreadingMover
+            stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
+            # thread the sequence from chA onto chC
+            stm.set_sequence(chA_seq, start_res=decoy.chain_begin(3))
+            stm.apply(decoy)
+
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
+
+
+@requires_init
+def fold_paired_state_X(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to fold with the superfold script.
+    :param: kwargs: keyword arguments to be passed to the superfold script.
+    :return: an iterator of PackedPose objects.
+    """
+
+    from pathlib import Path
+    import sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.pose import Pose
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
+    from crispy_shifty.utils.io import cmd, print_timestamp
+
+    start_time = time()
+    # split the string of pdbs paths into a list
+    pdb_paths = kwargs.pop("pdb_path").split()
+
+
+
+    # this function is special, we don't want a packed_pose_in ever, we maintain it as
+    # a kwarg for backward compatibility with PyRosettaCluster
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        raise ValueError("No packed_pose_in provided")
+
+    # for pose in poses:
+    #     pose.update_residue_neighbors()
+    #     scores = dict(pose.scores)
+    #     # need to get Y out of the pose
+    #     # load fasta into a dict
+    #     tmp_fasta_dict = fasta_to_dict(fasta_path)
+    #     pose_chains = list(pose.split_by_chain())
+    #     # slice out the bound state, aka chains A and B
+    #     tmp_pose = Pose()
+    #     pyrosetta.rosetta.core.pose.append_pose_to_pose(
+    #         tmp_pose, pose_chains[0], new_chain=True
+    #     )
+    #     pyrosetta.rosetta.core.pose.append_pose_to_pose(
+    #         tmp_pose, pose_chains[1], new_chain=True
+    #     )
+    #     # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
+    #     tmp_fasta_dict = {
+    #         tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
+    #     }
+    #     pose = tmp_pose.clone()
+    #     print_timestamp("Setting up for AF2", start_time)
+    #     runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, **kwargs)
+    #     runner.setup_runner(file=fasta_path)
+    #     # initial_guess, reference_pdb both are the tmp.pdb
+    #     initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
+    #     reference_pdb = initial_guess
+    #     flag_update = {
+    #         "--initial_guess": initial_guess,
+    #         "--reference_pdb": reference_pdb,
+    #     }
+    #     # now we have to point to the right fasta file
+    #     new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
+    #     dict_to_fasta(tmp_fasta_dict, new_fasta_path)
+    #     runner.set_fasta_path(new_fasta_path)
+    #     runner.override_input_file(new_fasta_path)
+    #     runner.update_flags(flag_update)
+    #     runner.update_command()
+    #     print_timestamp("Running AF2", start_time)
+    #     runner.apply(pose)
+    #     print_timestamp("AF2 complete, updating pose datacache", start_time)
+    #     # update the scores dict
+    #     scores.update(pose.scores)
+    #     # update the pose with the updated scores dict
+    #     for key, value in scores.items():
+    #         pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+    #     # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
+    #     # TODO, for the pilot run I will not filter the decoys
+    #     # filter_dict = {
+    #     #     "mean_plddt": (gt, 90.0),
+    #     #     "rmsd_to_reference": (lt, 1.75),
+    #     #     "mean_pae_interaction": (lt, 7.5),
+    #     # }
+    #     filter_dict = {}
+    #     rank_on = "mean_plddt"
+    #     prefix = "mpnn_seq"
+    #     for decoy in generate_decoys_from_pose(
+    #         pose,
+    #         filter_dict=filter_dict,
+    #         label_first=True,
+    #         prefix=prefix,
+    #         rank_on=rank_on,
+    #     ):
+    #         packed_decoy = io.to_packed(decoy)
+    #         yield packed_decoy
