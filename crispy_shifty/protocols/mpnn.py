@@ -120,7 +120,7 @@ class MPNNRunner(ABC):
         If no `chains_to_mask` is provided, the runner will run on (mask) all chains.
         If a `chains_to_mask` is provided, the runner will run on (mask) only that chain.
         If no `design_selector` is provided, all residues on all masked chains will be designed.
-        The chain letters in your PDB must be correct. TODO, might want to add a check for this.
+        The chain letters in your PDB must be correct.
         """
 
         from pathlib import Path
@@ -391,6 +391,8 @@ class MPNNDesign(MPNNRunner):
         **kwargs,
     ):
         """
+        :param: args: arguments to pass to MPNNRunner.
+        :param: kwargs: keyword arguments to pass to MPNNRunner.
         Initialize the base class for MPNN runners with common attributes.
         """
         super().__init__(*args, **kwargs)
@@ -523,6 +525,8 @@ class MPNNMultistateDesign(MPNNDesign):
         **kwargs,
     ):
         """
+        :param: args: arguments to pass to MPNNDesign.
+        :param: kwargs: keyword arguments to pass to MPNNDesign.
         Initialize the base class for MPNN runners with common attributes.
         """
         super().__init__(*args, **kwargs)
@@ -535,7 +539,6 @@ class MPNNMultistateDesign(MPNNDesign):
         Setup the MPNNRunner. Make a tmpdir and write input files to the tmpdir.
         Output sequences and scores will be written temporarily to the tmpdir as well.
         """
-        # TODO don't need imports if running super().setup_runner() ?
         import json, os
         from collections import defaultdict
 
