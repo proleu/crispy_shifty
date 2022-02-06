@@ -588,6 +588,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
         import json, os, sys
         from glob import glob
         from pathlib import Path
+        import pyrosetta
         import pyrosetta.distributed.io as io
         
         # insert the root of the repo into the sys.path
@@ -927,8 +928,8 @@ def fold_paired_state_X(
     start_time = time()
     # get the pdb_path from the kwargs
     pdb_path = kwargs.pop("pdb_path")
-    # there are multiple paths in the pdb_path
-    pdb_paths = pdb_path.split()
+    # there are multiple paths in the pdb_path, we need to split them and rejoin them
+    pdb_paths = pdb_path.split("____")
 
     # this function is special, we don't want a packed_pose_in ever, we maintain it as
     # a kwarg for backward compatibility with PyRosettaCluster
