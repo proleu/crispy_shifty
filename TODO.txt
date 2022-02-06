@@ -1,9 +1,5 @@
 Strategy:
-Use MPNN for sequence design after smaller sampling runs with Rosetta to sample backbones
 Probably only need delta SAP and CMS/ddG/SASA for interface filtering
-Start MSD sampling from designs that alphafold to single state state Y
-Use MPNN for two-state sequence design after smaller sampling runs with “almost linkres” to sample backbones again
-Look for complex prediction on AF2 then fold state X
 Increase SAP tolerance somewhat
 If disulfide stapled states are needed or wanted, just staple and predict
 
@@ -20,8 +16,10 @@ Back of the napkin numbers:
     ~44000 junctions
 
 dev TODOs:
-    - fold_paired_states_X and SuperfoldMultiPDB(SuperfoldRunner)
     - turn off precompute_ig to get deeper sampling and re-prototype
+    - prototyping/plotting:
+        - test total vs neighborhood vs difference only MSD with MPNN
+        - test 0.1 vs 0.2 vs 0.5 temp for MPNN
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
         - examples 2-4 with Abbas
@@ -36,16 +34,13 @@ dev TODOs:
         - do it when no one is has crispy env active
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
-    - prototyping/plotting:
-        - test total vs neighborhood vs difference only MSD with MPNN
-        - test 0.1 vs 0.2 vs 0.5 temp for MPNN
-    - add time and GRES options to gen_array_tasks
+    - TODOs and docstrings in all modules
+    - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
     - dask dataframe implementation in folding notebooks
 
     - if really bored, add documentation to the InsertResMover and PR
 
     - DOTFILES - check init.vim is working, then version control
-    - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
     - rebalance states/parents after 03_fold or just go crazy?
 
 TODO: 

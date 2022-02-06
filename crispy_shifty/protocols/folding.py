@@ -930,6 +930,7 @@ def fold_paired_state_X(
     pdb_path = kwargs.pop("pdb_path")
     # there are multiple paths in the pdb_path, we need to split them and rejoin them
     pdb_paths = pdb_path.split("____")
+    pdb_path = " ".join(pdb_paths)
 
     # this function is special, we don't want a packed_pose_in ever, we maintain it as
     # a kwarg for backward compatibility with PyRosettaCluster
