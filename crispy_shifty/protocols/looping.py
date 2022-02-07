@@ -868,8 +868,8 @@ def loop_bound_state(
         closure_type = loop_extend(
             pose=pose,
             connections="[A+B],C",
-            extend_before=2,
-            extend_after=2,
+            extend_before=3,
+            extend_after=3,
             min_loop_length=min_loop_length,
             max_loop_length=max_loop_length,
             rmsd_threshold=0.5,
