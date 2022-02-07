@@ -986,7 +986,7 @@ def one_state_design_bound_state(
         pack_nbhd=False,
         extra_rotamers_level=2,
         limit_arochi=True,
-        prune_buns=True,
+        prune_buns=False,
         upweight_ppi=True,
         restrict_pro_gly=True,
         precompute_ig=False,
