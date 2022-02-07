@@ -487,6 +487,9 @@ class StateMaker(ABC):
         Initialize the base class with common attributes.
         """
 
+        import pyrosetta
+        import pyrosetta.distributed.io as io
+
         self.input_pose = io.to_pose(pose)
         self.pre_break_helix = pre_break_helix
         self.post_break_helix = self.pre_break_helix + 1
