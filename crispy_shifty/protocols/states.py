@@ -804,7 +804,7 @@ class BoundStateMaker(StateMaker):
                     # fix PDBInfo and chain numbering
                     rechain.apply(dock)
                     # extend the bound helix
-                    dock = extend_helical_termini(
+                    dock = extend_helix_termini(
                         pose=dock,
                         chain=3,
                         extend_n_term=5,
