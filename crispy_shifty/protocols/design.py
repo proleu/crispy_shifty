@@ -129,6 +129,9 @@ def interface_among_chains(
     chain_list: list, vector_mode: bool = False
 ) -> ResidueSelector:
     """
+    :param: chain_list: List of chains to select the interface between.
+    :param: vector_mode: If true, use vectors of Cb atoms in addition to distance.
+    :return: ResidueSelector that selects the interface between the chains.
     Returns a selector that selects the interface between the given chains of a pose.
     """
     from itertools import combinations
@@ -148,6 +151,13 @@ def interface_among_chains(
 
 
 def gen_std_layer_design(layer_aas_list: list = None) -> dict:
+    """
+    :param: layer_aas_list: List of amino acids to include in each layer. Must be of 
+    length 13.
+    :return: Dictionary of layer design definitions.
+    Returns a dictionary of layer design definitions.
+    """
+
     from itertools import product
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
@@ -262,6 +272,7 @@ def gen_task_factory(
     :param: prune_buns: bool, whether to prune rotamers with buried unsatisfied polars.
     :param: upweight_ppi: bool, whether to upweight interfaces.
     :param: restrict_pro_gly: bool, whether to restrict proline and glycine from design.
+    :param: precompute_ig: bool, whether to precompute the interaction graph.
     :param: ifcl: bool, whether to initialize the packer from the command line.
     :param: layer_design: dict, custom layer design definition if you want to use one.
     :return: TaskFactory for design.
@@ -375,6 +386,16 @@ def gen_movemap(
     nu: bool = False,
     branch: bool = False,
 ) -> MoveMap:
+    """
+    :param: jump: bool, whether to allow jump moves.
+    :param: chi: bool, whether to allow chi moves.
+    :param: bb: bool, whether to allow backbone moves.
+    :param: nu: bool, whether to allow nu moves.
+    :param: branch: bool, whether to allow branch moves.
+    :return: MoveMap for design.
+    Sets up the MoveMap for design.
+    """
+
     import pyrosetta
 
     movemap = pyrosetta.rosetta.core.kinematics.MoveMap()
@@ -394,13 +415,21 @@ def fast_design(
     repeats: int = 1,
 ) -> None:
     """
+    :param: pose: Pose, the pose to design.
+    :param: task_factory: TaskFactory, the task factory to use.
+    :param: scorefxn: ScoreFunction, the score function to use.
+    :param: movemap: MoveMap, the movemap to use.
+    :param: repeats: int, the number of times to repeat the design.
+    :return: None.
     Runs FastDesign with the given task factory and score function.
     """
-    # took ~37 minutes to run with fixbb and one repeat on test case X23_3_20_3_ct7_fc.pdb
+    
     import pyrosetta
 
-    # using an xml to create the fastdesign mover since it's easier to load in a relax script and to specify the minimization algorithm
-    # chose lbfgs_armigo_nonmonotone for the minimization algorithm based on https://new.rosettacommons.org/docs/wiki/rosetta_basics/structural_concepts/minimization-overview
+    # use an xml to create the fastdesign mover since it's easier to load a relax script 
+    # and to specify the minimization algorithm
+    # chose lbfgs_armigo_nonmonotone for the minimization algorithm based on 
+    # https://new.rosettacommons.org/docs/wiki/rosetta_basics/structural_concepts/minimization-overview
     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
         f"""
         <MOVERS>
@@ -423,6 +452,10 @@ def pack_rotamers(
     pose: Pose, task_factory: TaskFactory, scorefxn: ScoreFunction
 ) -> None:
     """
+    :param: pose: Pose, the pose to design.
+    :param: task_factory: TaskFactory, the task factory to use.
+    :param: scorefxn: ScoreFunction, the score function to use.
+    :return: None.
     Runs PackRotamers with the given task factory and score function.
     """
     import pyrosetta
@@ -434,6 +467,13 @@ def pack_rotamers(
 
 
 def struct_profile(pose: Pose, design_sel: ResidueSelector) -> None:
+    """
+    :param: pose: Pose, the pose to design.
+    :param: design_sel: ResidueSelector, the design selection.
+    :return: None.
+    Runs StructProfile with the given design selection.
+    """
+
     import pyrosetta
 
     # used the defaults from rosettascripts, only changing things changed in the original one-state xml
@@ -462,6 +502,8 @@ def struct_profile(pose: Pose, design_sel: ResidueSelector) -> None:
 
 def clear_constraints(pose: Pose) -> None:
     """
+    :param: pose: Pose, the pose to design.
+    :return: None.
     Removes all constraints from the pose.
     """
     import pyrosetta
@@ -477,7 +519,13 @@ def gen_sasa_filter(pose: Pose, name: str = "sasa"):
     # sasa_filter = pyrosetta.rosetta.protocols.simple_filters.InterfaceSasaFilter()
 
 
-def gen_score_filter(scorefxn: ScoreFunction, name: str = "score"):
+def gen_score_filter(scorefxn: ScoreFunction, name: str = "score") -> Filter:
+    """
+    :param: scorefxn: ScoreFunction, the score function to use.
+    :param: name: str, the name of the filter.
+    :return: ScoreFilter, the score filter.
+    Generates a score filter with the given score function.
+    """
     import pyrosetta
 
     score_filter = pyrosetta.rosetta.protocols.score_filters.ScoreTypeFilter(
@@ -487,7 +535,15 @@ def gen_score_filter(scorefxn: ScoreFunction, name: str = "score"):
     return score_filter
 
 
-def score_on_chain_subset(pose: Pose, filter: Filter, chain_list: list):
+def score_on_chain_subset(pose: Pose, filter: Filter, chain_list: list) -> Union[float, int, str]:
+    """
+    :param: pose: Pose, the pose to score.
+    :param: filter: Filter, the filter to use.
+    :param: chain_list: list, the list of chains to score.
+    :return: Union[float, int, str], the score of the pose with the filter.
+    Scores the pose with the given filter on the given chains.
+    """
+
     import pyrosetta
 
     chain_str = "".join(str(i) for i in chain_list)
@@ -828,6 +884,12 @@ def one_state_design_unlooped_dimer(
 def one_state_design_bound_state(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a packed pose to use as a starting point for interface 
+    design. If None, a pose will be generated from the input pdb_path.
+    :param: kwargs: keyword arguments for the design.
+    :return: an iterator of packed poses.
+    """
 
     from pathlib import Path
     from time import time
@@ -842,7 +904,6 @@ def one_state_design_bound_state(
 
     start_time = time()
     # hardcode precompute_ig
-    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
     design_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
     print_timestamp("Generated interface selector", start_time=start_time)
     layer_design = gen_std_layer_design()
@@ -854,7 +915,8 @@ def one_state_design_bound_state(
         prune_buns=True,
         upweight_ppi=True,
         restrict_pro_gly=True,
-        ifcl=True,  # so that it respects precompute_ig if it is passed as an flag
+        precompute_ig=False,
+        ifcl=True,
         layer_design=layer_design,
     )
     print_timestamp("Generated interface design task factory", start_time=start_time)

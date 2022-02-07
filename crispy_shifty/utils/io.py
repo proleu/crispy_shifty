@@ -640,7 +640,9 @@ def gen_array_tasks(
     :param: gres: string specifying the gres to use, if any, e.g. "--gres=gpu:1".
     :param: memory: amount of memory to request for each task.
     :param: nstruct: number of structures to generate per input.
-    :param: nstruct_per_task: number of structures to generate per task generated.
+    :param: nstruct_per_task: number of structures to generate per task generated. Using
+    this option will chunk files from the design_list_file together, resulting in less
+    total tasks, useful for fast running protocols.
     :param: options: options for pyrosetta initialization.
     :param: perlmutter_mode: whether to use the Perlmutter mode. Perlmutter mode
     grabs entire nodes at a time and uses GNU parallel to run the tasks on the nodes.
