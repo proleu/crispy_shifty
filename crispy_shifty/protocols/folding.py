@@ -11,6 +11,7 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 
+
 def generate_decoys_from_pose(
     pose: Pose,
     filter_dict: Dict[
@@ -566,14 +567,14 @@ class SuperfoldMultiPDB(SuperfoldRunner):
 
         super().__init__(*args, pose=dummy_pose, **kwargs)
         self.tag_pose_dict = {}
-    
+
     def setup_runner(
-        self, 
+        self,
         chains_to_keep: Optional[List[int]] = None,
         flag_update: Optional[Dict[str, str]] = None,
     ) -> None:
         """
-        :param: chains_to_keep: list of chains to keep in the pose. If None, keep all 
+        :param: chains_to_keep: list of chains to keep in the pose. If None, keep all
         chains. Must be a list of ints.
         :param: flag_update: dictionary of flags to update, if any.
         :return: None
@@ -590,7 +591,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
         from pathlib import Path
         import pyrosetta
         import pyrosetta.distributed.io as io
-        
+
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
@@ -608,9 +609,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
             # TODO use pathlib
             tag = os.path.basename(path).split(".pdb")[0]
             self.tag_pose_dict[tag] = next(
-                path_to_pose_or_ppose(
-                    path=path, cluster_scores=True, pack_result=False
-                )
+                path_to_pose_or_ppose(path=path, cluster_scores=True, pack_result=False)
             )
         # TODO write the poses to clean PDB files of only ATOM coordinates.
         for tag, pose in self.tag_pose_dict.items():
@@ -698,6 +697,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
         :return: dict of the poses and their tags
         """
         return self.tag_pose_dict
+
 
 @requires_init
 def fold_bound_state(
@@ -964,7 +964,6 @@ def fold_paired_state_X(
             prefix=tag,
             rank_on=rank_on,
         ):
-        
+
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
-
