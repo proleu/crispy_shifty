@@ -42,17 +42,21 @@ def loop_match(pose: Pose, length: int, connections: str = "[A+B]") -> str:
 
 def loop_extend(
     pose: Pose,
+    connections: str = "[A+B]",
+    extend_before: int = 3,
+    extend_after: int = 3,
     min_loop_length: int = 2,
     max_loop_length: int = 5,
-    connections: str = "[A+B]",
+    rmsd_threshold: float = 0.8,
 ) -> str:
     """
     :param: pose: The pose to insert the loop into.
+    :param: connections: The connections to use.
+    :param: extend_before: The number of residues allowed to extend before the loop.
+    :param: extend_after: The number of residues allowed to extend after the loop.
     :param: min_loop_length: The minimum length of the loop.
     :param: max_loop_length: The maximum length of the loop.
-    :param: connections: The connections to use.
     :return: Whether the loop was successfully inserted.
-
     Runs ConnectChainsMover.
     May increase the loop length relative to the parent
     """
@@ -64,9 +68,9 @@ def loop_extend(
             <ConnectChainsMover name="connectchains" 
                 chain_connections="{connections}" 
                 loopLengthRange="{min_loop_length},{max_loop_length}" 
-                resAdjustmentRangeSide1="0,3" 
-                resAdjustmentRangeSide2="0,3" 
-                RMSthreshold="0.8"/>
+                resAdjustmentRangeSide1="0,{extend_before}" 
+                resAdjustmentRangeSide2="0,{extend_after}" 
+                RMSthreshold="{rmsd_threshold}"/>
         </MOVERS>
         """
     )
@@ -809,7 +813,6 @@ def loop_bound_state(
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` .
     `-indexed_structure_store:fragment_store \
     /net/databases/VALL_clustered/connect_chains/ss_grouped_vall_helix_shortLoop.h5`
-    TODO check if this is the correct fragment store
     """
 
     import sys
@@ -864,9 +867,12 @@ def loop_bound_state(
         print_timestamp("Generating loop extension...", start_time, end="")
         closure_type = loop_extend(
             pose=pose,
+            connections="[A+B],C",
+            extend_before=2,
+            extend_after=2,
             min_loop_length=min_loop_length,
             max_loop_length=max_loop_length,
-            connections="[A+B],C",
+            rmsd_threshold=0.5,
         )
         if closure_type == "not_closed":
             continue  # move on to next pose, we don't care about the ones that aren't closed
@@ -886,8 +892,6 @@ def loop_bound_state(
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
             looped_poses.append(pose)
 
-    # hardcode precompute_ig
-    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
     layer_design = gen_std_layer_design()
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
@@ -897,7 +901,7 @@ def loop_bound_state(
     for looped_pose in looped_poses:
         scores = dict(looped_pose.scores)
         new_loop_str = scores["new_loop_str"]
-        print_timestamp("Designing loop...", start_time, end="")
+        print_timestamp("Building loop...", start_time)
         new_loop_sel = (
             pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
                 new_loop_str
@@ -913,21 +917,27 @@ def loop_bound_state(
             pack_nbhd=True,
             extra_rotamers_level=2,
             limit_arochi=True,
-            prune_buns=True,
+            prune_buns=False,
             upweight_ppi=False,
             restrict_pro_gly=False,
+            precompute_ig=False,
             ifcl=True,
+            layer_design=layer_design,
         )
+        print_timestamp("Designing loop...", start_time)
         struct_profile(
             looped_pose,
             design_sel,
         )
-        pack_rotamers(
-            looped_pose,
-            task_factory,
-            design_sfxn,
-        )
+        # pack the loop twice
+        for _ in range(0,2):
+            pack_rotamers(
+                looped_pose,
+                task_factory,
+                design_sfxn,
+            )
         clear_constraints(looped_pose)
+        print_timestamp("Scoring loop...", start_time)
         pyrosetta.rosetta.core.pose.clearPoseExtraScores(looped_pose)
         total_length = looped_pose.total_residue()
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
