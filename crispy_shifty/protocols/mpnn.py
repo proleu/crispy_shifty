@@ -656,7 +656,6 @@ def mpnn_bound_state(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
 
-    # TODO parse kwargs for MPNN
     if "mpnn_temperature" in kwargs:
         if kwargs["mpnn_temperature"] == "scan":
             mpnn_temperatures = [0.1, 0.2, 0.5]
@@ -698,7 +697,6 @@ def mpnn_bound_state(
                 )
     else:
         mpnn_design_areas = [selector_options["interface"]]
-    # end TODO
 
     for pose in poses:
         pose.update_residue_neighbors()
