@@ -368,9 +368,7 @@ def combine_two_poses(
     newpose.append_residue_by_jump(
         pose_b.residue(start_b), newpose.chain_end(1), "CA", "CA", 1
     )
-    for i in range(
-        start_b + 1, pose_b.total_residue() + 1
-    ):  # TODO make sure this doesn't break the statemakers
+    for i in range(start_b + 1, pose_b.total_residue() + 1):
         newpose.append_residue_by_bond(pose_b.residue(i))
     return newpose
 
@@ -941,7 +939,6 @@ def pair_bound_state(
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` and
     `-indexed_structure_store:fragment_store \
     /net/databases/VALL_clustered/connect_chains/ss_grouped_vall_helix_shortLoop.h5`
-    TODO check if this is the correct fragment store
     """
     import sys
     from pathlib import Path
@@ -978,9 +975,6 @@ def pair_bound_state(
     for pose in poses:
         # get scores
         scores = dict(pose.scores)
-        scores = {
-            k: v for k, v in scores.items() if "mpnn_seq_" not in k
-        }  # TODO just for pilotrun
         pdb = scores["pdb"]
         pre_break_helix = scores["pre_break_helix"]
         # find a state 0 from the same parent pdb with the same pre-break helix
@@ -1037,10 +1031,6 @@ def pair_bound_state(
             continue
         print_timestamp("Setting up for design", start_time)
         layer_design = gen_std_layer_design()
-        # hardcode precompute_ig
-        pyrosetta.rosetta.basic.options.set_boolean_option(
-            "packing:precompute_ig", True
-        )
         # make sfxn
         sfxn = pyrosetta.create_score_function("beta_nov16.wts")
         # get the residue numbers of the loop
@@ -1061,21 +1051,25 @@ def pair_bound_state(
             pack_nbhd=True,
             extra_rotamers_level=2,
             limit_arochi=True,
-            prune_buns=True,
+            prune_buns=False,
             upweight_ppi=False,
             restrict_pro_gly=False,
+            precompute_ig=False,
             ifcl=True,
             layer_design=layer_design,
         )
+        print_timestamp("Designing loop...", start_time)
         struct_profile(
             closed_x_pose,
             design_sel,
         )
-        pack_rotamers(
-            closed_x_pose,
-            task_factory,
-            sfxn,
-        )
+        # pack the loop twice
+        for _ in range(0, 2):
+            pack_rotamers(
+                closed_x_pose,
+                task_factory,
+                sfxn,
+            )
         print_timestamp("Filtering state X", start_time)
         bb_clash_post = clash_check(closed_x_pose)
         score_per_res(closed_x_pose, sfxn)

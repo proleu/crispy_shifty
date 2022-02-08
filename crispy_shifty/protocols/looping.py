@@ -930,7 +930,7 @@ def loop_bound_state(
             design_sel,
         )
         # pack the loop twice
-        for _ in range(0,2):
+        for _ in range(0, 2):
             pack_rotamers(
                 looped_pose,
                 task_factory,
