@@ -34,7 +34,7 @@ dev TODOs:
         - do it when no one is has crispy env active
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
-    - TODOs and docstrings in all modules
+    - TODOs and docstrings in all modules - beta_nov16 notices in docstrings where used.
     - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
     - dask dataframe implementation in folding notebooks
 

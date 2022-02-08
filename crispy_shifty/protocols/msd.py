@@ -7,7 +7,6 @@ from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
-from pyrosetta.rosetta.protocols.filters import Filter  # TODO
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.kinematics import MoveMap
@@ -106,8 +105,10 @@ def two_state_design_paired_state(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
-    TODO
-    needs beta_nov16 at least
+    :param: packed_pose_in: a packed pose to use as a starting point for interface
+    design. If None, a pose will be generated from the input pdb_path.
+    :param: kwargs: keyword arguments for almost_linkres.
+    Needs `-corrections:beta_nov16 true` in init.
     """
 
     from pathlib import Path
@@ -139,13 +140,11 @@ def two_state_design_paired_state(
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
-    # hardcode precompute_ig
-    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
     # setup scorefxns
     clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
-        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0  # TODO
+        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
     )
     print_timestamp("Generated score functions", start_time=start_time)
     # setup movemap
@@ -214,9 +213,10 @@ def two_state_design_paired_state(
             pack_nbhd=True,
             extra_rotamers_level=2,
             limit_arochi=True,
-            prune_buns=True,
+            prune_buns=False,
             upweight_ppi=True,
             restrict_pro_gly=True,
+            precompute_ig=False,
             ifcl=True,
             layer_design=layer_design,
         )
@@ -249,9 +249,10 @@ def two_state_design_paired_state(
             pack_nbhd=True,
             extra_rotamers_level=2,
             limit_arochi=True,
-            prune_buns=True,
+            prune_buns=False,
             upweight_ppi=False,
             restrict_pro_gly=True,
+            precompute_ig=False,
             ifcl=True,
             layer_design=layer_design,
         )
