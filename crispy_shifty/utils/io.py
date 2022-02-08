@@ -846,7 +846,7 @@ def gen_array_tasks(
 
     # Let's go
     print("Run the following command with your desired environment active:")
-    print(f"sbatch -a 1-{array_len} {run_sh_file}")
+    print(f"sbatch -a 1-{int(array_len)} {run_sh_file}")
 
 
 def collect_score_file(output_path: str, score_dir_name: str = "scores") -> None:
