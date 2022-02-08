@@ -627,10 +627,15 @@ def mpnn_bound_state(
 
     from pathlib import Path
     import sys
+    from itertools import product
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
-    from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        ChainSelector,
+        NeighborhoodResidueSelector,
+        TrueResidueSelector,
+    )
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -651,32 +656,89 @@ def mpnn_bound_state(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
 
+    # TODO parse kwargs for MPNN
+    if "mpnn_temperature" in kwargs:
+        if kwargs["mpnn_temperature"] == "scan":
+            mpnn_temperatures = [0.1, 0.2, 0.5]
+        else:
+            mpnn_temperature = float(kwargs["mpnn_temperature"])
+            assert (
+                0.0 <= mpnn_temperature <= 1.0
+            ), "mpnn_temperature must be between 0 and 1"
+    else:
+        mpnn_temperatures = [0.1]
+    # setup dict for MPNN design areas
+    print_timestamp("Setting up design selectors", start_time)
+    # make a designable residue selector of only the interface residues
+    chA = ChainSelector(1)
+    chB = ChainSelector(2)
+    interface_selector = interface_between_selectors(chA, chB)
+    neighborhood_selector = NeighborhoodResidueSelector(
+        interface_selector, distance=8.0, include_focus_in_subset=True
+    )
+    full_selector = TrueResidueSelector()
+    selector_options = {
+        "full": full_selector,
+        "interface": interface_selector,
+        "neighborhood": neighborhood_selector,
+    }
+    # make the inverse dict of selector options
+    selector_inverse_options = {value: key for key, value in selector_options.items()}
+    if "mpnn_design_area" in kwargs:
+        if kwargs["mpnn_design_area"] == "scan":
+            mpnn_design_areas = [
+                selector_options[key] for key in ["full", "interface", "neighborhood"]
+            ]
+        else:
+            try:
+                mpnn_design_areas = [selector_options[kwargs["mpnn_design_area"]]]
+            except:
+                raise ValueError(
+                    "mpnn_design_area must be one of the following: full, interface, neighborhood"
+                )
+    else:
+        mpnn_design_areas = [selector_options["interface"]]
+    # end TODO
+
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
-        print_timestamp("Setting up design selector", start_time)
-        # make a designable residue selector of only the interface residues
-        chA = ChainSelector(1)
-        chB = ChainSelector(2)
-        interface_selector = interface_between_selectors(chA, chB)
-        print_timestamp("Designing interface with MPNN", start_time)
-        # construct the MPNNDesign object
-        mpnn_design = MPNNDesign(
-            design_selector=interface_selector,
-            omit_AAs="CX",
-            **kwargs,
-        )
-        # design the pose
-        mpnn_design.apply(pose)
-        print_timestamp("MPNN design complete, updating pose datacache", start_time)
-        # update the scores dict
-        scores.update(pose.scores)
-        # update the pose with the updated scores dict
-        for key, value in scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-        # generate the original pose, with the sequences written to the datacache
-        ppose = io.to_packed(pose)
-        yield ppose
+        original_pose = pose.clone()
+
+        # TODO loop over the product of mpnn_temperatures and mpnn_design_selectors
+        mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
+        num_conditions = len(list(mpnn_conditions))
+        print_timestamp(f"Beginning {num_conditions} MPNNDesign runs", start_time)
+        for i, (mpnn_temperature, mpnn_design_area) in enumerate(list(mpnn_conditions)):
+            pose = original_pose.clone()
+            print_timestamp(
+                f"Beginning MPNNDesign run {i+1}/{num_conditions}", start_time
+            )
+            print_timestamp("Designing interface with MPNN", start_time)
+            # construct the MPNNDesign object
+            mpnn_design = MPNNDesign(
+                design_selector=mpnn_design_area,
+                omit_AAs="CX",
+                temperature=mpnn_temperature,
+                **kwargs,
+            )
+            # design the pose
+            mpnn_design.apply(pose)
+            print_timestamp("MPNN design complete, updating pose datacache", start_time)
+            # update the scores dict
+            scores.update(pose.scores)
+            scores.update(
+                {
+                    "mpnn_temperature": mpnn_temperature,
+                    "mpnn_design_area": selector_inverse_options[mpnn_design_area],
+                }
+            )
+            # update the pose with the updated scores dict
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+            # generate the original pose, with the sequences written to the datacache
+            ppose = io.to_packed(pose)
+            yield ppose
 
 
 @requires_init
@@ -738,7 +800,7 @@ def mpnn_paired_state(
             i + offset for i, designable in enumerate(chA_filter, start=1) if designable
         ]
         X_interface_residues_str = ",".join(str(i) for i in X_interface_residues)
-        # make design selectors TODO
+        # make design selectors
         interface_selector = interface_between_selectors(chA, chB)
         X_selector = ResidueIndexSelector(X_interface_residues_str)
         design_selector = OrResidueSelector(interface_selector, X_selector)
