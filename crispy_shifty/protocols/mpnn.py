@@ -867,8 +867,8 @@ def mpnn_paired_state(
             scores.update(pose.scores)
             scores.update(
                 {
-                    "mpnn_temperature": mpnn_temperature,
-                    "mpnn_design_area": selector_inverse_options[mpnn_design_area],
+                    "mpnn_msd_temperature": mpnn_temperature,
+                    "mpnn_msd_design_area": selector_inverse_options[mpnn_design_area],
                 }
             )
             # update the pose with the updated scores dict
