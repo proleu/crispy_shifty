@@ -17,10 +17,6 @@ Back of the napkin numbers:
 
 dev TODOs:
     - loop instead of 21 repeats in 00_design
-    - turn off precompute_ig to get deeper sampling and re-prototype
-    - prototyping/plotting:
-        - test total vs neighborhood vs difference only MSD with MPNN
-        - test 0.1 vs 0.2 vs 0.5 temp for MPNN
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
         - examples 2-4 with Abbas
@@ -48,26 +44,21 @@ TODO:
     00 filter scaffold sets # run
     01 prep inputs # run # add slurm_logs loc for log_directory
     02 make states # change to array tasks? # run
-    00 design bound states # determine how many nstruct # linmem_ig and turn off prune # run
-    01 loop bound_states # test 0-1,2,3 adjustment per side comparison # probably want 0-2 # run
+    00 design bound states # run
+    01 loop bound_states # run
     02 MPNN bound states # figure out how many? probably 100 or so # run
     03 fold bound states # figure out how low to go with pae_interaction # run
     04 pair bound states # run
     05 design paired states # run
-    06 MPNN paired states # make MPNN msd # run
+    06 MPNN paired states # run
     07 fold paired states_Y # run
     08 fold paired states_X # run
     09 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
     10 order and analyze
 
 Paper TODOs:
-What will fig. 4 be:
-FRET? NMR? photoswitching? negative cooperativity? 
-crowdsource cool tricks, maybe ask some synbio people
 use symbolic regression on flexdock trajectory datasets? 
 networks learn to summarize rules about biophysical mechanics, 
 then we use a seperate layer to regress equations
 
-crispy snippy TODOs:
-fluo polarization for protease or fluorophore/quencher?
 

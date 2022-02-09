@@ -625,9 +625,9 @@ def mpnn_bound_state(
     :return: an iterator of PackedPose objects.
     """
 
+    from itertools import product
     from pathlib import Path
     import sys
-    from itertools import product
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
@@ -702,7 +702,7 @@ def mpnn_bound_state(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         original_pose = pose.clone()
-
+        # iterate over the mpnn parameter combinations
         mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
         num_conditions = len(list(mpnn_conditions))
         print_timestamp(f"Beginning {num_conditions} MPNNDesign runs", start_time)
@@ -748,6 +748,7 @@ def mpnn_paired_state(
     :return: an iterator of PackedPose objects.
     """
 
+    from itertools import product
     from pathlib import Path
     import sys
     from time import time
@@ -756,7 +757,9 @@ def mpnn_paired_state(
     from pyrosetta.rosetta.core.select.residue_selector import (
         ChainSelector,
         OrResidueSelector,
+        NeighborhoodResidueSelector,
         ResidueIndexSelector,
+        TrueResidueSelector,
     )
 
     # insert the root of the repo into the sys.path
@@ -791,77 +794,86 @@ def mpnn_paired_state(
     # setup dict for MPNN design areas
     print_timestamp("Setting up design selectors", start_time)
     # make a designable residue selector of only the interface residues
-    # chA = ChainSelector(1)
-    # chB = ChainSelector(2)
-    # interface_selector = interface_between_selectors(chA, chB)
-    # neighborhood_selector = NeighborhoodResidueSelector(
-    #     interface_selector, distance=8.0, include_focus_in_subset=True
-    # )
-    # full_selector = TrueResidueSelector()
-    # selector_options = {
-    #     "full": full_selector,
-    #     "interface": interface_selector,
-    #     "neighborhood": neighborhood_selector,
-    # }
-    # # make the inverse dict of selector options
-    # selector_inverse_options = {value: key for key, value in selector_options.items()}
-    # if "mpnn_design_area" in kwargs:
-    #     if kwargs["mpnn_design_area"] == "scan":
-    #         mpnn_design_areas = [
-    #             selector_options[key] for key in ["full", "interface", "neighborhood"]
-    #         ]
-    #     else:
-    #         try:
-    #             mpnn_design_areas = [selector_options[kwargs["mpnn_design_area"]]]
-    #         except:
-    #             raise ValueError(
-    #                 "mpnn_design_area must be one of the following: full, interface, neighborhood"
-    #             )
-    # else:
-    #     mpnn_design_areas = [selector_options["interface"]]
+    chA = ChainSelector(1)
+    chB = ChainSelector(2)
+    chC = ChainSelector(3)
+    interface_selector = interface_between_selectors(chA, chB)
+    neighborhood_selector = NeighborhoodResidueSelector(
+        interface_selector, distance=8.0, include_focus_in_subset=True
+    )
+    full_selector = TrueResidueSelector()
+    selector_options = {
+        "full": full_selector,
+        "interface": interface_selector,
+        "neighborhood": neighborhood_selector,
+    }
+    # make the inverse dict of selector options
+    selector_inverse_options = {value: key for key, value in selector_options.items()}
+    if "mpnn_design_area" in kwargs:
+        if kwargs["mpnn_design_area"] == "scan":
+            mpnn_design_areas = [
+                selector_options[key] for key in ["full", "interface", "neighborhood"]
+            ]
+        else:
+            try:
+                mpnn_design_areas = [selector_options[kwargs["mpnn_design_area"]]]
+            except:
+                raise ValueError(
+                    "mpnn_design_area must be one of the following: full, interface, neighborhood"
+                )
+    else:
+        mpnn_design_areas = [selector_options["interface"]]
 
+    # make a list of linked residue selectors, we want to link chA and chC
+    residue_selectors = [chA, chC]
 
-    # for pose in poses:
-    #     pose.update_residue_neighbors()
-    #     scores = dict(pose.scores)
-    #     original_pose = pose.clone()
-    #     print_timestamp("Setting up design selector", start_time)
-    #     # make a designable residue selector of only the interface residues
-    #     chA = ChainSelector(1)
-    #     chB = ChainSelector(2)
-    #     chC = ChainSelector(3)
-    #     # make a list of linked residue selectors, we want to link chA and chC
-    #     residue_selectors = [chA, chC]
-    #     # get the length of state Y
-    #     offset = pose.chain_end(2)
-    #     # get a boolean mask of the residues in chA
-    #     chA_filter = list(chA.apply(pose))
-    #     # make a list of the corresponding residues in state X that are interface in Y
-    #     X_interface_residues = [
-    #         i + offset for i, designable in enumerate(chA_filter, start=1) if designable
-    #     ]
-    #     X_interface_residues_str = ",".join(str(i) for i in X_interface_residues)
-    #     # make design selectors
-    #     interface_selector = interface_between_selectors(chA, chB)
-    #     X_selector = ResidueIndexSelector(X_interface_residues_str)
-    #     design_selector = OrResidueSelector(interface_selector, X_selector)
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        original_pose = pose.clone()
+        # get the length of state Y
+        offset = pose.chain_end(2)
+        # get a boolean mask of the residues in chA
+        chA_filter = list(chA.apply(pose))
+        # make a list of the corresponding residues in state X that are interface in Y
+        X_interface_residues = [
+            i + offset for i, designable in enumerate(chA_filter, start=1) if designable
+        ]
+        X_interface_residues_str = ",".join(str(i) for i in X_interface_residues)
+        X_selector = ResidueIndexSelector(X_interface_residues_str)
+        # iterate over the mpnn parameter combinations
+        mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
+        num_conditions = len(list(mpnn_conditions))
+        print_timestamp(f"Beginning {num_conditions} MPNNDesign runs", start_time)
+        for i, (mpnn_temperature, mpnn_design_area) in enumerate(list(mpnn_conditions)):
+            pose = original_pose.clone()
+            design_selector = OrResidueSelector(mpnn_design_area, X_selector)
+            print_timestamp(
+                f"Beginning MPNNDesign run {i+1}/{num_conditions}", start_time
+            )
 
-    #     print_timestamp("Multistate design with MPNN", start_time)
-    #     # construct the MPNNMultistateDesign object
-    #     mpnn_design = MPNNMultistateDesign(
-    #         design_selector=design_selector,
-    #         residue_selectors=residue_selectors,
-    #         omit_AAs="CX",
-    #         **kwargs,
-    #     )
-    #     # design the pose
-    #     mpnn_design.apply(pose)
-    #     print_timestamp("MPNN design complete, updating pose datacache", start_time)
-    #     # update the scores dict
-    #     scores.update(pose.scores)
-    #     # update the pose with the updated scores dict
-    #     for key, value in scores.items():
-    #         pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-    #     # generate the original pose, with the sequences written to the datacache
-    #     ppose = io.to_packed(pose)
-    #     yield ppose
+            print_timestamp("Multistate design with MPNN", start_time)
+            # construct the MPNNMultistateDesign object
+            mpnn_design = MPNNMultistateDesign(
+                design_selector=design_selector,
+                residue_selectors=residue_selectors,
+                omit_AAs="CX",
+                **kwargs,
+            )
+            # design the pose
+            mpnn_design.apply(pose)
+            print_timestamp("MPNN design complete, updating pose datacache", start_time)
+            # update the scores dict
+            scores.update(pose.scores)
+            scores.update(
+                {
+                    "mpnn_temperature": mpnn_temperature,
+                    "mpnn_design_area": selector_inverse_options[mpnn_design_area],
+                }
+            )
+            # update the pose with the updated scores dict
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+            # generate the original pose, with the sequences written to the datacache
+            ppose = io.to_packed(pose)
+            yield ppose
