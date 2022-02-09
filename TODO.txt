@@ -16,6 +16,7 @@ Back of the napkin numbers:
     ~44000 junctions
 
 dev TODOs:
+    - loop instead of 21 repeats in 00_design
     - turn off precompute_ig to get deeper sampling and re-prototype
     - prototyping/plotting:
         - test total vs neighborhood vs difference only MSD with MPNN
