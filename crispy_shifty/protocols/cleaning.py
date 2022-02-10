@@ -47,7 +47,16 @@ def path_to_pose_or_ppose(
             pass
         pposes = [ppose]
     elif ".pdb" in path:  # should handle pdb.gz as well
-        pposes = [io.pose_from_file(path)]
+        ppose = io.pose_from_file(path) 
+        if cluster_scores:  # set scores in pose after unpacking, then repack
+            scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
+            pose = io.to_pose(ppose)
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
+            ppose = io.to_packed(pose)
+        else:
+            pass
+        pposes = [ppose]
     else:
         raise RuntimeError("Must provide a pdb, pdb.gz, pdb.bz2, or binary silent")
     for ppose in pposes:
