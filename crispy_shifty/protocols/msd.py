@@ -211,7 +211,7 @@ def two_state_design_paired_state(
         task_factory_1 = gen_task_factory(
             design_sel=design_sel,
             pack_nbhd=True,
-            extra_rotamers_level=0,
+            extra_rotamers_level=1,
             limit_arochi=True,
             prune_buns=True,
             upweight_ppi=True,
@@ -247,7 +247,7 @@ def two_state_design_paired_state(
         task_factory_2 = gen_task_factory(
             design_sel=design_sel,
             pack_nbhd=True,
-            extra_rotamers_level=0,
+            extra_rotamers_level=1,
             limit_arochi=True,
             prune_buns=True,
             upweight_ppi=False,
