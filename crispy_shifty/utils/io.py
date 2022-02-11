@@ -615,19 +615,20 @@ def gen_array_tasks(
     design_list_file: str,
     output_path: str,
     queue: Optional[str] = "medium",
-    extra_kwargs: dict = {},
+    extra_kwargs: Optional[dict] = {},
     cores: Optional[int] = None,
     gres: Optional[str] = None,
-    memory: str = "4G",
-    nstruct: int = 1,
-    nstruct_per_task: int = 1,
-    options: str = "",  # options for pyrosetta initialization
-    perlmutter_mode: bool = False,
-    sha1: str = "",
-    simulation_name: str = "crispy_shifty",
+    memory: Optional[str] = "4G",
+    nstruct: Optional[int] = 1,
+    nstruct_per_task: Optional[int] = 1,
+    options: Optional[str] = "",  # options for pyrosetta initialization
+    perlmutter_mode: Optional[bool] = False,
+    sha1: Optional[str] = "",
+    simulation_name: Optional[str] = "crispy_shifty",
+    time: Optional[str] = "",
 ):
     """
-    :param: distribute_func: function to distribute, formatted as a string:
+    :param: distribute_func: function to distribute, formatted as a `str`:
     "module.function". The function must be a function that takes a list of pdb paths
     and returns or yields a list of poses.
     :param: design_list_file: path to a file containing a list of pdb paths.
@@ -639,7 +640,9 @@ def gen_array_tasks(
     :param: gres: string specifying the gres to use, if any, e.g. "--gres=gpu:1".
     :param: memory: amount of memory to request for each task.
     :param: nstruct: number of structures to generate per input.
-    :param: nstruct_per_task: number of structures to generate per task generated.
+    :param: nstruct_per_task: number of structures to generate per task generated. Using
+    this option will chunk files from the design_list_file together, resulting in less
+    total tasks, useful for fast running protocols.
     :param: options: options for pyrosetta initialization.
     :param: perlmutter_mode: whether to use the Perlmutter mode. Perlmutter mode
     grabs entire nodes at a time and uses GNU parallel to run the tasks on the nodes.
@@ -655,7 +658,8 @@ def gen_array_tasks(
     Defaults to "".
     :param: simulation_name: A `str` or `NoneType` object specifying the name of the
     specific simulation being run.
-    TODO: docstring.
+    :time: `str` specifying walltime. Must be compatible with queue. Example `55:00`
+    would be 55 min.
     """
     import os, stat, sys
     import git
@@ -721,6 +725,10 @@ def gen_array_tasks(
 
     # run_sh format is the only difference in perlmutter mode vs non-perlmutter mode
     if perlmutter_mode:  # perlmutter mode ignores cores, gres, memory and queue.
+        if time == "":
+            time = "55:00"
+        else:
+            pass
         run_sh = "".join(
             [
                 "#!/bin/bash\n",
@@ -733,7 +741,7 @@ def gen_array_tasks(
                 f"#SBATCH -e {slurm_dir}/{simulation_name}-%A_%a.err \n",
                 f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
                 "#SBATCH -p regular\n",
-                "#SBATCH --time=55:00\n",  # the shorter the better within reason
+                f"#SBATCH --time={time}\n",  # the shorter the better within reason
                 "module load cudatoolkit/21.9_11.4\n",
                 "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
                 "N2=$(( N + 1 ))\n",
@@ -752,6 +760,10 @@ def gen_array_tasks(
             gres_string = f"#SBATCH {gres}\n"
         else:
             gres_string = "\n"
+        if time == "":
+            time_string = "\n"
+        else:
+            time_string = f"#SBATCH --time={time}\n"
 
         run_sh = "".join(
             [
@@ -763,6 +775,7 @@ def gen_array_tasks(
                 f"#SBATCH -p {queue} \n",
                 f"#SBATCH --mem={memory} \n",
                 gres_string,
+                time_string,
                 "\n",
                 f"JOB_ID=${jid} \n",
                 f"""CMD=$(sed -n "${sid}" {tasklist}) \n""",
@@ -829,11 +842,11 @@ def gen_array_tasks(
         if count % 4 == 0:
             array_len = count / 4
         else:  # and if there are any left over, we need to add 1 to the array length
-            array_len = (count / 4) + 1
+            array_len = (count // 4) + 1
 
     # Let's go
     print("Run the following command with your desired environment active:")
-    print(f"sbatch -a 1-{array_len} {run_sh_file}")
+    print(f"sbatch -a 1-{int(array_len)} {run_sh_file}")
 
 
 def collect_score_file(output_path: str, score_dir_name: str = "scores") -> None:

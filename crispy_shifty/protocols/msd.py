@@ -7,7 +7,6 @@ from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
-from pyrosetta.rosetta.protocols.filters import Filter # TODO
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.kinematics import MoveMap
@@ -24,11 +23,19 @@ def almost_linkres(
     repeats: int = 1,
 ) -> None:
     """
+    :param: pose: The pose to be designed.
+    :param: movemap: The movemap to be used for design.
+    :param: residue_selectors: The residue selectors to be used for linking.
+    :param: scorefxn: The score function to be used for scoring.
+    :param: task_factory: The task factory to be used for design.
+    :param: repeats: The number of times to repeat the design.
+    :return: None
+
     This function does fast design using a linkres-style approach.
     It requires at minimum a pose, movemap, scorefxn, and task_factory.
-    The pose will be modified in place with fast_design, and the movemap and scorefxn 
-    will be passed directly to fast_design. The task_factory will have a sequence 
-    symmetry taskop added before it will be passed to fast_design. The residue_selectors 
+    The pose will be modified in place with fast_design, and the movemap and scorefxn
+    will be passed directly to fast_design. The task_factory will have a sequence
+    symmetry taskop added before it will be passed to fast_design. The residue_selectors
     will be used to determine which residues to pseudosymmetrize, and need to specify
     equal numbers of residues for each selector.
     """
@@ -60,11 +67,15 @@ def almost_linkres(
     </MOVERS>
     """
     index_selectors_str = "\n\t\t".join(
-        [f"""<Index name="{key}" resnums="{value}" />""" for key, value in index_selectors.items()]
+        [
+            f"""<Index name="{key}" resnums="{value}" />"""
+            for key, value in index_selectors.items()
+        ]
     )
     # autogenerate an xml string
     xml_string = pre_xml_string.format(
-        index_selectors_str=index_selectors_str, selector_keys=",".join(index_selectors.keys())
+        index_selectors_str=index_selectors_str,
+        selector_keys=",".join(index_selectors.keys()),
     )
     # setup the xml_object
     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
@@ -94,8 +105,10 @@ def two_state_design_paired_state(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
-    TODO
-    needs beta_nov16 at least
+    :param: packed_pose_in: a packed pose to use as a starting point for interface
+    design. If None, a pose will be generated from the input pdb_path.
+    :param: kwargs: keyword arguments for almost_linkres.
+    Needs `-corrections:beta_nov16 true` in init.
     """
 
     from pathlib import Path
@@ -122,17 +135,16 @@ def two_state_design_paired_state(
         gen_std_layer_design,
         gen_task_factory,
         score_per_res,
+        score_ss_sc,
     )
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
-    # hardcode precompute_ig
-    pyrosetta.rosetta.basic.options.set_boolean_option("packing:precompute_ig", True)
     # setup scorefxns
     clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
     design_sfxn.set_weight(
-        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0  # TODO
+        pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
     )
     print_timestamp("Generated score functions", start_time=start_time)
     # setup movemap
@@ -179,20 +191,38 @@ def two_state_design_paired_state(
         )
         # we want to design the peptide (chB) interface + anything that differs between the states
         print_timestamp("Generated selectors", start_time=start_time)
-        layer_design = gen_std_layer_design()
+        # we need to add an alanine to all layers of the default list
+        layer_aas_list = [
+            "ADNSTP",  # helix_cap
+            "AFILVWYNQSTHP",  # core AND helix_start
+            "AFILVWM",  # core AND helix
+            "AFILVWY",  # core AND sheet
+            "AFGILPVWYSM",  # core AND loop
+            "ADEHIKLNPQRSTVWY",  # boundary AND helix_start
+            "ADEHIKLNQRSTVWYM",  # boundary AND helix
+            "ADEFHIKLNQRSTVWY",  # boundary AND sheet
+            "ADEFGHIKLNPQRSTVWY",  # boundary AND loop
+            "ADEHKPQR",  # surface AND helix_start
+            "AEHKQR",  # surface AND helix
+            "AEHKNQRST",  # surface AND sheet
+            "ADEGHKNPQRST",  # surface AND loop
+        ]
+        layer_design = gen_std_layer_design(layer_aas_list=layer_aas_list)
         task_factory_1 = gen_task_factory(
             design_sel=design_sel,
             pack_nbhd=True,
-            extra_rotamers_level=2,
+            extra_rotamers_level=1,
             limit_arochi=True,
             prune_buns=True,
             upweight_ppi=True,
             restrict_pro_gly=True,
+            precompute_ig=True,
             ifcl=True,
             layer_design=layer_design,
         )
         print_timestamp(
-            "Generated interface design task factory with upweighted interface", start_time=start_time
+            "Generated interface design task factory with upweighted interface",
+            start_time=start_time,
         )
         # setup the linked selectors
         residue_selectors = chA, chC
@@ -217,16 +247,18 @@ def two_state_design_paired_state(
         task_factory_2 = gen_task_factory(
             design_sel=design_sel,
             pack_nbhd=True,
-            extra_rotamers_level=2,
+            extra_rotamers_level=1,
             limit_arochi=True,
             prune_buns=True,
             upweight_ppi=False,
             restrict_pro_gly=True,
+            precompute_ig=True,
             ifcl=True,
             layer_design=layer_design,
         )
         print_timestamp(
-            "Generated interface design task factory with upweighted interface", start_time=start_time
+            "Generated interface design task factory with upweighted interface",
+            start_time=start_time,
         )
         almost_linkres(
             pose=pose,
@@ -241,11 +273,14 @@ def two_state_design_paired_state(
         for pose in designed_poses:
             print_timestamp("Scoring...", start_time=start_time)
             score_per_res(pose, clean_sfxn)
+            score_ss_sc(pose)
             score_filter = gen_score_filter(clean_sfxn)
             add_metadata_to_pose(pose, "path_in", pdb_path)
             end_time = time()
             total_time = end_time - start_time
-            print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
+            print_timestamp(
+                f"Total time: {total_time:.2f} seconds", start_time=start_time
+            )
             add_metadata_to_pose(pose, "time", total_time)
             scores.update(pose.scores)
             for key, value in scores.items():

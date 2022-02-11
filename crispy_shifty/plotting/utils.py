@@ -39,9 +39,9 @@ def histplot_df(
     discrete: bool = False,
     hue: str = None,
     hue_order: List[str] = None,
+    save_path: str = None,
 ):
     import matplotlib.pyplot as plt
-    import numpy as np
     import seaborn as sns
     from tqdm import tqdm
 
@@ -66,6 +66,11 @@ def histplot_df(
         )
 
     fig.tight_layout()
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    return fig, axs
 
 
 # This probably doesn't work well; at some point need to test and refine

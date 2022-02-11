@@ -1,27 +1,5 @@
-remember to maintain the envs and repos on perlmutter and janelia clusters
-how to do better than last round, chA:
-    - bicistronic screen had high false positives, possibly co-expressed genes resulted in "locked" state Y complexes.
-    - longer loops for state Ys, force state X to have longer (63 and 74-7 have longer than parent, 129 only has match)
-    - torsional space only for backbone generation, later relax into predictions (in torsional space?)
-    - absolutely no disulfides during design >:(
-    - don't over optimize on SAP
-
-how to do better than last round, chB:
-    - longer chB, all have 27 except 63 which had 21 (as opposed to 17-25)
-    -     check results of the chB order4
-    - charges? + C term, - N term
-    -     check results of the chB order4
-    - FF129 has a very polar interface, Cterm sequence is QLQKKNKKQQK
-    - Some have lower helical propensity and most lower coiled-coil propensity at termini (did not quantify)
-    - backside hydrophobics and aromatics may break coiled coil propensity, resurfacing to all polars sometimes seemed to cause issues (also sometimes fixed issues like in FF75) 
-    -     check results of the chB order4
-
 Strategy:
-Use MPNN for sequence design after smaller sampling runs with Rosetta to sample backbones
 Probably only need delta SAP and CMS/ddG/SASA for interface filtering
-Start MSD sampling from designs that alphafold to single state state Y
-Use MPNN for two-state sequence design after smaller sampling runs with “almost linkres” to sample backbones again
-Look for complex prediction on AF2 then fold state X
 Increase SAP tolerance somewhat
 If disulfide stapled states are needed or wanted, just staple and predict
 
@@ -35,58 +13,52 @@ Back of the napkin numbers:
     *~.05=592k folded paired bound states, (Y)
     *~.33=195k folded paired bound states, (X)
 	TODO
-
     ~44000 junctions
 
-
-loop, allow extension, mpnn
-order chA and do SEC / expression screening 
-order chB and do SEC / expression screening too?
-
 dev TODOs:
-    - compare one more time DHR82 with FF74 (seq length difference)
+    - loop instead of 21 repeats in 00_design
+    - remember to maintain the envs and repos on perlmutter and janelia clusters
+    - Example notebooks for MPNN and superfold in crispy_shifty/examples
+        - examples 2-4 with Abbas
+            - show prototyping best practices
+            - then figure out smooth setup
+            - share with lab
+    	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
+            - fix Abbas superfold submodule
+            - get sudo access to superfold to add others
+            - repredict AF2 intial guess folding.py the FF63-129 and cs_0-108 and JHB1-13
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
+        - do it when no one is has crispy env active
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
-    - fix mpnn_seq entries in scores when the decoys are being generated from folding.py
-    - check that gen_array_tasks sbatch command is fixed
-    - test neighborhood vs difference only MSD with both "almost linkres" and tMPNN
-
-    - Example notebooks for MPNN and superfold in crispy_shifty/examples
-        - finish mpnn_example.ipynb with Abbas?
-    	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
+    - TODOs and docstrings in all modules - beta_nov16 notices in docstrings where used.
+    - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
+    - dask dataframe implementation in folding notebooks
 
     - if really bored, add documentation to the InsertResMover and PR
 
     - DOTFILES - check init.vim is working, then version control
-    - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
-    - check for unused final_pposes lists and remove them
-
+    - rebalance states/parents after 03_fold or just go crazy?
 
 TODO: 
     00 filter scaffold sets # run
-    01 prep inputs # run
+    01 prep inputs # run # add slurm_logs loc for log_directory
     02 make states # change to array tasks? # run
-    00 design bound states # probably split into junctions x 1-3, non-junctions x 5-10 # run
-    01 loop bound_states # test 0-1,2,3 adjustment per side comparison # probably want 0-2 # run
-    02 MPNN bound states # when generating passing ones, clear other mpnn_seq scores # run
-    03 fold bound states # get working on perlmutter # run
+    00 design bound states # run
+    01 loop bound_states # run
+    02 MPNN bound states # figure out how many? probably 100 or so # run
+    03 fold bound states # figure out how low to go with pae_interaction # run
     04 pair bound states # run
-    05 design paired states # almost linkres in msd.py # run
-    06 MPNN paired states # make MPNN msd # run
-    07 fold paired states # reuse folding.py Y first then X. # run
-    08 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
-    09 order and analyze
-
+    05 design paired states # run
+    06 MPNN paired states # run
+    07 fold paired states_Y # run
+    08 fold paired states_X # run
+    09 detail and filter # staple? peptide resurf? refold? probably mostly rosetta filters # run
+    10 order and analyze
 
 Paper TODOs:
-What will fig. 4 be:
-FRET? NMR? photoswitching? negative cooperativity? 
-crowdsource cool tricks, maybe ask some synbio people
 use symbolic regression on flexdock trajectory datasets? 
 networks learn to summarize rules about biophysical mechanics, 
 then we use a seperate layer to regress equations
 
-crispy snippy TODOs:
-fluo polarization for protease or fluorophore/quencher?
 
