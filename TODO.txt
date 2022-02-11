@@ -16,6 +16,10 @@ Back of the napkin numbers:
     ~44000 junctions
 
 dev TODOs:
+    - fix interface_scores_paired overwrite by temp in 03 and 07
+    - TODO option to return best decoys for each design in folding.py
+        - might need to use bytestring instead of pdbstring
+    - TODO relaxscript options for design
     - loop instead of 21 repeats in 00_design
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
@@ -32,8 +36,6 @@ dev TODOs:
     - add crispy kernel to ipython kernelspecs on janelia
     - test python interpreter finding with git root on janelia
     - TODOs and docstrings in all modules - beta_nov16 notices in docstrings where used.
-    - TODO relaxscript options for design
-    - TODO option to return best decoys for each design in folding.py
     - change crispy_shifty.plotting.utils.py to crispy_shifty.utils.plotting.py ; let Adam know
     - dask dataframe implementation in folding notebooks
 

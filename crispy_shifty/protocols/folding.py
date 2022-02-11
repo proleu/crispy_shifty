@@ -17,6 +17,7 @@ def generate_decoys_from_pose(
     filter_dict: Dict[
         str, Tuple[Union[eq, ge, gt, le, lt, ne], Union[int, float, str]]
     ] = {},
+    generate_prediction_decoys: Optional[bool] = False,
     label_first: Optional[bool] = False,
     prefix: Optional[str] = "tmp",
     rank_on: Optional[
@@ -30,6 +31,10 @@ def generate_decoys_from_pose(
     as a dictionary of the form {'score_name': (operator, value)} where the operator is
     one of the following: eq, ge, gt, le, lt, ne. Example: {'mean_plddt': (ge, 0.9)} .
     Note that this defaults to an empty dict, which will simply return all decoys.
+    :param: generate_prediction_decoys: If True, generate decoys for the predictions 
+    instead of threading the sequences onto the input pose.
+    :param: label_first: If True, label the first decoy as designed by rosetta and the 
+    rest as designed by mpnn. 
     prefix: for poses with many tags/pymol_names in results, get all results with the
     same prefix
     rank_on: the score to rank multiple model results for the same tag/pymol_name on.
@@ -40,6 +45,7 @@ def generate_decoys_from_pose(
     import json, sys
     from pathlib import Path
     import pyrosetta
+    import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -112,10 +118,15 @@ def generate_decoys_from_pose(
                 continue
         # if the decoy passes all filters, yield it
         if keep_decoy:
-            decoy = thread_full_sequence(
-                pose,
-                sequence,
-            )
+            # TODO load the prediction decoys from the pose datacache
+            if generate_prediction_decoys:
+                decoy_pdbstring = top_result.pop("decoy_pdbstring")
+                decoy = io.to_pose(io.pose_from_pdbstring(decoy_pdbstring))
+            else:
+                decoy = thread_full_sequence(
+                    pose,
+                    sequence,
+                )
             # add the scores from the top result to the decoy
             pose_scores.update(top_result)
             if label_first:
@@ -178,6 +189,7 @@ class SuperfoldRunner:
         amber_relax: bool = False,
         fasta_path: Optional[str] = None,
         initial_guess: Optional[Union[bool, str]] = None,
+        load_decoys: Optional[bool] = False,
         max_recycles: Optional[int] = 3,
         model_type: Optional[str] = "monomer_ptm",
         models: Optional[Union[int, List[int], List[str], str]] = "all",
@@ -194,6 +206,7 @@ class SuperfoldRunner:
         :param: initial_guess: Whether to use an initial guess. If True, the pose will
         be used as an initial guess. If a string, the string will be used as the path
         to the initial guess.
+        :param: load_decoys: Whether to load decoy PDBs from the results. 
         :param: max_recycles: The maximum number of cycles to run Superfold.
         :param: model_type: The type of model to run.
         :param: models: The models to run.
@@ -213,6 +226,7 @@ class SuperfoldRunner:
         self.amber_relax = amber_relax
         self.fasta_path = fasta_path
         self.initial_guess = initial_guess
+        self.load_decoys = load_decoys
         self.max_recycles = max_recycles
         self.model_type = model_type
         self.models = models
@@ -498,6 +512,17 @@ class SuperfoldRunner:
         results = defaultdict(dict)
         for json_file in json_files:
             pymol_name, model_seed, result = process_results_json(json_file)
+            # TODO optionally load result pdbs
+            if self.load_decoys:
+                if self.amber_relax:
+                    suffix = "_relaxed.pdb"
+                else:
+                    suffix = "_unrelaxed.pdb"
+                decoy_path = json_file.replace("_prediction_results.json", suffix)
+                # load pose and turn it into a pdb string
+                decoy_pdbstring = io.to_pdbstring(io.pose_from_file(decoy_path))
+                result["decoy_pdbstring"] = decoy_pdbstring
+            
             results[pymol_name].update({model_seed: result})
         # turn results back into a regular dict
         results = dict(results)
@@ -603,7 +628,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
             raise ValueError("No input file provided.")
         else:
             pass
-        # TODO read in the input files as poses and store them in a dict
+        # read in the input files as poses and store them in a dict
         for path in self.input_file.split():
             # the following is a bit unsafe to get rid of the extension
             # TODO use pathlib
@@ -611,7 +636,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
             self.tag_pose_dict[tag] = next(
                 path_to_pose_or_ppose(path=path, cluster_scores=True, pack_result=False)
             )
-        # TODO write the poses to clean PDB files of only ATOM coordinates.
+        # write the poses to clean PDB files of only ATOM coordinates.
         for tag, pose in self.tag_pose_dict.items():
             tmp_pdb_path = os.path.join(self.tmpdir, f"{tag}.pdb")
             if chains_to_keep is not None:
@@ -676,6 +701,16 @@ class SuperfoldMultiPDB(SuperfoldRunner):
         results = defaultdict(dict)
         for json_file in json_files:
             pymol_name, model_seed, result = process_results_json(json_file)
+            # TODO optionally load result pdbs
+            if self.load_decoys:
+                if self.amber_relax:
+                    suffix = "_relaxed.pdb"
+                else:
+                    suffix = "_unrelaxed.pdb"
+                decoy_path = json_file.replace("_prediction_results.json", suffix)
+                # load pose and turn it into a pdb string
+                decoy_pdbstring = io.to_pdbstring(io.pose_from_file(decoy_path))
+                result["decoy_pdbstring"] = decoy_pdbstring
             results[pymol_name].update({model_seed: result})
         # turn results back into a regular dict
         results = dict(results)
@@ -844,7 +879,7 @@ def fold_paired_state_Y(
         # change the pose to the modified pose
         pose = tmp_pose.clone()
         print_timestamp("Setting up for AF2", start_time)
-        runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, **kwargs)
+        runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, load_decoys=True, **kwargs)
         runner.setup_runner(file=fasta_path)
         # initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
@@ -882,6 +917,7 @@ def fold_paired_state_Y(
         for decoy in generate_decoys_from_pose(
             pose,
             filter_dict=filter_dict,
+            generate_prediction_decoys=True,
             label_first=True,
             prefix=prefix,
             rank_on=rank_on,
@@ -940,7 +976,7 @@ def fold_paired_state_X(
         pass
 
     print_timestamp("Setting up for AF2", start_time)
-    runner = SuperfoldMultiPDB(input_file=pdb_path, **kwargs)
+    runner = SuperfoldMultiPDB(input_file=pdb_path, load_decoys=True, **kwargs)
     runner.setup_runner(chains_to_keep=[3])
     print_timestamp("Running AF2", start_time)
     runner.apply()
@@ -960,6 +996,7 @@ def fold_paired_state_X(
         for decoy in generate_decoys_from_pose(
             pose,
             filter_dict=filter_dict,
+            generate_prediction_decoys=True,
             label_first=False,
             prefix=tag,
             rank_on=rank_on,
