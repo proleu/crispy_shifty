@@ -16,7 +16,7 @@ Back of the napkin numbers:
     ~44000 junctions
 
 dev TODOs:
-    - fix interface_scores_paired overwrite by temp in 03 and 07
+    - TODO add Y_ underscores to af2 metrics
     - TODO option to return best decoys for each design in folding.py
         - might need to use bytestring instead of pdbstring
     - TODO relaxscript options for design
