@@ -780,7 +780,7 @@ def mpnn_paired_state(
         poses = path_to_pose_or_ppose(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
-    
+
     if "mpnn_temperature" in kwargs:
         if kwargs["mpnn_temperature"] == "scan":
             mpnn_temperatures = [0.1, 0.2, 0.5]

@@ -11,6 +11,25 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 
+af2_metrics = [
+    "mean_pae",
+    "mean_pae_interaction",
+    "mean_pae_interaction_AB",
+    "mean_pae_interaction_BA",
+    "mean_pae_intra_chain",
+    "mean_pae_intra_chain_A",
+    "mean_pae_intra_chain_B",
+    "mean_plddt",
+    "model",
+    "pTMscore",
+    "recycles",
+    "rmsd_to_input",
+    "rmsd_to_reference",
+    "seed",
+    "tol",
+    "type",
+]
+
 
 def generate_decoys_from_pose(
     pose: Pose,
@@ -31,10 +50,10 @@ def generate_decoys_from_pose(
     as a dictionary of the form {'score_name': (operator, value)} where the operator is
     one of the following: eq, ge, gt, le, lt, ne. Example: {'mean_plddt': (ge, 0.9)} .
     Note that this defaults to an empty dict, which will simply return all decoys.
-    :param: generate_prediction_decoys: If True, generate decoys for the predictions 
+    :param: generate_prediction_decoys: If True, generate decoys for the predictions
     instead of threading the sequences onto the input pose.
-    :param: label_first: If True, label the first decoy as designed by rosetta and the 
-    rest as designed by mpnn. 
+    :param: label_first: If True, label the first decoy as designed by rosetta and the
+    rest as designed by mpnn.
     prefix: for poses with many tags/pymol_names in results, get all results with the
     same prefix
     rank_on: the score to rank multiple model results for the same tag/pymol_name on.
@@ -206,7 +225,7 @@ class SuperfoldRunner:
         :param: initial_guess: Whether to use an initial guess. If True, the pose will
         be used as an initial guess. If a string, the string will be used as the path
         to the initial guess.
-        :param: load_decoys: Whether to load decoy PDBs from the results. 
+        :param: load_decoys: Whether to load decoy PDBs from the results.
         :param: max_recycles: The maximum number of cycles to run Superfold.
         :param: model_type: The type of model to run.
         :param: models: The models to run.
@@ -522,7 +541,7 @@ class SuperfoldRunner:
                 # load pose and turn it into a pdb string
                 decoy_pdbstring = io.to_pdbstring(io.pose_from_file(decoy_path))
                 result["decoy_pdbstring"] = decoy_pdbstring
-            
+
             results[pymol_name].update({model_seed: result})
         # turn results back into a regular dict
         results = dict(results)
@@ -879,7 +898,9 @@ def fold_paired_state_Y(
         # change the pose to the modified pose
         pose = tmp_pose.clone()
         print_timestamp("Setting up for AF2", start_time)
-        runner = SuperfoldRunner(pose=pose, fasta_path=fasta_path, load_decoys=True, **kwargs)
+        runner = SuperfoldRunner(
+            pose=pose, fasta_path=fasta_path, load_decoys=True, **kwargs
+        )
         runner.setup_runner(file=fasta_path)
         # initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
@@ -933,6 +954,13 @@ def fold_paired_state_Y(
             # thread the sequence from chA onto chA
             stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
             stm.apply(decoy)
+            # rename af2 metrics to have Y_ prefix TODO
+            decoy_scores = dict(decoy.scores)
+            for key, value in decoy_scores.items():
+                if key in af2_metrics:
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        decoy, f"Y_{key}", value
+                    )
 
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
