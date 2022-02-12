@@ -12,6 +12,7 @@ __pycache__/
 *.png
 *.pse
 
+demos
 envs
 software
 projects/*/00*/*
@@ -22,6 +23,9 @@ projects/*/04*/*
 projects/*/05*/*
 projects/*/06*/*
 projects/*/07*/*
+projects/*/08*/*
+projects/*/09*/*
+projects/*/10*/*
 examples
 figs
 *-Copy1*
@@ -36,10 +40,9 @@ figs
 *.silent
 ._*
 .DS_Store
-testing*
+test*
 old*
 run.py
 run.sh
 
 scaffolds
-.gitignore

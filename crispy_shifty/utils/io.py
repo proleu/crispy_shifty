@@ -70,6 +70,67 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
         return
 
 
+def fix_path_prefixes(
+    find: str, replace: str, file: str, overwrite: Optional[bool] = False
+) -> Union[pd.DataFrame, List[str], str, None]:
+    """
+    :param: find: path prefix to find and replace.
+    :param: replace: path prefix to replace with.
+    :param: file: path to file to fix.
+    :param: overwrite: overwrite file if it exists.
+    :return: A pandas dataframe, a list of paths, or a string, depending on the file
+    type of input, or None if overwrite is True.
+    When rsyncing lists or scorefiles from one cluster to another, the paths in the
+    lists or index of the scorefile need to be fixed. This function fixes them, and
+    can either return a python object (dataframe, list, or string) of the fixed file,
+    or overwrite the file in place.
+    """
+    import os
+    import pandas as pd
+
+    # infer what to do with the file
+    if ".json" in file:
+        try:  # this one will often fail as scores.json is usually formatted differently
+            df = pd.read_json(file)
+        except ValueError:
+            df = parse_scorefile_linear(file)
+        # fix df index and return df
+        df.set_index(df.index.astype(str).str.replace(find, replace), inplace=True)
+        if overwrite:
+            df.to_json(file, orient="records")
+            return None
+        else:
+            return df
+    elif ".csv" in file:
+        df = pd.read_csv(file)
+        # fix df index and return df
+        df.set_index(df.index.astype(str).str.replace(find, replace), inplace=True)
+        if overwrite:
+            df.to_json(file, orient="records")
+            return None
+        else:
+            return df
+    elif ".list" in file or ".pair" in file:
+        # fix and return list or overwrite file
+        out_lines = []
+        with open(file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if find in line:
+                    line = line.replace(find, replace)
+                out_lines.append(line)
+        if overwrite:
+            with open(file, "w") as f:
+                for line in out_lines:
+                    print(line, file=f)
+            return None
+        else:
+            return out_lines
+    else:  # assume it's a single path, fix and return
+        fixed_path = file.replace(find, replace)
+        return fixed_path
+
+
 def df_to_fastas(
     df: pd.DataFrame, prefix: str, out_path: Optional[str] = None
 ) -> pd.DataFrame:
@@ -553,20 +614,21 @@ def gen_array_tasks(
     distribute_func: str,
     design_list_file: str,
     output_path: str,
-    queue: str,
-    extra_kwargs: dict = {},
+    queue: Optional[str] = "medium",
+    extra_kwargs: Optional[dict] = {},
     cores: Optional[int] = None,
     gres: Optional[str] = None,
-    memory: str = "4G",
-    nstruct: int = 1,
-    nstruct_per_task: int = 1,
-    options: str = "",  # options for pyrosetta initialization
-    perlmutter_mode: bool = False,
-    sha1: str = "",
-    simulation_name: str = "crispy_shifty",
+    memory: Optional[str] = "4G",
+    nstruct: Optional[int] = 1,
+    nstruct_per_task: Optional[int] = 1,
+    options: Optional[str] = "",  # options for pyrosetta initialization
+    perlmutter_mode: Optional[bool] = False,
+    sha1: Optional[str] = "",
+    simulation_name: Optional[str] = "crispy_shifty",
+    time: Optional[str] = "",
 ):
     """
-    :param: distribute_func: function to distribute, formatted as a string:
+    :param: distribute_func: function to distribute, formatted as a `str`:
     "module.function". The function must be a function that takes a list of pdb paths
     and returns or yields a list of poses.
     :param: design_list_file: path to a file containing a list of pdb paths.
@@ -578,7 +640,9 @@ def gen_array_tasks(
     :param: gres: string specifying the gres to use, if any, e.g. "--gres=gpu:1".
     :param: memory: amount of memory to request for each task.
     :param: nstruct: number of structures to generate per input.
-    :param: nstruct_per_task: number of structures to generate per task generated.
+    :param: nstruct_per_task: number of structures to generate per task generated. Using
+    this option will chunk files from the design_list_file together, resulting in less
+    total tasks, useful for fast running protocols.
     :param: options: options for pyrosetta initialization.
     :param: perlmutter_mode: whether to use the Perlmutter mode. Perlmutter mode
     grabs entire nodes at a time and uses GNU parallel to run the tasks on the nodes.
@@ -594,11 +658,8 @@ def gen_array_tasks(
     Defaults to "".
     :param: simulation_name: A `str` or `NoneType` object specifying the name of the
     specific simulation being run.
-    TODO: docstring.
-    TODO: option to simultaneously iterate through a second file at the same time.
-    TODO: if its a one for one iteration, then just zip the lines together and wrap the
-    function being distributed to unpack the lines into the seperate arguments.
-    TODO: GRES and GNU parallel support? Maybe a GNU parallel mode or a perlmutter mode?
+    :time: `str` specifying walltime. Must be compatible with queue. Example `55:00`
+    would be 55 min.
     """
     import os, stat, sys
     import git
@@ -612,6 +673,11 @@ def gen_array_tasks(
     from crispy_shifty.utils.io import get_yml
 
     sha1 = parse_sha1(sha1)
+    # if the user provided None then sha1 is still an empty string, this fixes that
+    if sha1 == "":
+        sha1 = "untracked"
+    else:
+        pass
     # use git to find the root of the repo
     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
     root = repo.git.rev_parse("--show-toplevel")
@@ -628,11 +694,11 @@ def gen_array_tasks(
         design_list_file, options, nstruct_per_task
     ) -> Iterator[Dict[Any, Any]]:
         """
-        :param: design_list_file: path to a file containing a list of pdb files inputs
+        :param: design_list_file: path to a file containing a list of input files
         :param: options: options for pyrosetta initialization
         :param: nstruct_per_task: number of structures to generate per task
         :return: an iterator of task dicts.
-        Generates tasks for pyrosetta distributed.
+        Generates tasks for pyrosetta distributed-style array tasks
         TODO: docstring, better type annotations.
         """
         with open(design_list_file, "r") as f:
@@ -659,27 +725,30 @@ def gen_array_tasks(
 
     # run_sh format is the only difference in perlmutter mode vs non-perlmutter mode
     if perlmutter_mode:  # perlmutter mode ignores cores, gres, memory and queue.
+        if time == "":
+            time = "55:00"
+        else:
+            pass
         run_sh = "".join(
             [
                 "#!/bin/bash\n",
-                "#SBATCH --account=m3962_g\n",
-                "#SBATCH --constraint=gpu\n",
+                "#SBATCH --account=m4129_g\n",  # equivalent to -A
+                "#SBATCH --constraint=gpu\n",  # equivalent to -C
                 f"#SBATCH --job-name={simulation_name}\n",
-                "#SBATCH --gpus=4\n",
-                "#SBATCH --gpu-bind=map_gpu:0,1,2,3\n",
+                "#SBATCH --gpus=4\n",  # equivalent to -G
                 "#SBATCH --nodes=1\n",
                 "#SBATCH --ntasks=4\n",
                 f"#SBATCH -e {slurm_dir}/{simulation_name}-%A_%a.err \n",
                 f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
                 "#SBATCH -p regular\n",
-                "#SBATCH --time=1:00:00\n",  # the shorter the better within reason
+                f"#SBATCH --time={time}\n",  # the shorter the better within reason
+                "module load cudatoolkit/21.9_11.4\n",
                 "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
                 "N2=$(( N + 1 ))\n",
                 "start_idx=$(( N*4 + 1 ))\n",
                 "end_idx=$(( N2*4 ))\n",
-                # "source ~/.bashrc" # TODO needed for conda?
                 "source activate /global/cfs/cdirs/m3962/projects/crispy_shifty/envs/crispy\n",
-                "head -n $end_idx {tasklist} | tail -n +$start_idx | parallel",
+                f"""head -n $end_idx {tasklist} | tail -n +$start_idx | parallel 'CUDA_VISIBLE_DEVICES=$(("{{%}}" - 1)) && bash -c {{}}'""",
             ]
         )
     else:
@@ -691,6 +760,10 @@ def gen_array_tasks(
             gres_string = f"#SBATCH {gres}\n"
         else:
             gres_string = "\n"
+        if time == "":
+            time_string = "\n"
+        else:
+            time_string = f"#SBATCH --time={time}\n"
 
         run_sh = "".join(
             [
@@ -702,6 +775,7 @@ def gen_array_tasks(
                 f"#SBATCH -p {queue} \n",
                 f"#SBATCH --mem={memory} \n",
                 gres_string,
+                time_string,
                 "\n",
                 f"JOB_ID=${jid} \n",
                 f"""CMD=$(sed -n "${sid}" {tasklist}) \n""",
@@ -751,16 +825,28 @@ def gen_array_tasks(
         [" ".join([k, str(v)]) for k, v in extra_kwargs.items()]
     )
 
+    # Track the number of tasks in the tasklist
+    count = 0
     with open(tasklist, "w+") as f:
         for i in range(0, nstruct):
             for tasks in create_tasks(design_list_file, options, nstruct_per_task):
                 task_str = " ".join([" ".join([k, str(v)]) for k, v in tasks.items()])
                 cmd = f"{run_py_file} {task_str} {extra_kwargs_str} {instance_str}"
                 print(cmd, file=f)
+                count += 1
+
+    # the number of tasks for the array depends on whether it is perlmutter mode or not
+    if not perlmutter_mode:
+        array_len = count
+    else:  # in perlmutter mode we run tasks in chunks of 4, so we need to divide by 4
+        if count % 4 == 0:
+            array_len = count / 4
+        else:  # and if there are any left over, we need to add 1 to the array length
+            array_len = (count // 4) + 1
 
     # Let's go
     print("Run the following command with your desired environment active:")
-    print(f"sbatch -a 1-$(cat {tasklist} | wc -l) {run_sh_file}")
+    print(f"sbatch -a 1-{int(array_len)} {run_sh_file}")
 
 
 def collect_score_file(output_path: str, score_dir_name: str = "scores") -> None:

@@ -1,6 +1,6 @@
 # Python standard library
 from abc import ABC, abstractmethod
-from typing import Iterator, List, Optional, Union
+from typing import Iterator, List, Optional, Tuple, Union
 
 # 3rd party library imports
 # Rosetta library imports
@@ -10,6 +10,37 @@ from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
+
+
+def yeet_pose_xyz(
+    pose: Pose,
+    xyz: Tuple[Union[int, float], Union[int, float], Union[int, float]] = (1, 0, 0),
+) -> Pose:
+    """
+    :param: pose: Pose to yeet
+    :param: xyz: x, y, z coordinates to yeet to
+    :return: yeeted pose
+    Given a pose and a cartesian 3D unit vector, translates the pose
+    according to 100 * the unit vector without applying a rotation:
+    @pleung @bcov @flop
+    """
+    import pyrosetta
+    from pyrosetta.rosetta.core.select.residue_selector import TrueResidueSelector
+    from pyrosetta.rosetta.protocols.toolbox.pose_manipulation import (
+        rigid_body_move,
+    )
+
+    assert len(xyz) == 3
+    pose = pose.clone()
+    entire = TrueResidueSelector()
+    subset = entire.apply(pose)
+    # get which direction in cartesian unit vectors (xyz) to yeet pose
+    unit = pyrosetta.rosetta.numeric.xyzVector_double_t(*xyz)
+    scaled_xyz = tuple([100 * x for x in xyz])
+    far_away = pyrosetta.rosetta.numeric.xyzVector_double_t(*scaled_xyz)
+    # yeet
+    rigid_body_move(unit, 0, far_away, pose, subset)
+    return pose
 
 
 def grow_terminal_helices(
@@ -136,7 +167,7 @@ def extend_helix_termini(
     :param: pose: Pose to extend the terminal helices of.
     :param: chain: Chain to extend the terminal helices of.
     :return: Pose with the terminal helices extended.
-    Extend the terminal helices of a pose by a specified number of residues at the 
+    Extend the terminal helices of a pose by a specified number of residues at the
     provided chain. The new residues are valines.
     """
 
@@ -210,9 +241,9 @@ def extend_helix_termini(
     pre_extended_chain = chain_dict[chain]
 
     range_CA_align(
-        pose_to_extend, 
-        pre_extended_chain, 
-        extend_n_term + 1, 
+        pose_to_extend,
+        pre_extended_chain,
+        extend_n_term + 1,
         extend_n_term + len(pre_extended_chain.residues),
         pre_extended_chain.chain_begin(1),
         pre_extended_chain.chain_end(1),
@@ -229,6 +260,7 @@ def extend_helix_termini(
     for key, value in scores.items():
         pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
     return pose
+
 
 def range_CA_align(
     pose_a: Pose,
@@ -336,9 +368,7 @@ def combine_two_poses(
     newpose.append_residue_by_jump(
         pose_b.residue(start_b), newpose.chain_end(1), "CA", "CA", 1
     )
-    for i in range(
-        start_b + 1, pose_b.total_residue() + 1
-    ):  # TODO make sure this doesn't break the statemakers
+    for i in range(start_b + 1, pose_b.total_residue() + 1):
         newpose.append_residue_by_bond(pose_b.residue(i))
     return newpose
 
@@ -454,6 +484,9 @@ class StateMaker(ABC):
         """
         Initialize the base class with common attributes.
         """
+
+        import pyrosetta
+        import pyrosetta.distributed.io as io
 
         self.input_pose = io.to_pose(pose)
         self.pre_break_helix = pre_break_helix
@@ -769,7 +802,7 @@ class BoundStateMaker(StateMaker):
                     # fix PDBInfo and chain numbering
                     rechain.apply(dock)
                     # extend the bound helix
-                    dock = extend_helical_termini(
+                    dock = extend_helix_termini(
                         pose=dock,
                         chain=3,
                         extend_n_term=5,
@@ -849,7 +882,6 @@ def make_free_states(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-    final_pposes = []
     for pose in poses:
         # make a new FreeStateMaker for each pose
         state_maker = FreeStateMaker(pose, **kwargs)
@@ -884,7 +916,6 @@ def make_bound_states(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-    final_pposes = []
     for pose in poses:
         # make a new BoundStateMaker for each pose
         state_maker = BoundStateMaker(pose, **kwargs)
@@ -894,17 +925,24 @@ def make_bound_states(
 
 
 @requires_init
-def pair_bound_states(
+def pair_bound_state(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
-    # TODO Wrapper for distributing BoundStateMaker.
-    # TODO :param packed_pose_in: The input pose.
-    # TODO :param kwargs: The keyword arguments to pass to BoundStateMaker.
-    # TODO :return: An iterator of PackedPoses.
+    :param packed_pose_in: The input pose.
+    :param kwargs: The keyword arguments to pass to the pairing and looping protocols.
+    :return: An iterator of PackedPoses.
+    Find a state X crispy shifty for a given state Y.
+    Do so by finding the best free state for a given bound state. Then try to loop the
+    free state to have the same DSSP as the bound state. Briefly pack the loop and then
+    filter on wnm and clash.
+    Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16` and
+    `-indexed_structure_store:fragment_store \
+    /net/databases/VALL_clustered/connect_chains/ss_grouped_vall_helix_shortLoop.h5`
     """
     import sys
     from pathlib import Path
+    from time import time
     import pandas as pd
     import pyrosetta
     import pyrosetta.distributed.io as io
@@ -912,8 +950,17 @@ def pair_bound_states(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    # TODO import yeet pose xyz
-    # TODO from crispy_shifty.protocols.looping import loop_from_blueprint
+    from crispy_shifty.protocols.design import (
+        clear_constraints,
+        gen_std_layer_design,
+        gen_task_factory,
+        pack_rotamers,
+        score_per_res,
+        score_wnm_all,
+        struct_profile,
+    )
+    from crispy_shifty.protocols.looping import loop_remodel
+    from crispy_shifty.utils.io import print_timestamp
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -923,29 +970,132 @@ def pair_bound_states(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
 
+    start_time = time()
     reference_csv = pd.read_csv(kwargs["reference_csv"], index_col="Unnamed: 0")
-    final_pposes = []
     for pose in poses:
         # get scores
         scores = dict(pose.scores)
         pdb = scores["pdb"]
         pre_break_helix = scores["pre_break_helix"]
         # find a state 0 from the same parent pdb with the same pre-break helix
-        state_0 = reference_csv.loc[
+        state_0 = reference_csv[
             (reference_csv["pdb"] == pdb)
-            & (reference_csv["pre_break_helix"] == pre_break_helix)
-            & (reference_csv["shift"] == 0)
+            & (reference_csv["pre_break_helix"].astype(int) == int(pre_break_helix))
         ]
+        if len(state_0) == 0:
+            continue
+        else:
+            state_0 = state_0.iloc[
+                0
+            ]  # if there are multiple, take the first (there shouldn't be multiple)
         # load the state 0 pose
-        x_pose = next(path_to_pose_or_ppose(path=state_0.name, cluster_scores=True, pack_result=False))
+        x_pose = next(
+            path_to_pose_or_ppose(
+                path=state_0.name, cluster_scores=True, pack_result=False
+            )
+        )
         # get the dssp string of the pose
         dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
         dssp_string = dssp.get_dssp_secstruct()
-        # try to loop the state 0 with blueprint builder and the dssp string
-        # TODO
+        # infer the length of the region to be inserted
+        region_length = pose.chain_end(1) - len(x_pose.sequence())
+        # get the start and end of the loop
+        start = x_pose.chain_end(1) + 1
+        end = start + region_length
+        # python indexing starts at 0
+        start -= 1
+        end -= 1
+        # get the dssp of the region to be inserted
+        region_dssp = dssp_string[start:end]
+        # try to loop the state 0 with loop_remodel and the region dssp
+        maybe_closed_x_pose = x_pose.clone()
+        bb_clash_pre = clash_check(maybe_closed_x_pose)
+        print_timestamp("Attempting blueprint rebuild of state X", start_time)
+        closure_type = loop_remodel(
+            pose=maybe_closed_x_pose,
+            length=region_length,
+            loop_dssp=region_dssp,
+            surround_loop_with_helix=True,
+        )
         # if successful, check chain A and chain C match length
+        if closure_type == "loop_remodel":
+            print_timestamp("Successful blueprint rebuild of state X", start_time)
+            try:
+                assert pose.chain_end(1) == len(maybe_closed_x_pose.sequence())
+                closed_x_pose = maybe_closed_x_pose.clone()
+            except AssertionError:
+                raise RuntimeError(
+                    "The length of the X pose after looping is not the same as the length of the Y pose chA."
+                )
+        else:  # skip if unsuccessful and don't yield
+            continue
+        print_timestamp("Setting up for design", start_time)
+        layer_design = gen_std_layer_design()
+        # make sfxn
+        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+        # get the residue numbers of the loop
+        new_loop_resis = list(range(start, end + 1))
+        new_loop_str = ",".join(str(x) for x in new_loop_resis)
+        new_loop_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+                new_loop_str
+            )
+        )
+        design_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
+                new_loop_sel, 8, True
+            )
+        )
+        task_factory = gen_task_factory(
+            design_sel=design_sel,
+            pack_nbhd=True,
+            extra_rotamers_level=2,
+            limit_arochi=True,
+            prune_buns=False,
+            upweight_ppi=False,
+            restrict_pro_gly=False,
+            precompute_ig=False,
+            ifcl=True,
+            layer_design=layer_design,
+        )
+        print_timestamp("Designing loop...", start_time)
+        struct_profile(
+            closed_x_pose,
+            design_sel,
+        )
+        # pack the loop twice
+        for _ in range(0, 2):
+            pack_rotamers(
+                closed_x_pose,
+                task_factory,
+                sfxn,
+            )
+        print_timestamp("Filtering state X", start_time)
+        bb_clash_post = clash_check(closed_x_pose)
+        score_per_res(closed_x_pose, sfxn)
+        wnm_all_x = score_wnm_all(closed_x_pose)[0]
+        scores["bb_clash_delta_x"] = bb_clash_post - bb_clash_pre
+        scores["score_per_res_x"] = closed_x_pose.scores["score_per_res"]
+        scores["wnm_all_x"] = wnm_all_x
+        print_timestamp("Yeeting state X into state Y", start_time)
         # yeet the state 0 pose
+        closed_x_pose = yeet_pose_xyz(
+            closed_x_pose,
+        )
         # then add it to pose
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            pose,
+            closed_x_pose,
+            new_chain=True,
+        )
         # then rechain
-        # yield the pose
-
+        sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sc.chain_order("123")
+        sc.apply(pose)
+        # reset scores
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        # then pack
+        ppose = io.to_packed(pose)
+        # yield the ppose
+        yield ppose
