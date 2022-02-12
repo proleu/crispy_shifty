@@ -541,7 +541,8 @@ class SuperfoldRunner:
                 # load pose and turn it into a pdb string
                 decoy_pdbstring = io.to_pdbstring(io.pose_from_file(decoy_path))
                 result["decoy_pdbstring"] = decoy_pdbstring
-
+            else:
+                pass
             results[pymol_name].update({model_seed: result})
         # turn results back into a regular dict
         results = dict(results)
@@ -730,6 +731,8 @@ class SuperfoldMultiPDB(SuperfoldRunner):
                 # load pose and turn it into a pdb string
                 decoy_pdbstring = io.to_pdbstring(io.pose_from_file(decoy_path))
                 result["decoy_pdbstring"] = decoy_pdbstring
+            else:
+                pass
             results[pymol_name].update({model_seed: result})
         # turn results back into a regular dict
         results = dict(results)
