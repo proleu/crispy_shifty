@@ -137,7 +137,6 @@ def generate_decoys_from_pose(
                 continue
         # if the decoy passes all filters, yield it
         if keep_decoy:
-            # TODO load the prediction decoys from the pose datacache
             if generate_prediction_decoys:
                 decoy_pdbstring = top_result.pop("decoy_pdbstring")
                 decoy = io.to_pose(io.pose_from_pdbstring(decoy_pdbstring))
@@ -527,11 +526,10 @@ class SuperfoldRunner:
         json_files = glob(os.path.join(self.tmpdir, "*_prediction_results.json"))
         # read the json files and update a dict of dicts of dicts of scores
         # the outer dict is keyed by the pymol_name, values are all model/seed results
-        # the inner dict is keyed by the model and seed, and the value is the scores
+        # the inner dict is keyed by the model + seed, and the value is the scores dict
         results = defaultdict(dict)
         for json_file in json_files:
             pymol_name, model_seed, result = process_results_json(json_file)
-            # TODO optionally load result pdbs
             if self.load_decoys:
                 if self.amber_relax:
                     suffix = "_relaxed.pdb"
@@ -721,7 +719,6 @@ class SuperfoldMultiPDB(SuperfoldRunner):
         results = defaultdict(dict)
         for json_file in json_files:
             pymol_name, model_seed, result = process_results_json(json_file)
-            # TODO optionally load result pdbs
             if self.load_decoys:
                 if self.amber_relax:
                     suffix = "_relaxed.pdb"
@@ -911,6 +908,7 @@ def fold_paired_state_Y(
         flag_update = {
             "--initial_guess": initial_guess,
             "--reference_pdb": reference_pdb,
+            "--keep_chain_order": " ",
         }
         # now we have to point to the right fasta file
         new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
@@ -957,7 +955,7 @@ def fold_paired_state_Y(
             # thread the sequence from chA onto chA
             stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
             stm.apply(decoy)
-            # rename af2 metrics to have Y_ prefix TODO
+            # rename af2 metrics to have Y_ prefix 
             decoy_scores = dict(decoy.scores)
             for key, value in decoy_scores.items():
                 if key in af2_metrics:
