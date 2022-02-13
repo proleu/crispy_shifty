@@ -16,9 +16,7 @@ Back of the napkin numbers:
     ~44000 junctions
 
 dev TODOs:
-    - TODO add Y_ underscores to af2 metrics
-    - TODO option to return best decoys for each design in folding.py
-        - might need to use bytestring instead of pdbstring
+    - check with Ryan for superfold chain order / RMSD bug
     - TODO relaxscript options for design
     - loop instead of 21 repeats in 00_design
     - remember to maintain the envs and repos on perlmutter and janelia clusters
@@ -43,6 +41,9 @@ dev TODOs:
 
     - DOTFILES - check init.vim is working, then version control
     - rebalance states/parents after 03_fold or just go crazy?
+    - AF2 working stuff
+    - AF2 nihal helix binders
+    - make `almost_inpainting` blueprint builder func
 
 TODO: 
     00 filter scaffold sets # run

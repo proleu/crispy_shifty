@@ -325,7 +325,8 @@ class SuperfoldRunner:
             "--type",
             # flags that are optional
             "--enable_dropout",
-            "--keep_chain_order",
+            "--keep_chain_order", # only in devel TODO
+            "--simple_rmsd", # only in non-devel TODO
             "--output_pae",
             "--overwrite",
             "--save_intermediates",
@@ -392,6 +393,15 @@ class SuperfoldRunner:
         """
         self.fasta_path = fasta_path
         return None
+
+    def set_script(self, script: str) -> None:
+        """
+        :param: script: The path to the script.
+        :return: None.
+        """
+        self.script = script
+        self.update_command()
+        return 
 
     def setup_tmpdir(self) -> None:
         """
