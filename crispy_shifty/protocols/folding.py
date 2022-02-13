@@ -918,7 +918,7 @@ def fold_paired_state_Y(
         flag_update = {
             "--initial_guess": initial_guess,
             "--reference_pdb": reference_pdb,
-            "--keep_chain_order": " ",
+            "--simple_rmsd": " ", # TODO for RMSD bug
         }
         # now we have to point to the right fasta file
         new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
@@ -926,6 +926,7 @@ def fold_paired_state_Y(
         runner.set_fasta_path(new_fasta_path)
         runner.override_input_file(new_fasta_path)
         runner.update_flags(flag_update)
+        runner.set_script(runner.script.replace("_devel", "")) # TODO for RMSD bug
         runner.update_command()
         print_timestamp("Running AF2", start_time)
         runner.apply(pose)
