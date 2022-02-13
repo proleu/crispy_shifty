@@ -40,8 +40,13 @@ dev TODOs:
     - if really bored, add documentation to the InsertResMover and PR
 
     - DOTFILES - check init.vim is working, then version control
+
     - rebalance states/parents after 03_fold or just go crazy?
-    - AF2 working stuff
+
+    - AF2 working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
+    - staple j7, j9, cs94, af2.
+    - order snac and any staple that pass af2, as eblocks?
+    - order 24-48 prototypes as eblocks
     - AF2 nihal helix binders
     - make `almost_inpainting` blueprint builder func
 
