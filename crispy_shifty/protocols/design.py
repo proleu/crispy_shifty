@@ -378,6 +378,40 @@ def gen_task_factory(
     return task_factory
 
 
+def gen_scorefxn(scorefxn_purpose: str = "clean") -> ScoreFunction:
+
+    import pyrosetta
+
+    if scorefxn_purpose == "clean":
+        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    
+    elif scorefxn_purpose == "design":
+        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
+
+    elif scorefxn_purpose == "hbonds":
+        # a scorefunction that likes hbonds- I got this from Ryan Kibler, not sure of the original source. Bcov?
+        # use with prune_buns (allow_even_trades=False, atomic_depth_cutoff=3.5, minimum_hbond_energy=-1.0)
+        hbond_options = pyrosetta.rosetta.core.scoring.hbonds.HBondOptions()
+        hbond_options.use_hb_env_dep(True)
+        energy_method_options = pyrosetta.rosetta.core.scoring.methods.EnergyMethodOptions()
+        energy_method_options.hbond_options(hbond_options)
+        energy_method_options.approximate_buried_unsat_penalty_burial_atomic_depth(3.5)
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_cross_chain(-7.0)
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_ser_to_helix_bb(1.0)
+        energy_method_options.approximate_buried_unsat_penalty_hbond_energy_threshold(-1.0)
+        energy_method_options.approximate_buried_unsat_penalty_natural_corrections1(True)
+        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+        sfxn.set_energy_method_options(energy_method_options)
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.approximate_buried_unsat_penalty, 17.0)
+
+    else:
+        raise ValueError(f"Invalid scorefxn_purpose: {scorefxn_purpose}")
+
+    return sfxn
+
+
 # False is the default for all these in a new movemap
 def gen_movemap(
     jump: bool = False,
