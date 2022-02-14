@@ -15,7 +15,17 @@ __pycache__/
 demos
 envs
 software
-projects
+projects/*/00*/*
+projects/*/01*/*
+projects/*/02*/*
+projects/*/03*/*
+projects/*/04*/*
+projects/*/05*/*
+projects/*/06*/*
+projects/*/07*/*
+projects/*/08*/*
+projects/*/09*/*
+projects/*/10*/*
 examples
 figs
 *-Copy1*
@@ -36,4 +46,4 @@ run.py
 run.sh
 
 scaffolds
-share/*
+share
