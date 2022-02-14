@@ -883,11 +883,36 @@ def make_free_states(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
     for pose in poses:
-        # make a new FreeStateMaker for each pose
-        state_maker = FreeStateMaker(pose, **kwargs)
-        # generate states
-        for ppose in state_maker.generate_states():
-            yield ppose
+        # get scores from pose
+        scores = dict(pose.scores)
+        clash_cutoff = 3000
+        # interfaces must be a ratio of 1:3 or 3:1 between the n and c term halves
+        int_cutoff = 0.33
+        # get the name of the original design
+        name = scores["pdb"].split("/")[-1].replace(".pdb", "", 1)
+        # determine where to split the scaffold by counting the number of helixes
+        num_helices = len(scores["topo"])
+        # split even numbers in half
+        if num_helices % 2 == 0:
+            pre_break_helices = [int(num_helices / 2)]
+        # get middle two for odd numbers
+        else:
+            first_helix = int(num_helices / 2)  # rounds down
+            pre_break_helices = [first_helix, first_helix + 1]
+        for pre_break_helix in pre_break_helices:
+            pose = pose.clone()
+            # make a new FreeStateMaker for each pose
+            state_maker = FreeStateMaker(
+                pose, 
+                clash_cutoff=clash_cutoff,
+                int_cutoff=int_cutoff,
+                name=name,
+                pre_break_helix=pre_break_helix,
+                **kwargs,
+            )
+            # generate states
+            for ppose in state_maker.generate_states():
+                yield ppose
 
 
 @requires_init
