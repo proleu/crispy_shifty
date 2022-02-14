@@ -326,3 +326,67 @@ def redesign_disulfides(
         final_pposes.append(designed_ppose)
     for ppose in final_pposes:
         yield ppose
+
+
+def prep_input_scaffold(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param packed_pose_in: PackedPose object.
+    :param kwargs: kwargs such as "pdb_path".
+    :return: Iterator of PackedPose objects with ends trimmed and disulfides redesigned.
+    First removes trailing loops, adds metadata, then does design to remove disulfides.
+    Design is fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
+    Requires the following init flags:
+    -corrections::beta_nov16 true
+    -detect_disulf false
+    -holes:dalphaball /software/rosetta/DAlphaBall.gcc
+    """
+    from pathlib import Path
+    import sys
+    import pandas as pd
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.distributed.tasks.rosetta_scripts import (
+        SingleoutputRosettaScriptsTask,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import (
+        path_to_pose_or_ppose,
+        break_all_disulfides,
+        redesign_disulfides,
+        remove_terminal_loops,
+    )
+
+    # get path to metadata from kwargs
+    metadata_csv = kwargs.pop("metadata_csv")
+    key = kwargs["pdb_path"]
+
+    metadata = dict(pd.read_csv(metadata_csv, index_col="pdb").loc[key])
+    metadata_to_keep = [
+        "topo",
+        "best_model",
+        "best_average_plddts",
+        "best_ptm",
+        "best_rmsd_to_input",
+        "best_average_DAN_plddts",
+        "scaffold_type",
+    ]
+    metadata = {k: v for k, v in metadata.items() if k in metadata_to_keep}
+    metadata["pdb"] = key
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=False, pack_result=False
+        )
+    for pose in poses:
+        for trimmed_ppose in remove_terminal_loops(packed_pose_in=io.to_packed(pose), metadata=metadata, **kwargs):
+            for final_ppose in redesign_disulfides(trimmed_ppose, **kwargs):
+                yield final_ppose
+
+
