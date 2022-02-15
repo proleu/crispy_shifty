@@ -1,5 +1,5 @@
 # Python standard library
-from typing import Iterator, List, Optional, Union
+from typing import Iterator, List, Optional, Tuple, Union
 
 # 3rd party library imports
 # Rosetta library imports
