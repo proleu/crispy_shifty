@@ -639,6 +639,58 @@ def score_cms(
     return cms
 
 
+def score_ddg(pose: Pose, jump: int=1, name: str = "ddg") -> float:
+    """
+    :param: pose: Pose, the pose to score.
+    :param: jump: the jump to calculate DDG across
+    :param: name: str, the name of the filter.
+    :return: float, the score of the pose with the filter.
+    Scores the pose ddg at a particular jump.
+    """
+    import pyrosetta
+
+    objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
+        f"""
+        <FILTERS>
+            <Ddg name="ddg" jump="{str(jump)}" />
+        </FILTERS>
+        """
+    )
+    ddg_filter = objs.get_filter("ddg")
+    ddg_filter.set_user_defined_name(name)
+    ddg = ddg_filter.report_sm(pose)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(ddg))
+    return ddg
+
+
+def score_SAP(
+        pose: Pose, 
+        name: str = "SAP",
+        sap_calculate_selector: ResidueSelector = None,
+        sasa_selector: ResidueSelector = None,
+        score_selector: ResidueSelector = None,
+    ) -> float:
+    """
+    :param: pose: Pose, the pose to score.
+    :param: name: str, the name of the filter.
+    :return: float, the score of the pose with the filter.
+    Scores the pose with the worst9mer filter on the given selector. Should not be used
+    over selections that include jumps/chainbreaks.
+    """
+    import pyrosetta
+
+    sap_metric = pyrosetta.rosetta.core.pack.guidance_scoreterms.sap.SapScoreMetric()
+    if sap_calculate_selector is not None:
+        sap_metric.set_calculate_selector(sap_calculate_selector)
+    if sasa_selector is not None:
+        sap_metric.set_sasa_selector(sasa_selector)
+    if score_selector is not None:
+        sap_metric.set_score_selector(score_selector)
+    sap = sap_metric.calculate(pose)
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(sap))
+    return sap
+
+
 def score_sc(
     pose: Pose, sel_1: ResidueSelector, sel_2: ResidueSelector, name: str = "sc_int"
 ) -> float:
@@ -771,7 +823,7 @@ def score_wnm_helix(pose: Pose, name: str = "wnm_hlx") -> float:
     return wnm
 
 
-def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score"):
+def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score") -> Tuple[float, float]:
     """
     :param: pose: Pose to score.
     :param: scorefxn: ScoreFunction to use.
@@ -791,7 +843,7 @@ def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score"):
     return score, score_pr
 
 
-def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist"):
+def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist") -> float:
     """
     :param: pose: Pose to measure CA distance.
     :param: resi_1: Residue index of first residue.
