@@ -1032,6 +1032,8 @@ def fold_paired_state_X(
     # }
     rank_on = "mean_plddt"
     print_timestamp("Generating decoys", start_time)
+    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    sw.chain_order("123")
     for tag, pose in tag_pose_dict.items():
         for decoy in generate_decoys_from_pose(
             pose,
@@ -1041,6 +1043,16 @@ def fold_paired_state_X(
             prefix=tag,
             rank_on=rank_on,
         ):
+            for original_path in pdb_paths:
+                if tag in original_path:
+                    bound_pose = pyrosetta.io.pose_from_file(original_path)
+                    pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                        bound_pose, decoy, new_chain=True
+                    )
+                    sw.apply(bound_pose)
+                    break
+                else:
+                    continue
 
-            packed_decoy = io.to_packed(decoy)
+            packed_decoy = io.to_packed(bound_pose)
             yield packed_decoy

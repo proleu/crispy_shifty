@@ -297,7 +297,10 @@ def filter_paired_state(
     :param: packed_pose_in: a packed pose to filter. If None, a pose will be generated 
     from the input pdb_path.
     :param: kwargs: keyword arguments for filtering.
-    Needs `-corrections:beta_nov16 true` and TODO (wnm DB) in init.
+    Needs `-corrections:beta_nov16 true` and 
+    `-indexed_structure_store:fragment_store \
+    /net/databases/VALL_clustered/connect_chains/ss_grouped_vall_helix_shortLoop.h5` in
+    init statement.
     """
 
     from pathlib import Path
@@ -363,11 +366,10 @@ def filter_paired_state(
         scores = dict(pose.scores)
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
-        # make a copy of the original pose
-        original_pose = pose.clone()
         # get SAP
         Y_sap = score_SAP(pose, name="Y_sap")
         # get cms
+        chA, chB, chC = (ChainSelector(i) for i in range(1, 4))
         Y_cms = score_cms(pose=pose, sel_1=chA, sel_2=chB, name="Y_cms")
         # get ddg
         Y_ddg = score_ddg(pose=pose, name="Y_ddg")
