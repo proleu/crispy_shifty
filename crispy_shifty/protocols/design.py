@@ -1126,60 +1126,64 @@ def one_state_design_bound_state(
             end="",
             start_time=start_time,
         )
-        fast_design(
-            pose=pose,
-            task_factory=task_factory,
-            scorefxn=design_sfxn,
-            movemap=flexbb_mm,
-            repeats=2,
-        )
-        print("complete.")
+        fixbb_pose = pose.clone()
+        # run fast design twice, flexible backbone movemap and yield the pose both times
+        for _ in range(2):
+            pose = fixbb_pose.clone()
+            fast_design(
+                pose=pose,
+                task_factory=task_factory,
+                scorefxn=design_sfxn,
+                movemap=flexbb_mm,
+                repeats=2,
+            )
+            print("complete.")
 
-        print_timestamp("Scoring loop distance...", end="", start_time=start_time)
-        pre_break_helix = int(float(pose.scores["pre_break_helix"]))
-        score_loop_dist(pose, pre_break_helix, name="loop_dist")
-        print("complete.")
+            print_timestamp("Scoring loop distance...", end="", start_time=start_time)
+            pre_break_helix = int(float(pose.scores["pre_break_helix"]))
+            score_loop_dist(pose, pre_break_helix, name="loop_dist")
+            print("complete.")
 
-        print_timestamp(
-            "Scoring contact molecular surface and shape complementarity...",
-            end="",
-            start_time=start_time,
-        )
-        an_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(1)
-        ac_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(2)
-        b_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(3)
-        dhr_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(
-            an_sel, ac_sel
-        )
-        selector_pairs = [
-            (an_sel, ac_sel),
-            (an_sel, b_sel),
-            (ac_sel, b_sel),
-            (b_sel, dhr_sel),
-        ]
-        pair_names = ["AnAc", "AnB", "AcB", "AnAcB"]
-        for (sel_1, sel_2), name in zip(selector_pairs, pair_names):
-            score_cms(pose, sel_1, sel_2, "cms_" + name)
-            score_sc(pose, sel_1, sel_2, "sc_" + name)
-        print("complete.")
+            print_timestamp(
+                "Scoring contact molecular surface and shape complementarity...",
+                end="",
+                start_time=start_time,
+            )
+            an_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(1)
+            ac_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(2)
+            b_sel = pyrosetta.rosetta.core.select.residue_selector.ChainSelector(3)
+            dhr_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(
+                an_sel, ac_sel
+            )
+            selector_pairs = [
+                (an_sel, ac_sel),
+                (an_sel, b_sel),
+                (ac_sel, b_sel),
+                (b_sel, dhr_sel),
+            ]
+            pair_names = ["AnAc", "AnB", "AcB", "AnAcB"]
+            for (sel_1, sel_2), name in zip(selector_pairs, pair_names):
+                score_cms(pose, sel_1, sel_2, "cms_" + name)
+                score_sc(pose, sel_1, sel_2, "sc_" + name)
+            print("complete.")
 
-        print_timestamp(
-            "Scoring secondary structure shape complementarity...",
-            end="",
-            start_time=start_time,
-        )
-        score_ss_sc(pose)
-        print("complete.")
+            print_timestamp(
+                "Scoring secondary structure shape complementarity...",
+                end="",
+                start_time=start_time,
+            )
+            score_ss_sc(pose)
+            print("complete.")
 
-        print_timestamp("Scoring...", end="", start_time=start_time)
-        score_per_res(pose, clean_sfxn)
-        score_filter = gen_score_filter(clean_sfxn)
-        add_metadata_to_pose(pose, "path_in", pdb_path)
-        end_time = time()
-        total_time = end_time - start_time
-        print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
-        add_metadata_to_pose(pose, "time", total_time)
-        clear_terms_from_scores(pose)
+            print_timestamp("Scoring...", end="", start_time=start_time)
+            score_per_res(pose, clean_sfxn)
+            score_filter = gen_score_filter(clean_sfxn)
+            add_metadata_to_pose(pose, "path_in", pdb_path)
+            end_time = time()
+            total_time = end_time - start_time
+            print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
+            add_metadata_to_pose(pose, "time", total_time)
+            clear_terms_from_scores(pose)
 
-        ppose = io.to_packed(pose)
-        yield ppose
+            ppose = io.to_packed(pose)
+            yield ppose
