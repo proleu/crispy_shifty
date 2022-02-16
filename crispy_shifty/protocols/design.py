@@ -446,6 +446,7 @@ def fast_design(
     task_factory: TaskFactory,
     scorefxn: ScoreFunction,
     movemap: MoveMap,
+    relax_script: str = "InterfaceDesign2019",
     repeats: int = 1,
 ) -> None:
     """
@@ -469,7 +470,7 @@ def fast_design(
         <MOVERS>
             <FastDesign name="fastdesign" repeats="{repeats}" ramp_down_constraints="false" 
                 batch="false" cartesian="false" bondangle="false" bondlength="false" 
-                min_type="lbfgs_armijo_nonmonotone" relaxscript="InterfaceDesign2019">
+                min_type="lbfgs_armijo_nonmonotone" relaxscript="{relax_script}">
             </FastDesign>
         </MOVERS>
         """

@@ -17,7 +17,6 @@ Back of the napkin numbers:
 
 dev TODOs:
     - check with Ryan for superfold chain order / RMSD bug
-    - TODO relaxscript options for design
     - loop instead of 21 repeats in 00_design
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
