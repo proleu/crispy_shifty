@@ -1043,16 +1043,33 @@ def fold_paired_state_X(
             prefix=tag,
             rank_on=rank_on,
         ):
+            scores = dict(decoy.scores)
+            bound_pose = None
             for original_path in pdb_paths:
                 if tag in original_path:
-                    bound_pose = pyrosetta.io.pose_from_file(original_path)
-                    pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                        bound_pose, decoy, new_chain=True
+                    bound_pose = next(
+                        path_to_pose_or_ppose(
+                            path=original_path, cluster_scores=True, pack_result=False
+                        )
                     )
-                    sw.apply(bound_pose)
+                    final_pose = Pose()
+                    # get the first two chains from the input
+                    for chain in list(bound_pose.split_by_chain())[:2]:
+                        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                            final_pose, chain, new_chain=True
+                        )
+                    pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                        final_pose, decoy, new_chain=True
+                    )
+                    sw.apply(final_pose)
                     break
                 else:
                     continue
-
-            packed_decoy = io.to_packed(bound_pose)
-            yield packed_decoy
+            if bound_pose is None:
+                raise RuntimeError
+            else: 
+                pass
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(final_pose, key, value)
+            final_ppose = io.to_packed(final_pose)
+            yield final_ppose

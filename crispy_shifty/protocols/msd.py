@@ -417,6 +417,7 @@ def filter_paired_state(
         print_timestamp(
             f"Total time: {total_time:.2f} seconds", start_time=start_time
         )
+        pack_rotamers(pose=pose, task_factory=task_factory, scorefxn=clean_sfxn)
         # clear the pose scores
         pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
         for key, value in scores.items():
