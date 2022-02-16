@@ -403,7 +403,9 @@ def filter_paired_state(
             # get wnm_helix
             wnm_helix = score_wnm_helix(solo_chain, name=f"{chain_id}_wnm_helix")
             # update the scores dict with the new scores
+            final_sequence = solo_chain.sequence()
             chain_scores = {
+                f"{chain_id}_final_seq": final_sequence,
                 f"{chain_id}_sap": sap,
                 f"{chain_id}_total_score": chain_total_score,
                 f"{chain_id}_score_per_res": chain_score_per_res,
