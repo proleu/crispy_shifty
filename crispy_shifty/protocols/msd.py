@@ -366,6 +366,9 @@ def filter_paired_state(
         scores = dict(pose.scores)
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
+        print_timestamp("Settling Y and scoring...", start_time=start_time)
+        # pack the rotamers to get rid of rosetta clashes
+        pack_rotamers(pose=pose, task_factory=task_factory, scorefxn=clean_sfxn)
         # get SAP
         Y_sap = score_SAP(pose, name="Y_sap")
         # get cms
@@ -419,7 +422,6 @@ def filter_paired_state(
         print_timestamp(
             f"Total time: {total_time:.2f} seconds", start_time=start_time
         )
-        pack_rotamers(pose=pose, task_factory=task_factory, scorefxn=clean_sfxn)
         # clear the pose scores
         pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
         for key, value in scores.items():

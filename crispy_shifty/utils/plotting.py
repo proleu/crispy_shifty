@@ -40,6 +40,7 @@ def histplot_df(
     hue: str = None,
     hue_order: List[str] = None,
     save_path: str = None,
+    **kwargs,
 ):
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -63,6 +64,7 @@ def histplot_df(
             discrete=discrete,
             hue=hue,
             hue_order=hue_order,
+            **kwargs,
         )
 
     fig.tight_layout()
