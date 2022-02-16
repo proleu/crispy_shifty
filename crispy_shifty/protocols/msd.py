@@ -397,7 +397,7 @@ def filter_paired_state(
             # get SAP
             sap = score_SAP(pose=solo_chain, name=f"{chain_id}_sap")
             # get total score and score_per_res
-            total_score, score_per_res = score_per_res(solo_chain, clean_sfxn, name=f"{chain_id}_score")
+            chain_total_score, chain_score_per_res = score_per_res(solo_chain, clean_sfxn, name=f"{chain_id}_score")
             # get wnm_all
             wnm_all = score_wnm_all(solo_chain)[0]
             # get wnm_helix
@@ -405,8 +405,8 @@ def filter_paired_state(
             # update the scores dict with the new scores
             chain_scores = {
                 f"{chain_id}_sap": sap,
-                f"{chain_id}_total_score": total_score,
-                f"{chain_id}_score_per_res": score_per_res,
+                f"{chain_id}_total_score": chain_total_score,
+                f"{chain_id}_score_per_res": chain_score_per_res,
                 f"{chain_id}_wnm_all": wnm_all,
                 f"{chain_id}_wnm_helix": wnm_helix,
             }
