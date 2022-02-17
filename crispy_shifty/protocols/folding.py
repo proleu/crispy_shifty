@@ -662,7 +662,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
             # TODO use pathlib
             tag = os.path.basename(path).split(".pdb")[0]
             self.tag_pose_dict[tag] = next(
-                path_to_pose_or_ppose(path=path, cluster_scores=True, pack_result=False)
+                path_to_pose_or_ppose(path=path, cluster_scores=False, pack_result=False)
             )
         # write the poses to clean PDB files of only ATOM coordinates.
         for tag, pose in self.tag_pose_dict.items():
