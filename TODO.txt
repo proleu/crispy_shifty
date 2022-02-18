@@ -1,19 +1,6 @@
 Strategy:
-Probably only need delta SAP and CMS/ddG/SASA for interface filtering
 Increase SAP tolerance somewhat
 If disulfide stapled states are needed or wanted, just staple and predict
-
-Back of the napkin numbers:
-    ~2100 non-junctions
-    *~17=34000 bound states,
-    *75=2.6M designed bound states,
-    *~.25=640k folded bound states,
-    *~.5=320k paired bound states,
-    *37=11.8M designed paired bound states,
-    *~.05=592k folded paired bound states, (Y)
-    *~.33=195k folded paired bound states, (X)
-	TODO
-    ~44000 junctions
 
 dev TODOs:
     - order 24-48 prototypes as eblocks # 24 A, 24 B, 12 DHRs
@@ -22,7 +9,6 @@ dev TODOs:
     
     - ordering utils, domesticator?
     - TODOs and docstrings in all modules - beta_nov16 notices in docstrings where used.
-    - check path_to_pose_or_ppose isn't broken with cluster scores
     - use Bio SeqIO for fasta wrangling
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
@@ -31,7 +17,6 @@ dev TODOs:
             - then figure out smooth setup
             - share with lab
     	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
-            - fix Abbas superfold submodule
             - repredict AF2 intial guess folding.py the FF63-129 and cs_0-108 and JHB1-13
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
@@ -42,7 +27,9 @@ dev TODOs:
 
     - dask dataframe implementation in folding notebooks
 
-    - if really bored, add documentation to the InsertResMover and PR
+    - if really bored
+        - add documentation to the InsertResMover and PR
+        - add safety check for missing pyrosettacluster remark/score dict in get_scores_dict
 
     - DOTFILES - check init.vim is working, then version control
 
@@ -72,4 +59,5 @@ use symbolic regression on flexdock trajectory datasets?
 networks learn to summarize rules about biophysical mechanics, 
 then we use a seperate layer to regress equations
 
+in vivo assay for crispy snippies: cleavable sequence fused to petcon that prevents display
 
