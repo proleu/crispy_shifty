@@ -253,8 +253,10 @@ def gen_std_layer_design(layer_aas_list: list = None) -> dict:
 
 
 def gen_task_factory(
-    design_sel: ResidueSelector,
+    design_sel: ResidueSelector = None,
+    pack_sel: ResidueSelector = None,
     pack_nbhd: bool = False,
+    pack_nondesignable: bool = False,
     extra_rotamers_level: int = 0,
     limit_arochi: bool = False,
     prune_buns: bool = False,
@@ -289,9 +291,15 @@ def gen_task_factory(
 
     task_factory = pyrosetta.rosetta.core.pack.task.TaskFactory()
 
+    if not design_sel:
+        design_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+
+    if not pack_sel:
+        pack_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+
     if pack_nbhd:
         # pack around designable area
-        pack_sel = (
+        pack_nbhd_sel = (
             pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
                 design_sel, 6, True
             )
@@ -300,11 +308,21 @@ def gen_task_factory(
         pack_op = OperateOnResidueSubset(RestrictToRepackingRLT(), design_sel, True)
         task_factory.push_back(pack_op)
 
-        # everything not packable
-        lock_op = OperateOnResidueSubset(PreventRepackingRLT(), pack_sel, True)
+        # everything neither designable nor packable
+        design_nbhd_or_pack_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(pack_nbhd_sel, pack_sel)
+        lock_op = OperateOnResidueSubset(PreventRepackingRLT(), design_nbhd_or_pack_sel, True)
         task_factory.push_back(lock_op)
+    elif pack_nondesignable:
+        # everything not designable
+        pack_op = OperateOnResidueSubset(RestrictToRepackingRLT(), design_sel, True)
+        task_factory.push_back(pack_op)
     else:
-        lock_op = OperateOnResidueSubset(PreventRepackingRLT(), design_sel, True)
+        # everything not designable
+        pack_op = OperateOnResidueSubset(RestrictToRepackingRLT(), design_sel, True)
+        task_factory.push_back(pack_op)
+        # everything neither designable nor packable
+        design_or_pack_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(design_sel, pack_sel)
+        lock_op = OperateOnResidueSubset(PreventRepackingRLT(), design_or_pack_sel, True)
         task_factory.push_back(lock_op)
 
     if extra_rotamers_level > 0:
