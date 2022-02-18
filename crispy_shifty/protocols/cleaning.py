@@ -24,8 +24,10 @@ def path_to_pose_or_ppose(
     Generate PackedPose objects given an input path to a file on disk to read in.
     Can do pdb, pdb.bz2, pdb.gz or binary silent file formats.
     To use silents, must initialize Rosetta with "-in:file:silent_struct_type binary".
-    Does not save scores unless reading in pdb.bz2 and cluster_scores is set to true.
+    If `cluster_scores` is set to True, will attempt to set cluster scores from the 
+    file path if they exist (e.g. has line "REMARK PyRosettaCluster: {"instance": ...}")
     This function can be distributed (best for single inputs) or run on a host process
+
     """
     import bz2
     import pyrosetta
@@ -38,7 +40,11 @@ def path_to_pose_or_ppose(
         with open(path, "rb") as f:  # read bz2 bytestream, decompress and decode
             ppose = io.pose_from_pdbstring(bz2.decompress(f.read()).decode())
         if cluster_scores:  # set scores in pose after unpacking, then repack
-            scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
+            try:
+                scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
+            except UnboundLocalError:
+                print("Scores may be absent or incorrectly formatted")
+                scores = {}
             pose = io.to_pose(ppose)
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
@@ -49,7 +55,11 @@ def path_to_pose_or_ppose(
     elif ".pdb" in path:  # should handle pdb.gz as well
         ppose = io.pose_from_file(path)
         if cluster_scores:  # set scores in pose after unpacking, then repack
-            scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
+            try:
+                scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
+            except UnboundLocalError:
+                print("Scores may be absent or incorrectly formatted")
+                scores = {}
             pose = io.to_pose(ppose)
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))

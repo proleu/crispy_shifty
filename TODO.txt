@@ -22,6 +22,8 @@ dev TODOs:
     
     - ordering utils, domesticator?
     - TODOs and docstrings in all modules - beta_nov16 notices in docstrings where used.
+    - check path_to_pose_or_ppose isn't broken with cluster scores
+    - use Bio SeqIO for fasta wrangling
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
         - examples 2-4 with Abbas

@@ -134,7 +134,8 @@ class MPNNRunner(ABC):
         # setup standard command line flags for MPNN with default values
         self.flags = {
             "--backbone_noise": "0.0",
-            "--checkpoint_path": "/home/justas/projects/lab_github/mpnn/model_weigths/p17/epoch150_step235456.pt",  # TODO
+            # TODO last tested with /home/justas/projects/lab_github/proteinmpnn/model_weigths/p17/epoch150_step235456.pt
+            "--checkpoint_path": "/home/justas/projects/lab_github/proteinmpnn/model_weigths/p58/epoch514_step807206.pt",
             "--hidden_dim": "128",
             "--max_length": "20000",
             "--num_connections": "64",
@@ -178,9 +179,9 @@ class MPNNRunner(ABC):
             "--pssm_log_odds_flag",
             "--pssm_multi",
             "--pssm_threshold",
+            "--save_probs",
             "--save_score",
         ]
-        # TODO git root?
         self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'protein_mpnn_run.py')}"
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.is_setup = False  # this will be updated by the setup_runner method.
