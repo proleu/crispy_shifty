@@ -29,7 +29,7 @@ dev TODOs:
 
     - if really bored
         - add documentation to the InsertResMover and PR
-        - add safety check for missing pyrosettacluster remark/score dict in get_scores_dict
+        - SafeSwitchChainOrderMover in python, then CPP?
 
     - DOTFILES - check init.vim is working, then version control
 
