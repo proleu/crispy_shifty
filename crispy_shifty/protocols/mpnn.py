@@ -883,13 +883,20 @@ def mpnn_paired_state(
 
 
 @requires_init
-def mpnn_hinge_dimers(
+def mpnn_dimers(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
     """
     :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
     :param: kwargs: keyword arguments to be passed to MPNNMultistateDesign, or this function.
     :return: an iterator of PackedPose objects.
+    Runs MPNN design on dimers. The input pose can be any number of pairs of dimer protomers, in any state.
+    Useful for designing dimers for two or more states (especially when providing multiple copies of the same 
+    state to bias MSD toward that state) or for providing slight variations of the same state (e.g., different 
+    AF2 model predictions) to show MPNN a slightly more comprehensive view of the backbone space (note this 
+    last idea hasn't been tested).
+    For the interface selector to work properly, make sure the interface is formed in the last pair of chains
+    provided as input. All chains must be the same length.
     """
 
     from itertools import product
@@ -934,48 +941,46 @@ def mpnn_hinge_dimers(
             ), "mpnn_temperature must be between 0 and 1"
     else:
         mpnn_temperatures = [0.2]
-    # setup dict for MPNN design areas
-    print_timestamp("Setting up design selectors", start_time)
-    # make a designable residue selector of only the interface residues
-    chA = ChainSelector(1)
-    chB = ChainSelector(2)
-    chC = ChainSelector(3)
-    chD = ChainSelector(4)
-    interface_selector = interface_between_selectors(chC, chD)
-    neighborhood_selector = NeighborhoodResidueSelector(
-        interface_selector, distance=8.0, include_focus_in_subset=True
-    )
-    full_selector = OrResidueSelector(chC, chD)
-    selector_options = {
-        "full": full_selector,
-        "interface": interface_selector,
-        "neighborhood": neighborhood_selector,
-    }
-    # make the inverse dict of selector options
-    selector_inverse_options = {value: key for key, value in selector_options.items()}
-    if "mpnn_design_area" in kwargs:
-        if kwargs["mpnn_design_area"] == "scan":
-            mpnn_design_areas = [
-                selector_options[key] for key in ["full", "interface", "neighborhood"]
-            ]
-        else:
-            try:
-                mpnn_design_areas = [selector_options[kwargs["mpnn_design_area"]]]
-            except:
-                raise ValueError(
-                    "mpnn_design_area must be one of the following: full, interface, neighborhood"
-                )
-    else:
-        mpnn_design_areas = [selector_options["interface"]]
-
-    # make a list of linked residue selectors, we want to link chA with chC and chB with chD
-    residue_selectors = [[chA, chC], [chB, chD]]
 
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         original_pose = pose.clone()
-        # get the length of state X
+
+        # setup dict for MPNN design areas
+        print_timestamp("Setting up design selectors", start_time)
+        # make a designable residue selector of only the interface residues
+        chain_sels = [ChainSelector(i) for i in range(1, pose.num_chains() + 1)]
+        interface_selector = interface_between_selectors(chain_sels[-2], chain_sels[-1])
+        neighborhood_selector = NeighborhoodResidueSelector(
+            interface_selector, distance=8.0, include_focus_in_subset=True
+        )
+        full_selector = OrResidueSelector(chain_sels[-2], chain_sels[-1])
+        selector_options = {
+            "full": full_selector,
+            "interface": interface_selector,
+            "neighborhood": neighborhood_selector,
+        }
+        # make the inverse dict of selector options
+        selector_inverse_options = {value: key for key, value in selector_options.items()}
+        if "mpnn_design_area" in kwargs:
+            if kwargs["mpnn_design_area"] == "scan":
+                mpnn_design_areas = [
+                    selector_options[key] for key in ["full", "interface", "neighborhood"]
+                ]
+            else:
+                try:
+                    mpnn_design_areas = [selector_options[kwargs["mpnn_design_area"]]]
+                except:
+                    raise ValueError(
+                        "mpnn_design_area must be one of the following: full, interface, neighborhood"
+                    )
+        else:
+            mpnn_design_areas = [selector_options["interface"]]
+        # make a list of linked residue selectors, we want to link all the odd-indexed chains together and all the even-indexed chains together
+        residue_selectors = [chain_sels[::2], chain_sels[1::2]]
+
+        # get the length of one state
         offset = pose.chain_end(2)
         # iterate over the mpnn parameter combinations
         mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
@@ -985,15 +990,17 @@ def mpnn_hinge_dimers(
             pose = original_pose.clone()
 
             # get a boolean mask of the designable residues in state Y
-            stateY_filter = list(mpnn_design_area.apply(pose))
+            designable_filter = list(mpnn_design_area.apply(pose))
             # make a list of the corresponding residues in state X that are interface in Y
-            X_interface_residues = [
-                i - offset for i, designable in enumerate(stateY_filter, start=1) if designable
-            ]
-            X_interface_residues_str = ",".join(str(i) for i in X_interface_residues)
-            X_selector = ResidueIndexSelector(X_interface_residues_str)
+            all_interface_residues = []
+            for chain_pair in reversed(range(len(chain_sels) // 2)):
+                all_interface_residues += [
+                    i - offset*chain_pair for i, designable in enumerate(designable_filter, start=1) if designable
+                ]
+            all_interface_residues_str = ",".join(str(i) for i in all_interface_residues)
+            print(all_interface_residues_str)
+            design_selector = ResidueIndexSelector(all_interface_residues_str)
 
-            design_selector = OrResidueSelector(mpnn_design_area, X_selector)
             print_timestamp(
                 f"Beginning MPNNDesign run {run_i+1}/{num_conditions}", start_time
             )
