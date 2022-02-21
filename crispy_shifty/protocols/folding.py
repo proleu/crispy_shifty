@@ -134,7 +134,7 @@ def generate_decoys_from_pose(
             else:
                 # if the filter fails, don't keep the decoy
                 keep_decoy = False
-                continue
+                break
         # if the decoy passes all filters, yield it
         if keep_decoy:
             if generate_prediction_decoys:
@@ -829,7 +829,6 @@ def fold_bound_state(
             "rmsd_to_reference": (lt, 1.5),
             "mean_pae_interaction": (lt, 5),
         }
-        filter_dict = {}
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         for decoy in generate_decoys_from_pose(
