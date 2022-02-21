@@ -824,12 +824,11 @@ def fold_bound_state(
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
-        # TODO, for the pilot run I will not filter the decoys
-        # filter_dict = {
-        #     "mean_plddt": (gt, 90.0),
-        #     "rmsd_to_reference": (lt, 1.75),
-        #     "mean_pae_interaction": (lt, 7.5),
-        # }
+        filter_dict = {
+            "mean_plddt": (gt, 92.0),
+            "rmsd_to_reference": (lt, 1.5),
+            "mean_pae_interaction": (lt, 5),
+        }
         filter_dict = {}
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
