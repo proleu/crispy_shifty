@@ -3,8 +3,9 @@ Increase SAP tolerance somewhat
 If disulfide stapled states are needed or wanted, just staple and predict
 
 dev TODOs:
-    - order 24-48 prototypes as eblocks # 24 A, 24 B, 12 DHRs
-    - order 3 X and 3 Y staples for j7, j9, cs_094
+    - fully migrate to m4129
+    - test 24-48 prototypes as eblocks # 24 A, 24 B, 12 DHRs
+    - test 3 X and 3 Y staples for j7, j9, cs_094
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
     
     - ordering utils, domesticator?

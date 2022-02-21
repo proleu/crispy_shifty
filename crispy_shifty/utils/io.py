@@ -747,7 +747,7 @@ def gen_array_tasks(
                 "N2=$(( N + 1 ))\n",
                 "start_idx=$(( N*4 + 1 ))\n",
                 "end_idx=$(( N2*4 ))\n",
-                "source activate /global/cfs/cdirs/m3962/projects/crispy_shifty/envs/crispy\n",
+                "source activate /global/cfs/cdirs/m4129/projects/crispy_shifty/envs/crispy\n",
                 f"""head -n $end_idx {tasklist} | tail -n +$start_idx | parallel 'CUDA_VISIBLE_DEVICES=$(("{{%}}" - 1)) && bash -c {{}}'""",
             ]
         )
