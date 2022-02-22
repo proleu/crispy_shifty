@@ -668,6 +668,7 @@ def mpnn_bound_state(
             assert (
                 0.0 <= mpnn_temperature <= 1.0
             ), "mpnn_temperature must be between 0 and 1"
+            mpnn_temperatures = [mpnn_temperature]
     else:
         mpnn_temperatures = [0.1]
     # setup dict for MPNN design areas
@@ -793,6 +794,7 @@ def mpnn_paired_state(
             assert (
                 0.0 <= mpnn_temperature <= 1.0
             ), "mpnn_temperature must be between 0 and 1"
+            mpnn_temperatures = [mpnn_temperature]
     else:
         mpnn_temperatures = [0.1]
     # setup dict for MPNN design areas
@@ -940,6 +942,7 @@ def mpnn_dimers(
             assert (
                 0.0 <= mpnn_temperature <= 1.0
             ), "mpnn_temperature must be between 0 and 1"
+            mpnn_temperatures = [mpnn_temperature]
     else:
         mpnn_temperatures = [0.2]
 
