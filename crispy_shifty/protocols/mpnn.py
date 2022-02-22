@@ -134,8 +134,9 @@ class MPNNRunner(ABC):
         # setup standard command line flags for MPNN with default values
         self.flags = {
             "--backbone_noise": "0.0",
-            # TODO last tested with /home/justas/projects/lab_github/proteinmpnn/model_weigths/p17/epoch150_step235456.pt
-            "--checkpoint_path": "/home/justas/projects/lab_github/proteinmpnn/model_weigths/p58/epoch514_step807206.pt",
+            "--checkpoint_path": "/home/justas/projects/lab_github/mpnn/model_weigths/p17/epoch150_step235456.pt",  # TODO - last tested checkpoint
+            # this newer checkpoint caused alanine to be sprayed everywhere during MSD. Reverting to the older checkpoint above for now
+            # "--checkpoint_path": "/home/justas/projects/lab_github/proteinmpnn/model_weigths/p58/epoch514_step807206.pt",
             "--hidden_dim": "128",
             "--max_length": "20000",
             "--num_connections": "64",
