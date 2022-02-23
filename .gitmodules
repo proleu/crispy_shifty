@@ -6,4 +6,4 @@
 	url = https://git.ipd.uw.edu/justas/proteinmpnn.git
 [submodule "superfold"]
 	path = superfold
-	url = git@github.com:rbkibler/superfold.git
+	url = git@github.com:rdkibler/superfold.git
