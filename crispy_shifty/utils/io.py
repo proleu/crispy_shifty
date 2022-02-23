@@ -681,11 +681,12 @@ def gen_array_tasks(
     # use git to find the root of the repo
     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
     root = repo.git.rev_parse("--show-toplevel")
-    python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
-    if os.path.exists(python):
+    env_path = str(Path(root) / "envs" / "crispy")
+    if os.path.exists(env_path):
         pass
     else:  # crispy env must be installed in envs/crispy or must be used on DIGS
-        python = "/projects/crispy_shifty/envs/crispy/bin/python"
+        env_path = "/projects/crispy_shifty/envs/crispy"
+    python = env_path + "/bin/python"
 
     os.makedirs(output_path, exist_ok=True)
 
@@ -747,7 +748,7 @@ def gen_array_tasks(
                 "N2=$(( N + 1 ))\n",
                 "start_idx=$(( N*4 + 1 ))\n",
                 "end_idx=$(( N2*4 ))\n",
-                "source activate /global/cfs/cdirs/m4129/projects/crispy_shifty/envs/crispy\n",
+                f"source activate {env_path}\n",
                 f"""head -n $end_idx {tasklist} | tail -n +$start_idx | parallel 'CUDA_VISIBLE_DEVICES=$(("{{%}}" - 1)) && bash -c {{}}'""",
             ]
         )
