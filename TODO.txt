@@ -1,16 +1,11 @@
-Strategy:
-Increase SAP tolerance somewhat
-If disulfide stapled states are needed or wanted, just staple and predict
-
 dev TODOs:
-    - fully migrate to m4129
     - test 24-48 prototypes as eblocks # 24 A, 24 B, 12 DHRs
     - test 3 X and 3 Y staples for j7, j9, cs_094
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
     
     - ordering utils, domesticator?
-    - TODOs and docstrings in all modules - beta_nov16 notices in docstrings where used.
-    - use Bio SeqIO for fasta wrangling
+    - TODOs and docstrings in all modules
+    - use Bio SeqIO for fasta wrangling?
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
         - examples 2-4 with Abbas
@@ -46,7 +41,7 @@ TODO:
     00 design bound states # run
     01 loop bound_states # run
     02 MPNN bound states #  run
-    03 fold bound states # run # rebalance states if needed
+    03 fold bound states # run 
     04 pair bound states # run
     05 design paired states # run
     06 MPNN paired states # run

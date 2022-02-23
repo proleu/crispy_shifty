@@ -397,6 +397,12 @@ def gen_task_factory(
 
 
 def gen_scorefxn(scorefxn_purpose: str = "clean") -> ScoreFunction:
+    """
+    TODO
+    Requires the following init flags:
+    `-corrections::beta_nov16 true`
+
+    """
 
     import pyrosetta
 
@@ -1068,6 +1074,8 @@ def one_state_design_bound_state(
     design. If None, a pose will be generated from the input pdb_path.
     :param: kwargs: keyword arguments for the design.
     :return: an iterator of packed poses.
+    Requires the following init flags:
+    `-corrections::beta_nov16 true`
     """
 
     from pathlib import Path

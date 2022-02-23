@@ -194,9 +194,9 @@ def redesign_disulfides(
     :return: Iterator of PackedPose objects with disulfides redesigned.
     fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
     Requires the following init flags:
-    -corrections::beta_nov16 true
-    -detect_disulf false
-    -holes:dalphaball /software/rosetta/DAlphaBall.gcc
+    `-corrections::beta_nov16 true`
+    `-detect_disulf false`
+    `-holes:dalphaball /software/rosetta/DAlphaBall.gcc`
     """
     from pathlib import Path
     import sys
