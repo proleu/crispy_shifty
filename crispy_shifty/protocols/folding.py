@@ -40,7 +40,7 @@ def generate_decoys_from_pose(
     label_first: Optional[bool] = False,
     prefix: Optional[str] = "tmp",
     rank_on: Optional[
-        Union["mean_plddt", "pTMscore", "rmsd_to_input", "rmsd_to_reference"]
+        Union[str, bool] # "mean_plddt", "pTMscore", "rmsd_to_input", "rmsd_to_reference", or False
     ] = "mean_plddt",
     **kwargs,
 ) -> Iterator[Pose]:
@@ -105,62 +105,67 @@ def generate_decoys_from_pose(
             )
         else:
             pass
-        # sort the model/seed results by the rank_on score and take the top result only
-        # this is a bit tricky because higher is better for mean_plddt and pTMscore
-        # and lower is better for rmsd_to_input and rmsd_to_reference
-        if rank_on == "mean_plddt" or rank_on == "pTMscore":
-            # higher is better
-            model_seed_results = sorted(
-                results.items(), key=lambda x: x[1][rank_on], reverse=True
-            )
-        elif rank_on == "rmsd_to_input" or rank_on == "rmsd_to_reference":
-            # lower is better
-            model_seed_results = sorted(
-                results.items(), key=lambda x: x[1][rank_on], reverse=False
-            )
+        if rank_on is False:
+            # return all the decoys
+            top_results = [x[1] for x in results.items()]
         else:
-            raise ValueError(
-                f"{rank_on} is not a valid rank_on score. "
-                "This is required for generating decoys."
-            )
-        # get the top result
-        top_result = model_seed_results[0][1]
-        # setup flag: the decoy hasn't been discarded yet
-        keep_decoy = True
-        # apply the filter(s)
-        for score_name, (operator, value) in filter_dict.items():
-            if operator(top_result[score_name], value):
-                pass
-            else:
-                # if the filter fails, don't keep the decoy
-                keep_decoy = False
-                break
-        # if the decoy passes all filters, yield it
-        if keep_decoy:
-            if generate_prediction_decoys:
-                decoy_pdbstring = top_result.pop("decoy_pdbstring")
-                decoy = io.to_pose(io.pose_from_pdbstring(decoy_pdbstring))
-            else:
-                decoy = thread_full_sequence(
-                    pose,
-                    sequence,
+            # sort the model/seed results by the rank_on score and take the top result only
+            # this is a bit tricky because higher is better for mean_plddt and pTMscore
+            # and lower is better for rmsd_to_input and rmsd_to_reference
+            if rank_on == "mean_plddt" or rank_on == "pTMscore":
+                # higher is better
+                model_seed_results = sorted(
+                    results.items(), key=lambda x: x[1][rank_on], reverse=True
                 )
-            # add the scores from the top result to the decoy
-            pose_scores.update(top_result)
-            if label_first:
-                if tag == "mpnn_seq_0000":
-                    pose_scores["designed_by"] = "rosetta"
+            elif rank_on == "rmsd_to_input" or rank_on == "rmsd_to_reference":
+                # lower is better
+                model_seed_results = sorted(
+                    results.items(), key=lambda x: x[1][rank_on], reverse=False
+                )
+            else:
+                raise ValueError(
+                    f"{rank_on} is not a valid rank_on score. "
+                    "This is required for generating decoys."
+                )
+            # get the top result
+            top_results = [model_seed_results[0][1]]
+        for top_result in top_results:
+            # setup flag: the decoy hasn't been discarded yet
+            keep_decoy = True
+            # apply the filter(s)
+            for score_name, (operator, value) in filter_dict.items():
+                if operator(top_result[score_name], value):
+                    pass
                 else:
-                    pose_scores["designed_by"] = "mpnn"
+                    # if the filter fails, don't keep the decoy
+                    keep_decoy = False
+                    break
+            # if the decoy passes all filters, yield it
+            if keep_decoy:
+                if generate_prediction_decoys:
+                    decoy_pdbstring = top_result.pop("decoy_pdbstring")
+                    decoy = io.to_pose(io.pose_from_pdbstring(decoy_pdbstring))
+                else:
+                    decoy = thread_full_sequence(
+                        pose,
+                        sequence,
+                    )
+                # add the scores from the top result to the decoy
+                pose_scores.update(top_result)
+                if label_first:
+                    if tag == "mpnn_seq_0000":
+                        pose_scores["designed_by"] = "rosetta"
+                    else:
+                        pose_scores["designed_by"] = "mpnn"
+                else:
+                    pass
+                # clear decoy scores
+                pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
+                for k, v in pose_scores.items():
+                    setPoseExtraScore(decoy, k, v)
+                yield decoy
             else:
                 pass
-            # clear decoy scores
-            pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
-            for k, v in pose_scores.items():
-                setPoseExtraScore(decoy, k, v)
-            yield decoy
-        else:
-            pass
     return
 
 
@@ -1177,7 +1182,7 @@ def fold_dimer_Y(
         #     "rmsd_to_reference": (lt, 1.75),
         #     "mean_pae_interaction": (lt, 7.5),
         # }
-        rank_on = "mean_plddt"
+        # rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         print_timestamp("Generating decoys", start_time)
         for tmp_decoy in generate_decoys_from_pose(
@@ -1186,7 +1191,7 @@ def fold_dimer_Y(
             generate_prediction_decoys=True,
             label_first=True,
             prefix=prefix,
-            rank_on=rank_on,
+            rank_on=False,
         ):
             # add the free state back into the decoy
             decoy = Pose()
@@ -1211,7 +1216,7 @@ def fold_dimer_Y(
             stm.set_sequence(new_seq, start_position=decoy.chain_begin(1))
             stm.apply(decoy)
             # rename af2 metrics to have Y_ prefix 
-            decoy_scores = dict(decoy.scores)
+            decoy_scores = dict(tmp_decoy.scores)
             for key, value in decoy_scores.items():
                 if key in af2_metrics:
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
