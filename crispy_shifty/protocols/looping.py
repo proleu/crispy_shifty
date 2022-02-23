@@ -134,9 +134,20 @@ def get_torsions(pose: Pose) -> List[Tuple[float]]:
     """
     torsions = []
     for i in range(1, pose.total_residue() + 1):
-        phi = pose.phi(i)
-        psi = pose.psi(i)
-        omega = pose.omega(i)
+        # these error if a chain is a non-protein (DNA, for example)
+        # so, put them in try/except blocks
+        try:
+            phi = pose.phi(i)
+        except:
+            phi = None
+        try:
+            psi = pose.psi(i)
+        except:
+            psi = None
+        try:
+            omega = pose.omega(i)
+        except:
+            omega = None
         if i == 1:
             phi = None
         if i == pose.total_residue():
@@ -153,6 +164,7 @@ def remodel_helper(
     remodel_before_loop: int = 1,
     remodel_after_loop: int = 1,
     surround_loop_with_helix: bool = False,
+    new_loop_resl: str = 'V',
 ) -> str:
     """
     :param: pose: The pose to insert the loop into.
@@ -186,7 +198,8 @@ def remodel_helper(
             pose.chain_end(1),
             pose.chain_begin(2),
         )
-        end2 = pose.chain_end(2)
+        # end2 = pose.chain_end(2)
+        end2 = pose.size() # allows this to work with any number of chains, and it'll just try to loop the first two
         for i in range(1, end1 + 1):
             if i >= end1 - (remodel_before_loop - 1):
                 if surround_loop_with_helix:
@@ -210,7 +223,7 @@ def remodel_helper(
                 )
         if loop_dssp is None:
             for i in range(loop_length):
-                print("0", "V", "LX", "R", file=f)
+                print("0", new_loop_resl, "LX", "R", file=f)
         else:
             try:
                 assert len(loop_dssp) == loop_length
@@ -219,7 +232,7 @@ def remodel_helper(
             for i in range(loop_length):
                 print(
                     "0",
-                    "V",
+                    new_loop_resl,
                     f"{loop_dssp[i]}X",
                     "R",
                     file=f,
@@ -258,6 +271,7 @@ def loop_remodel(
     remodel_after_loop: int = 1,
     remodel_lengths_by_vector: bool = False,
     surround_loop_with_helix: bool = False,
+    new_loop_resl: str = 'V',
 ) -> str:
     """
     :param: pose: The pose to insert the loop into.
@@ -267,7 +281,7 @@ def loop_remodel(
     :param: remodel_after_loop: The number of residues to remodel after the loop.
     :param: remodel_lengths_by_vector: Use the vector angles of chain ends to determine what length to remodel.
     :return: Whether the loop was successfully inserted.
-    Remodel a new loop using Blueprint Builder. Expects a pose with two chains.
+    Remodel a new loop using Blueprint Builder. Loops the first two chains, leaving the others untouched as context.
     DSSP and SS agnostic in principle but in practice more or less matches.
     """
     import os
@@ -308,6 +322,7 @@ def loop_remodel(
             remodel_before_loop=remodel_before_loop,
             remodel_after_loop=remodel_after_loop,
             surround_loop_with_helix=surround_loop_with_helix,
+            new_loop_resl=new_loop_resl
         )
     else:
         bp_file = remodel_helper(
@@ -317,6 +332,7 @@ def loop_remodel(
             remodel_before_loop=remodel_before_loop,
             remodel_after_loop=remodel_after_loop,
             surround_loop_with_helix=surround_loop_with_helix,
+            new_loop_resl=new_loop_resl
         )
 
     bp_sfxn = pyrosetta.create_score_function("fldsgn_cen.wts")
@@ -345,9 +361,10 @@ def loop_remodel(
     bp_mover.scorefunction(bp_sfxn)
 
     closure_type = "not_closed"
+    orig_num_chains = pose.num_chains()
     for _ in range(attempts):
         bp_mover.apply(pose)
-        if pose.num_chains() == 1:
+        if pose.num_chains() < orig_num_chains:
             closure_type = "loop_remodel"
             break
 

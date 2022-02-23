@@ -213,6 +213,7 @@ class SuperfoldRunner:
         models: Optional[Union[int, List[int], List[str], str]] = "all",
         recycle_tol: Optional[float] = 0.0,
         reference_pdb: Optional[str] = None,
+        simple_rmsd: Optional[bool] = True,
         **kwargs,
     ):
         """
@@ -249,6 +250,7 @@ class SuperfoldRunner:
         self.model_type = model_type
         self.models = models
         self.recycle_tol = recycle_tol
+        self.simple_rmsd = simple_rmsd
         self.reference_pdb = reference_pdb
         # setup standard flags for superfold
         self.flags = {
@@ -273,6 +275,11 @@ class SuperfoldRunner:
         if self.amber_relax:
             # store_true flag
             self.flags["--amber_relax"] = " "
+        else:
+            pass
+        if self.simple_rmsd:
+            # store_true flag
+            self.flags["--simple_rmsd"] = " "
         else:
             pass
         if self.reference_pdb is not None:
@@ -325,8 +332,8 @@ class SuperfoldRunner:
             "--type",
             # flags that are optional
             "--enable_dropout",
-            "--keep_chain_order", # only in devel TODO
-            "--simple_rmsd", # only in non-devel TODO
+            # "--keep_chain_order", # only in devel TODO
+            "--simple_rmsd",
             "--output_pae",
             "--overwrite",
             "--save_intermediates",
@@ -341,7 +348,8 @@ class SuperfoldRunner:
         else:  # crispy env must be installed in envs/crispy or must be used on DIGS
             self.python = "/projects/crispy_shifty/envs/crispy/bin/python"
         self.script = str(
-            Path(__file__).parent.parent.parent / "superfold" / "run_superfold_devel.py"
+            # Path(__file__).parent.parent.parent / "superfold" / "run_superfold_devel.py"
+            Path(__file__).parent.parent.parent / "superfold" / "run_superfold.py" # switch to non-devel version
         )
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.command = None  # this will be updated by the setup_runner method.
@@ -1071,3 +1079,144 @@ def fold_paired_state_X(
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(final_pose, key, value)
             final_ppose = io.to_packed(final_pose)
             yield final_ppose
+
+
+@requires_init
+def fold_dimer_Y(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to fold with the superfold script.
+    :param: kwargs: keyword arguments to be passed to the superfold script.
+    :return: an iterator of PackedPose objects.
+    """
+
+    from operator import lt, gt
+    from pathlib import Path
+    import sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.pose import Pose
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
+    from crispy_shifty.utils.io import cmd, print_timestamp
+
+    start_time = time()
+    # hacky split pdb_path into pdb_path and fasta_path
+    pdb_path = kwargs.pop("pdb_path")
+    pdb_path, fasta_path = tuple(pdb_path.split("____"))
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        # skip the kwargs check
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        )
+
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        # load fasta into a dict
+        tmp_fasta_dict = fasta_to_dict(fasta_path)
+        pose_chains = list(pose.split_by_chain())
+        Y_pose = Pose()
+        # free state is chains A and B
+        # slice out the bound state, aka the last two chains
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            Y_pose, pose_chains[-2], new_chain=True
+        )
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            Y_pose, pose_chains[-1], new_chain=True
+        )
+        # fix the fasta by splitting on chainbreaks '/' and rejoining the last two
+        tmp_fasta_dict = {
+            tag: "/".join(seq.split("/")[-2:]) for tag, seq in tmp_fasta_dict.items()
+        }
+        # change the pose to the modified pose
+        pose = Y_pose.clone()
+        print_timestamp("Setting up for AF2", start_time)
+        runner = SuperfoldRunner(
+            pose=pose, fasta_path=fasta_path, load_decoys=True, simple_rmsd=True, **kwargs
+        )
+        runner.setup_runner(file=fasta_path)
+        # initial_guess, reference_pdb both are the tmp.pdb
+        initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
+        reference_pdb = initial_guess
+        flag_update = {
+            "--initial_guess": initial_guess,
+            "--reference_pdb": reference_pdb,
+        }
+        # now we have to point to the right fasta file
+        new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
+        dict_to_fasta(tmp_fasta_dict, new_fasta_path)
+        runner.set_fasta_path(new_fasta_path)
+        runner.override_input_file(new_fasta_path)
+        runner.update_flags(flag_update)
+        # runner.set_script(runner.script.replace("_devel", "")) # TODO for RMSD bug
+        runner.update_command()
+        print_timestamp("Running AF2", start_time)
+        runner.apply(pose)
+        print_timestamp("AF2 complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        # update the pose with the updated scores dict
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
+        # TODO, for the pilot run i will not filter the decoys
+        filter_dict = {}
+        # filter_dict = {
+        #     "mean_plddt": (gt, 90.0),
+        #     "rmsd_to_reference": (lt, 1.75),
+        #     "mean_pae_interaction": (lt, 7.5),
+        # }
+        rank_on = "mean_plddt"
+        prefix = "mpnn_seq"
+        print_timestamp("Generating decoys", start_time)
+        for tmp_decoy in generate_decoys_from_pose(
+            pose,
+            filter_dict=filter_dict,
+            generate_prediction_decoys=True,
+            label_first=True,
+            prefix=prefix,
+            rank_on=rank_on,
+        ):
+            # add the free state back into the decoy
+            decoy = Pose()
+            tmp_decoy_split = list(tmp_decoy.split_by_chain())
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                decoy, pose_chains[0], new_chain=True
+            )
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                decoy, pose_chains[1], new_chain=True
+            )
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                decoy, tmp_decoy_split[0], new_chain=True
+            )
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                decoy, tmp_decoy_split[1], new_chain=True
+            )
+            # get the chA sequence
+            new_seq = tmp_decoy.sequence()
+            # setup SimpleThreadingMover
+            stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
+            # thread the sequence from chA onto chA
+            stm.set_sequence(new_seq, start_position=decoy.chain_begin(1))
+            stm.apply(decoy)
+            # rename af2 metrics to have Y_ prefix 
+            decoy_scores = dict(decoy.scores)
+            for key, value in decoy_scores.items():
+                if key in af2_metrics:
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        decoy, f"Y_{key}", value
+                    )
+
+            packed_decoy = io.to_packed(decoy)
+            yield packed_decoy
