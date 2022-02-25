@@ -353,8 +353,7 @@ class SuperfoldRunner:
         else:  # crispy env must be installed in envs/crispy or must be used on DIGS
             self.python = "/projects/crispy_shifty/envs/crispy/bin/python"
         self.script = str(
-            # Path(__file__).parent.parent.parent / "superfold" / "run_superfold_devel.py"
-            Path(__file__).parent.parent.parent / "superfold" / "run_superfold.py" # switch to non-devel version
+            Path(__file__).parent.parent.parent / "superfold" / "run_superfold.py"
         )
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
         self.command = None  # this will be updated by the setup_runner method.
@@ -929,7 +928,6 @@ def fold_paired_state_Y(
         flag_update = {
             "--initial_guess": initial_guess,
             "--reference_pdb": reference_pdb,
-            "--simple_rmsd": " ", # TODO for RMSD bug
         }
         # now we have to point to the right fasta file
         new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
@@ -937,7 +935,6 @@ def fold_paired_state_Y(
         runner.set_fasta_path(new_fasta_path)
         runner.override_input_file(new_fasta_path)
         runner.update_flags(flag_update)
-        runner.set_script(runner.script.replace("_devel", "")) # TODO for RMSD bug
         runner.update_command()
         print_timestamp("Running AF2", start_time)
         runner.apply(pose)
@@ -948,13 +945,11 @@ def fold_paired_state_Y(
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
-        # TODO, for the pilot run i will not filter the decoys
-        filter_dict = {}
-        # filter_dict = {
-        #     "mean_plddt": (gt, 90.0),
-        #     "rmsd_to_reference": (lt, 1.75),
-        #     "mean_pae_interaction": (lt, 7.5),
-        # }
+        filter_dict = {
+            "mean_plddt": (gt, 92.0),
+            "rmsd_to_reference": (lt, 1.5),
+            "mean_pae_interaction": (lt, 5),
+        }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         print_timestamp("Generating decoys", start_time)
