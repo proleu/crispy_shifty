@@ -1208,19 +1208,23 @@ def fold_dimer_Y(
             pyrosetta.rosetta.core.pose.append_pose_to_pose(
                 decoy, tmp_decoy_split[1], new_chain=True
             )
-            # get the chA sequence
+            # get the state Y sequence
             new_seq = tmp_decoy.sequence()
             # setup SimpleThreadingMover
             stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
-            # thread the sequence from chA onto chA
+            # thread the sequence from state Y onto state X
             stm.set_sequence(new_seq, start_position=decoy.chain_begin(1))
             stm.apply(decoy)
-            # rename af2 metrics to have Y_ prefix 
             decoy_scores = dict(tmp_decoy.scores)
             for key, value in decoy_scores.items():
+                # rename af2 metrics to have Y_ prefix 
                 if key in af2_metrics:
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
                         decoy, f"Y_{key}", value
+                    )
+                else:
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        decoy, key, value
                     )
 
             packed_decoy = io.to_packed(decoy)
