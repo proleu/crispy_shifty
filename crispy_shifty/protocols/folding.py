@@ -592,7 +592,7 @@ class SuperfoldRunner:
 
         elif len(seqs) == 0 and len(results) == 1:
             # then this was a single sequence run
-            seqs = {"tmp": {"seq": pose.sequence}}
+            seqs = {"tmp": {"seq": pose.sequence()}}
 
         else:
             raise NotImplementedError("I am not sure how this behaves with silents")
