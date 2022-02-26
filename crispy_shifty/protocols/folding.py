@@ -1229,3 +1229,98 @@ def fold_dimer_Y(
 
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
+
+
+@requires_init
+def fold_dimer_X(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to fold with the Superfold script.
+    :param: kwargs: keyword arguments to be passed to the Superfold script.
+    :return: an iterator of PackedPose objects.
+    """
+
+    from pathlib import Path
+    import os, sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.pose import Pose
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
+    from crispy_shifty.utils.io import cmd, print_timestamp
+
+    start_time = time()
+    # get the pdb_path from the kwargs
+    pdb_path = kwargs.pop("pdb_path")
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        # skip the kwargs check
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        )
+        
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        
+        X_pose_1, X_pose_2, _, _ = pose.split_by_chain()
+        for X_pose, protomer in zip([X_pose_1, X_pose_2], ['A', 'B']):
+            # change the pose to the modified pose
+            pose = X_pose.clone()
+            print_timestamp("Setting up for AF2", start_time)
+            runner = SuperfoldRunner(
+                pose=pose, load_decoys=True, simple_rmsd=True, initial_guess=True, **kwargs
+            )
+            runner.setup_runner()
+            runner.update_command()
+            print_timestamp("Running AF2", start_time)
+            runner.apply(pose)
+            print_timestamp("AF2 complete, updating pose datacache", start_time)
+            # update the scores dict
+            scores.update(pose.scores)
+            scores['X_protomer'] = protomer
+            # update the pose with the updated scores dict
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+            # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
+            # TODO, for the pilot run i will not filter the decoys
+            filter_dict = {}
+            # filter_dict = {
+            #     "mean_plddt": (gt, 90.0),
+            #     "rmsd_to_reference": (lt, 1.75),
+            #     "mean_pae_interaction": (lt, 7.5),
+            # }
+            # rank_on = "mean_plddt"
+            prefix = protomer + "_af2_prediction"
+            print_timestamp("Generating decoys", start_time)
+            for decoy in generate_decoys_from_pose(
+                pose,
+                filter_dict=filter_dict,
+                generate_prediction_decoys=True,
+                label_first=True,
+                prefix=prefix,
+                rank_on=False,
+            ):
+                decoy_scores = dict(decoy.scores)
+                for key, value in decoy_scores.items():
+                    # rename af2 metrics to have X_ prefix 
+                    if key in af2_metrics:
+                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                            decoy, f"X_{key}", value
+                        )
+                    else:
+                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                            decoy, key, value
+                        )
+
+                packed_decoy = io.to_packed(decoy)
+                yield packed_decoy
