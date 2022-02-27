@@ -24,6 +24,7 @@ dev TODOs:
         - test python interpreter finding with git root on janelia
 
     - dask dataframe implementation in folding notebooks
+    - agg clustering of States before and after plot instead of piecharts
 
     - if really bored
         - add documentation to the InsertResMover and PR
