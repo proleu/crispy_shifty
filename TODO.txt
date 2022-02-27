@@ -2,6 +2,8 @@ dev TODOs:
     - test 24-48 prototypes as eblocks # 24 A, 24 B, 12 DHRs
     - test 3 X and 3 Y staples for j7, j9, cs_094
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
+
+    - FIGURE OUT IF WE LOST GOOD STATES AT 03
     
     - ordering utils, domesticator?
     - TODOs and docstrings in all modules
