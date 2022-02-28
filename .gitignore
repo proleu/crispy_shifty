@@ -25,6 +25,7 @@ __pycache__/
 *.zip
 ._*
 
+data
 demos
 envs
 software
