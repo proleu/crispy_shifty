@@ -1242,17 +1242,15 @@ def fold_dimer_X(
     """
 
     from pathlib import Path
-    import os, sys
+    import sys
     from time import time
     import pyrosetta
     import pyrosetta.distributed.io as io
-    from pyrosetta.rosetta.core.pose import Pose
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
-    from crispy_shifty.utils.io import cmd, print_timestamp
+    from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
     # get the pdb_path from the kwargs
@@ -1300,14 +1298,13 @@ def fold_dimer_X(
             #     "mean_pae_interaction": (lt, 7.5),
             # }
             # rank_on = "mean_plddt"
-            prefix = protomer + "_af2_prediction"
             print_timestamp("Generating decoys", start_time)
             for decoy in generate_decoys_from_pose(
                 pose,
                 filter_dict=filter_dict,
                 generate_prediction_decoys=True,
                 label_first=True,
-                prefix=prefix,
+                prefix='tmp',
                 rank_on=False,
             ):
                 decoy_scores = dict(decoy.scores)
