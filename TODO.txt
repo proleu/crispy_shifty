@@ -1,10 +1,12 @@
 dev TODOs:
-    - test 24-48 prototypes as eblocks # 24 A, 24 B, 12 DHRs
+    - make 09
+        - 09_detail_filter_and_order
+        - trim peptides up to 5 aa each side to no shorter than 30
+        - check for ddG changes after deleting each residue
+        - once final trim is reached mutant non-interface surface residues to E until pI is <-5
     - test 3 X and 3 Y staples for j7, j9, cs_094
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
 
-    - FIGURE OUT IF WE LOST GOOD STATES AT 03
-    
     - ordering utils, domesticator?
     - TODOs and docstrings in all modules
     - use Bio SeqIO for fasta wrangling?
@@ -23,7 +25,6 @@ dev TODOs:
         - add crispy kernel to ipython kernelspecs on janelia
         - test python interpreter finding with git root on janelia
 
-    - dask dataframe implementation in folding notebooks
     - agg clustering of States before and after plot instead of piecharts
 
     - if really bored
@@ -32,9 +33,7 @@ dev TODOs:
 
     - DOTFILES - check init.vim is working, then version control
 
-
-    - AF2 nihal helix binders
-    - make `almost_inpainting` blueprint builder func
+    - make `almost_inpainting` blueprint builder func /home/pleung/projects/peptide_binders/pdb_files/nihal4.pdb
 
 TODO: 
     00 filter scaffold sets # run
