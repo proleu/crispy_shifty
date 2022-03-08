@@ -184,7 +184,7 @@ def break_all_disulfides(pose: Pose) -> Pose:
                 pass
     return pose
 
-
+@requires_init
 def redesign_disulfides(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
@@ -337,7 +337,7 @@ def redesign_disulfides(
     for ppose in final_pposes:
         yield ppose
 
-
+@requires_init
 def prep_input_scaffold(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
@@ -399,4 +399,69 @@ def prep_input_scaffold(
             for final_ppose in redesign_disulfides(trimmed_ppose, **kwargs):
                 yield final_ppose
 
+
+def trim_and_resurface_peptide(pose: Pose) -> Pose:
+    """
+    TODO
+    """
+    from Bio.SeqUtils.ProtParam import ProteinAnalysis
+    import pyrosetta
+    # get the length and the pI of the peptide
+    chains = list(pose.split_by_chain())
+    chB = chains[1]
+    chB_length = len(chB.sequence())
+    chB_pI = ProteinAnalysis(chB.sequence()).isoelectric_point()
+    # if length is above 35, try to trim the peptide down to 33
+    if chB_length > 35:
+        # get trimmable regions
+        # we want the longest continuous stretch of residues that is interfacial
+        # setup trimmer
+        trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
+        trimmer.set_rechain(True)
+        trimmer.set_add_terminal_types_on_rechain(True)
+
+
+    # TODO
+
+    # if pI is above 6.5, try to mutate non-interface surface residues to GLU
+
+@requires_init
+def finalize_peptide(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param packed_pose_in: PackedPose object.
+    :param kwargs: kwargs such as "pdb_path".
+    :return: Iterator of PackedPose objects with chB trimmed and resurfaced.
+    Requires the following init flags:
+    -corrections::beta_nov16 true
+    """
+    from pathlib import Path
+    import sys
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import (
+        path_to_pose_or_ppose,
+        trim_and_resurface_peptide,
+    )
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
+        )
+    for pose in poses:
+        scores = dict(pose.scores)
+        pose = trim_and_resurface_peptide(pose)
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                pose, key, str(value)
+            )
+        final_ppose = io.to_packed(pose)
+        yield final_ppose
 
