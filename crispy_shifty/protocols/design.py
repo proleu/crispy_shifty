@@ -410,26 +410,31 @@ def gen_task_factory(
     return task_factory
 
 
-def gen_scorefxn(scorefxn_purpose: str = "clean") -> ScoreFunction:
+def gen_scorefxn(
+    cartesian: bool = False,
+    res_type_constraint: bool = False,
+    hbonds: bool = False,
+) -> ScoreFunction:
     """
     TODO
     Requires the following init flags:
-    `-corrections::beta_nov16 true`
-
+    `-corrections::beta_nov16 true` or `-corrections::beta_nov16_cart true`
+    :param: cartesian: score function set up for Cartesian scoring
+    :param: res_type_constraint: score function set up for designing with residue type information, as in FavorNativeResidue
+    :param: hbonds: score function set up for designing hbonds
     """
 
     import pyrosetta
 
-    if scorefxn_purpose == "clean":
+    if cartesian:
+        sfxn = pyrosetta.create_score_function("beta_nov16_cart.wts")
+    else:
         sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    
+    if res_type_constraint:
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
 
-    elif scorefxn_purpose == "design":
-        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
-        sfxn.set_weight(
-            pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
-        )
-
-    elif scorefxn_purpose == "hbonds":
+    if hbonds:
         # a scorefunction that likes hbonds- I got this from Ryan Kibler, not sure of the original source. Bcov?
         # use with prune_buns (allow_even_trades=False, atomic_depth_cutoff=3.5, minimum_hbond_energy=-1.0)
         hbond_options = pyrosetta.rosetta.core.scoring.hbonds.HBondOptions()
@@ -439,30 +444,12 @@ def gen_scorefxn(scorefxn_purpose: str = "clean") -> ScoreFunction:
         )
         energy_method_options.hbond_options(hbond_options)
         energy_method_options.approximate_buried_unsat_penalty_burial_atomic_depth(3.5)
-        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_cross_chain(
-            -7.0
-        )
-        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_ser_to_helix_bb(
-            1.0
-        )
-        energy_method_options.approximate_buried_unsat_penalty_hbond_energy_threshold(
-            -1.0
-        )
-        energy_method_options.approximate_buried_unsat_penalty_natural_corrections1(
-            True
-        )
-        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_cross_chain(-7.0)
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_ser_to_helix_bb(1.0)
+        energy_method_options.approximate_buried_unsat_penalty_hbond_energy_threshold(-1.0)
+        energy_method_options.approximate_buried_unsat_penalty_natural_corrections1(True)
         sfxn.set_energy_method_options(energy_method_options)
-        sfxn.set_weight(
-            pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
-        )
-        sfxn.set_weight(
-            pyrosetta.rosetta.core.scoring.ScoreType.approximate_buried_unsat_penalty,
-            17.0,
-        )
-
-    else:
-        raise ValueError(f"Invalid scorefxn_purpose: {scorefxn_purpose}")
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.approximate_buried_unsat_penalty, 17.0)
 
     return sfxn
 
@@ -479,8 +466,8 @@ def gen_movemap(
     :param: jump: bool, whether to allow jump moves.
     :param: chi: bool, whether to allow chi moves.
     :param: bb: bool, whether to allow backbone moves.
-    :param: nu: bool, whether to allow nu moves.
-    :param: branch: bool, whether to allow branch moves.
+    :param: nu: bool, whether to allow nu moves (for carbohydrates).
+    :param: branch: bool, whether to allow branch moves (for carbohydrates).
     :return: MoveMap for design.
     Sets up the MoveMap for design.
     """
@@ -503,6 +490,7 @@ def fast_design(
     movemap: MoveMap,
     relax_script: str = "InterfaceDesign2019",
     repeats: int = 1,
+    cartesian: bool = False,
 ) -> None:
     """
     :param: pose: Pose, the pose to design.
@@ -524,7 +512,7 @@ def fast_design(
         f"""
         <MOVERS>
             <FastDesign name="fastdesign" repeats="{repeats}" ramp_down_constraints="false" 
-                batch="false" cartesian="false" bondangle="false" bondlength="false" 
+                batch="false" cartesian="{str(cartesian).lower()}" bondangle="false" bondlength="false" 
                 min_type="lbfgs_armijo_nonmonotone" relaxscript="{relax_script}">
             </FastDesign>
         </MOVERS>
