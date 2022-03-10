@@ -24,7 +24,7 @@ def path_to_pose_or_ppose(
     Generate PackedPose objects given an input path to a file on disk to read in.
     Can do pdb, pdb.bz2, pdb.gz or binary silent file formats.
     To use silents, must initialize Rosetta with "-in:file:silent_struct_type binary".
-    If `cluster_scores` is set to True, will attempt to set cluster scores from the 
+    If `cluster_scores` is set to True, will attempt to set cluster scores from the
     file path if they exist (e.g. has line "REMARK PyRosettaCluster: {"instance": ...}")
     This function can be distributed (best for single inputs) or run on a host process
 
@@ -184,6 +184,7 @@ def break_all_disulfides(pose: Pose) -> Pose:
                 pass
     return pose
 
+
 @requires_init
 def redesign_disulfides(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -337,6 +338,7 @@ def redesign_disulfides(
     for ppose in final_pposes:
         yield ppose
 
+
 @requires_init
 def prep_input_scaffold(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -395,14 +397,22 @@ def prep_input_scaffold(
             path=kwargs["pdb_path"], cluster_scores=False, pack_result=False
         )
     for pose in poses:
-        for trimmed_ppose in remove_terminal_loops(packed_pose_in=io.to_packed(pose), metadata=metadata, **kwargs):
+        for trimmed_ppose in remove_terminal_loops(
+            packed_pose_in=io.to_packed(pose), metadata=metadata, **kwargs
+        ):
             for final_ppose in redesign_disulfides(trimmed_ppose, **kwargs):
                 yield final_ppose
 
 
 def trim_and_resurface_peptide(pose: Pose) -> Pose:
     """
-    TODO
+    :param pose: Pose object with peptide to trim and resurface.
+    :return: Pose object with trimmed and resurfaced peptide.
+    If peptide is longer than 30 residues, it is trimmed to 30 or total length - 10,
+    whichever is longer.
+    If peptide pI is greater than 6.0 it will be resurfaced, targeting a goal pI of less
+    than 6.0.
+    Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16`.
     """
     from pathlib import Path
     import sys
@@ -411,56 +421,168 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
+        NeighborhoodResidueSelector,
         NotResidueSelector,
         OrResidueSelector,
         ResidueIndexSelector,
     )
-    
+    from pyrosetta.rosetta.protocols.grafting.simple_movers import DeleteRegionMover
+
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from crispy_shifty.protocols.design import interface_among_chains, score_cms
-    # get the length and the pI of the peptide
+    from crispy_shifty.protocols.design import (
+        clear_constraints,
+        gen_std_layer_design,
+        gen_task_factory,
+        interface_among_chains, 
+        pack_rotamers,
+        score_cms,
+        score_per_res,
+    )
+
+    # preserve the original pose scores
+    scores = dict(pose.scores)
+    # get the length of the peptide
     chB = pose.clone()
     rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
     rechain.chain_order("2")
     rechain.apply(chB)
     chB_length = chB.total_residue()
-    # if length is above 31, try to trim the peptide down to 31
-    if chB_length > 31:
+    # if length is above 30, try to trim the peptide down to 30
+    if chB_length > 30:
         # get trimmable regions
-        # interface_sel = interface_among_chains([1, 2], vector_mode = True)
-        # not_interface_sel = NotResidueSelector(interface_sel)
-        chB_residue_indices = [str(i) for i in range(pose.chain_begin(2), pose.chain_end(2) + 1)]
-        n_term, c_term = chB_residue_indices[:5], chB_residue_indices[-5:]
-        # n_term_sel = ResidueIndexSelector(",".join(n_term))
-        # c_term_sel = ResidueIndexSelector(",".join(c_term))
-        length = chB_length
-        while length > 31:
-            end_indices = n_term[0], c_term[-1]
-            scores_post_del = {}
-            pose_del = pose.clone()
-            for index in end_indices:
-                # setup trimmer
-                trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
-                trimmer.set_rechain(True)
-                trimmer.set_add_terminal_types_on_rechain(True)
-                trimmer.set_residue_selector(ResidueIndexSelector(index))
-                trimmer.apply(pose_del)
-                # score pose cms
-                scores_post_del[index] = score_cms(pose_del)
-            # get the lowest scoring index from the scores
-
-
-
-
-    # TODO
-
+        chB_residue_indices = [
+            str(i) for i in range(pose.chain_begin(2), pose.chain_end(2) + 1)
+        ]
+        internal = chB_residue_indices[5:-5]
+        # now we decide whether to do a sliding window approach or serial truncation
+        if len(internal) > 30:
+            # get all possible sub windows of length internal and score them with cms
+            window_size = len(internal)
+        else:
+            # get all possible sub windows of length 30
+            window_size = 30
+        # get all possible sub windows of length window_size from chB_residue_indices
+        sub_windows = [
+            chB_residue_indices[i : i + window_size]
+            for i in range(len(chB_residue_indices) - window_size + 1)
+        ]
+        # make a dict keyed by sub_window and valued by pose trimmed to that window
+        truncations_dict = {}
+        # make a dict keyed by sub_window and valued score of cms
+        cms_scores_dict = {}
+        # for each sub_window, make a pose and trim it to the sub_window
+        for sub_window in sub_windows:
+            # make a residue selector that includes all residues in sub_window
+            indices = ",".join(sub_window)
+            sub_window_sel = ResidueIndexSelector(indices)
+            chA_sel, chB_sel, chC_sel = ChainSelector(1), ChainSelector(2), ChainSelector(3)
+            chA_chC_sel = OrResidueSelector(chA_sel, chC_sel)
+            to_keep_sel = OrResidueSelector(sub_window_sel, chA_chC_sel)
+            to_delete_sel = NotResidueSelector(to_keep_sel)
+            # setup the delete region mover
+            trimmed_pose = pose.clone()
+            trimmer = DeleteRegionMover()
+            trimmer.set_rechain(True)
+            trimmer.set_add_terminal_types_on_rechain(True)
+            trimmer.set_residue_selector(to_delete_sel)
+            trimmer.apply(trimmed_pose)
+            # fix the pdb_info
+            rechain.chain_order("123")
+            rechain.apply(trimmed_pose)
+            # score the pose
+            cms = score_cms(
+                pose=trimmed_pose,
+                sel_1=chA_sel,
+                sel_2=chB_sel,
+            )
+            # add to the dicts
+            truncations_dict[indices] = trimmed_pose
+            cms_scores_dict[indices] = cms
+        # invert the dict, this destroys any ties but we don't care
+        inverted_cms_scores_dict = {
+            v: k for k, v in cms_scores_dict.items()
+        }
+        # get the sub_window with the highest cms score
+        highest_cms_sub_window = inverted_cms_scores_dict[max(inverted_cms_scores_dict)]
+        # get the pose with the highest cms score
+        highest_cms_pose = truncations_dict[highest_cms_sub_window]
+        # exit the if statement with the highest cms score pose set to pose
+        pose = highest_cms_pose
+    else:  # don't need to trim if already 30 or less
+        pass
+    # get the pI of the peptide
+    chB = pose.clone()
+    rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    rechain.chain_order("2")
+    rechain.apply(chB)
     chB_pI = ProteinAnalysis(chB.sequence()).isoelectric_point()
     # if pI is above 6, try to mutate non-interface surface residues to GLU
-    # while pI is above 6, score mutating every surface non interface residue to GLU
-    # pick the best mutation
-    # recheck pI
-    # break if below 6, else continue
+    if chB_pI > 6:
+        # get the interface residues
+        interface_sel = interface_among_chains([1, 2], vector_mode=True)
+        # get the non-interface residues
+        non_interface_sel = NotResidueSelector(interface_sel)
+        # get the residues to mutate
+        non_interface_chB_sel = AndResidueSelector(non_interface_sel, ChainSelector(2))
+        design_sel = non_interface_chB_sel
+        # make sfxn with constraints
+        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+        sfxn_clean = pyrosetta.create_score_function("beta_nov16.wts")
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.aa_composition, 1.0)
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.netcharge, 1.0)
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
+        # make layer_design dict
+        layer_design = gen_std_layer_design()
+        # make a task factory
+        task_factory = gen_task_factory(
+            design_sel=design_sel,
+            pack_nbhd=True,
+            extra_rotamers_level=2,
+            limit_arochi=True,
+            prune_buns=False,
+            upweight_ppi=False,
+            restrict_pro_gly=True,
+            precompute_ig=False,
+            ifcl=True,
+            layer_design=layer_design,
+        )
+        # add a net charge constraint
+        chg = pyrosetta.rosetta.protocols.aa_composition.AddNetChargeConstraintMover()
+        # make the file contents
+        file_contents = """
+        DESIRED_CHARGE -3
+        PENALTIES_CHARGE_RANGE -7 -1
+        PENALTIES 4 0 0 0 0 0 4
+        BEFORE_FUNCTION LINEAR
+        AFTER_FUNCTION LINEAR
+        """
+        chg.create_constraint_from_file_contents(file_contents)
+        chg.add_residue_selector(ChainSelector(2))
+        chg.apply(pose)
+        # pack rotamers up to 5 times trying to get a pI under 6
+        for _ in range(0, 5):
+            pack_rotamers(
+                pose,
+                task_factory,
+                sfxn,
+            )
+            chB_seq = list(pose.split_by_chain())[1].sequence()
+            # recheck pI
+            chB_pI = ProteinAnalysis(chB_seq).isoelectric_point()
+            # break if below 6, else continue
+            if chB_pI <= 6:
+                break
+            else:
+                continue
+    else:
+        pass
+    scores["B_final_seq"] = list(pose.split_by_chain())[1].sequence()
+    # reset scores
+    for key, value in scores.items():
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+    return pose
+
 
 @requires_init
 def finalize_peptide(
@@ -496,9 +618,6 @@ def finalize_peptide(
         scores = dict(pose.scores)
         pose = trim_and_resurface_peptide(pose)
         for key, value in scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                pose, key, str(value)
-            )
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
         final_ppose = io.to_packed(pose)
         yield final_ppose
-
