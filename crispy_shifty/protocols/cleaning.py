@@ -404,26 +404,63 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
     """
     TODO
     """
+    from pathlib import Path
+    import sys
     from Bio.SeqUtils.ProtParam import ProteinAnalysis
     import pyrosetta
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        AndResidueSelector,
+        ChainSelector,
+        NotResidueSelector,
+        OrResidueSelector,
+        ResidueIndexSelector,
+    )
+    
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.design import interface_among_chains, score_cms
     # get the length and the pI of the peptide
-    chains = list(pose.split_by_chain())
-    chB = chains[1]
-    chB_length = len(chB.sequence())
-    chB_pI = ProteinAnalysis(chB.sequence()).isoelectric_point()
-    # if length is above 35, try to trim the peptide down to 33
-    if chB_length > 35:
+    chB = pose.clone()
+    rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    rechain.chain_order("2")
+    rechain.apply(chB)
+    chB_length = chB.total_residue()
+    # if length is above 31, try to trim the peptide down to 31
+    if chB_length > 31:
         # get trimmable regions
-        # we want the longest continuous stretch of residues that is interfacial
-        # setup trimmer
-        trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
-        trimmer.set_rechain(True)
-        trimmer.set_add_terminal_types_on_rechain(True)
+        # interface_sel = interface_among_chains([1, 2], vector_mode = True)
+        # not_interface_sel = NotResidueSelector(interface_sel)
+        chB_residue_indices = [str(i) for i in range(pose.chain_begin(2), pose.chain_end(2) + 1)]
+        n_term, c_term = chB_residue_indices[:5], chB_residue_indices[-5:]
+        # n_term_sel = ResidueIndexSelector(",".join(n_term))
+        # c_term_sel = ResidueIndexSelector(",".join(c_term))
+        length = chB_length
+        while length > 31:
+            end_indices = n_term[0], c_term[-1]
+            scores_post_del = {}
+            pose_del = pose.clone()
+            for index in end_indices:
+                # setup trimmer
+                trimmer = pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
+                trimmer.set_rechain(True)
+                trimmer.set_add_terminal_types_on_rechain(True)
+                trimmer.set_residue_selector(ResidueIndexSelector(index))
+                trimmer.apply(pose_del)
+                # score pose cms
+                scores_post_del[index] = score_cms(pose_del)
+            # get the lowest scoring index from the scores
+
+
 
 
     # TODO
 
-    # if pI is above 6.5, try to mutate non-interface surface residues to GLU
+    chB_pI = ProteinAnalysis(chB.sequence()).isoelectric_point()
+    # if pI is above 6, try to mutate non-interface surface residues to GLU
+    # while pI is above 6, score mutating every surface non interface residue to GLU
+    # pick the best mutation
+    # recheck pI
+    # break if below 6, else continue
 
 @requires_init
 def finalize_peptide(
