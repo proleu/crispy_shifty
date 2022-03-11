@@ -16,7 +16,9 @@ from pyrosetta.distributed import requires_init
 #    )
 # )
 # params files can be found in crispy_shifty/params
-# Minimal usage: add_azo(pose, ResidueIndexSelector_specifying_two_residues)
+# Minimal usage: add_azo(pose, selection)
+# pose - input pose
+# selection - ResidueIndexSelector or str specifying two residues
 # Other options:
 # add_constraints - bool, should constraints be added to the crosslinker?
 # filter_by_sidechain_distance - float, negative for no filtering, positive to set a threshold in angstroms for crosslinking to be attempted.  Use this in a try/except block as it will throw an AssertionError
@@ -27,6 +29,7 @@ from pyrosetta.distributed import requires_init
 # final_fast_relax_rounds - int, number of round of whole-structure fast relax to do after relaxing sidechains and linker
 # cartesian - bool, should the final fast relax be in cartesian space?
 # custom_movemap - override the default movemap for the final relax (untested)
+# rmsd_filter - None to not calculate rmsd.  {"sele":StrOfIndices, "super_sele":StrOfIndices, "type":str(pyrosetta.rosetta.core.scoring.rmsd_atoms member), "save":bool, "cutoff":float}
 def add_azo(
     pose_in,
     selection,
@@ -40,6 +43,7 @@ def add_azo(
     final_fast_relax_rounds: int = 0,
     cartesian: bool = False,
     custom_movemap=None,
+    rmsd_filter: dict = None,
 ):
     import pyrosetta
 
@@ -238,7 +242,56 @@ def add_azo(
         total_eng = pose.energies().total_energy()
         return total_eng > cutoff
 
+    def filter_by_rmsd(pose, pose_in, selection, **kwargs):
+        from pyrosetta.rosetta.core.select.residue_selector import TrueResidueSelector as TrueResidueSelector
+        from pyrosetta.rosetta.core.select.residue_selector import ResidueIndexSelector as ResidueIndexSelector
+        from pyrosetta.rosetta.core.select.residue_selector import AndResidueSelector as AndResidueSelector
+        from pyrosetta.rosetta.core.select.residue_selector import NotResidueSelector as NotResidueSelector
+
+        if "type" not in kwargs.keys():
+            kwargs["type"] = "rmsd_protein_bb_ca"
+        if "sele" not in kwargs.keys():
+            kwargs["sele"] = AndResidueSelector(
+                TrueResidueSelector(), NotResidueSelector(selection)
+            )
+        else:
+            kwargs["sele"] = AndResidueSelector(
+                ResidueIndexSelector(kwargs["sele"]), NotResidueSelector(selection)
+            )
+        if "super_sele" not in kwargs.keys():
+            kwargs["super_sele"] = kwargs["sele"]
+        else:
+            kwargs["super_sele"] = AndResidueSelector(
+                ResidueIndexSelector(kwargs["super_sele"]),
+                NotResidueSelector(selection),
+            )
+        if "save" not in kwargs.keys():
+            kwargs["save"] = False
+        rmsd_metric = pyrosetta.rosetta.core.simple_metrics.metrics.RMSDMetric()
+        rmsd_metric.set_residue_selector(kwargs["sele"])
+        rmsd_metric.set_residue_selector_reference(kwargs["sele"])
+        rmsd_metric.set_residue_selector_super(kwargs["super_sele"])
+        rmsd_metric.set_residue_selector_super_reference(kwargs["super_sele"])
+        rmsd_metric.set_rmsd_type(
+            eval(f"pyrosetta.rosetta.core.scoring.rmsd_atoms.{kwargs['type']}")
+        )
+        rmsd_metric.set_run_superimpose(True)
+        rmsd_metric.set_comparison_pose(pose_in)
+        rmsd = rmsd_metric.calculate(pose)
+        if kwargs["save"]:
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                pose, "crosslinking_rmsd", rmsd
+            )
+        if "cutoff" in kwargs.keys():
+            return rmsd > kwargs["cutoff"]
+        else:
+            return False
+
     pose = pose_in.clone()
+    if type(selection) == str:
+        selection = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+            selection
+        )
     res_indices = [i + 1 for i, b in enumerate(selection.apply(pose)) if b]
     assert len(res_indices) == 2, "Incorrect number of residues specified"
     cys1 = res_indices[0]
@@ -334,5 +387,11 @@ def add_azo(
     # Filter by total score
     if filter_by_total_score is not None:
         assert not total_score_filter(pose, filter_by_total_score)
+
+    # Filter by rmsd
+    if rmsd_filter is not None:
+        assert not filter_by_rmsd(
+            pose, pose_in, selection, **rmsd_filter
+        ), "Failed RMSD filter"
 
     return pose
