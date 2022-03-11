@@ -337,7 +337,6 @@ class SuperfoldRunner:
             "--type",
             # flags that are optional
             "--enable_dropout",
-            # "--keep_chain_order", # only in devel TODO
             "--simple_rmsd",
             "--output_pae",
             "--overwrite",
@@ -1029,13 +1028,11 @@ def fold_paired_state_X(
     print_timestamp("AF2 complete, updating pose datacache", start_time)
     # get the updated poses from the runner
     tag_pose_dict = runner.get_tag_pose_dict()
-    filter_dict = {}
-    # TODO, for the pilot run I will not filter the decoys
-    # filter_dict = {
-    #     "mean_plddt": (gt, 90.0),
-    #     "rmsd_to_reference": (lt, 1.75),
-    #     "mean_pae_interaction": (lt, 7.5),
-    # }
+    # filter the decoys
+    filter_dict = {
+        "mean_plddt": (gt, 92.0),
+        "rmsd_to_reference": (lt, 1.5),
+    }
     rank_on = "mean_plddt"
     print_timestamp("Generating decoys", start_time)
     sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
