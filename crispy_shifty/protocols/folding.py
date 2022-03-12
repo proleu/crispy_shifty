@@ -1030,8 +1030,8 @@ def fold_paired_state_X(
     tag_pose_dict = runner.get_tag_pose_dict()
     # filter the decoys
     filter_dict = {
-        "mean_plddt": (gt, 92.0),
-        "rmsd_to_reference": (lt, 1.5),
+        "mean_plddt": (gt, 90.0),
+        "rmsd_to_input": (lt, 1.75),
     }
     rank_on = "mean_plddt"
     print_timestamp("Generating decoys", start_time)
