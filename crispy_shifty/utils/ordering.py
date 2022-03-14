@@ -1,3 +1,4 @@
+from pathlib import Path
 import sys
 # insert the root of the repo into the sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

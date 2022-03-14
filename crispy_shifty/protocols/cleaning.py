@@ -511,72 +511,68 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
         pose = highest_cms_pose
     else:  # don't need to trim if already 30 or less
         pass
-    # get the pI of the peptide
+    # try to mutate non-interface surface residues to GLU and generally resurface chB
     chB = pose.clone()
     rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
     rechain.chain_order("2")
     rechain.apply(chB)
-    chB_pI = ProteinAnalysis(chB.sequence()).isoelectric_point()
-    # if pI is above 6, try to mutate non-interface surface residues to GLU
-    if chB_pI > 6:
-        # get the interface residues
-        interface_sel = interface_among_chains([1, 2], vector_mode=True)
-        # get the non-interface residues
-        non_interface_sel = NotResidueSelector(interface_sel)
-        # get the residues to mutate
-        non_interface_chB_sel = AndResidueSelector(non_interface_sel, ChainSelector(2))
-        design_sel = non_interface_chB_sel
-        # make sfxn with constraints
-        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
-        sfxn_clean = pyrosetta.create_score_function("beta_nov16.wts")
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.aa_composition, 1.0)
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.netcharge, 1.0)
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
-        # make layer_design dict
-        layer_design = gen_std_layer_design()
-        # make a task factory
-        task_factory = gen_task_factory(
-            design_sel=design_sel,
-            pack_nbhd=True,
-            extra_rotamers_level=2,
-            limit_arochi=True,
-            prune_buns=False,
-            upweight_ppi=False,
-            restrict_pro_gly=True,
-            precompute_ig=False,
-            ifcl=True,
-            layer_design=layer_design,
+    # get the interface residues
+    interface_sel = interface_among_chains([1, 2], vector_mode=True)
+    # get the non-interface residues
+    non_interface_sel = NotResidueSelector(interface_sel)
+    # get the residues to mutate
+    non_interface_chB_sel = AndResidueSelector(non_interface_sel, ChainSelector(2))
+    design_sel = non_interface_chB_sel
+    pack_sel = NeighborhoodResidueSelector(design_sel, 10)
+    # make sfxn with constraints
+    sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    sfxn_clean = pyrosetta.create_score_function("beta_nov16.wts")
+    sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.aa_composition, 1.0)
+    sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.netcharge, 1.0)
+    sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
+    # make layer_design dict
+    layer_design = gen_std_layer_design()
+    # make a task factory
+    task_factory = gen_task_factory(
+        design_sel=design_sel,
+        pack_sel=pack_sel,
+        extra_rotamers_level=2,
+        limit_arochi=True,
+        prune_buns=False,
+        upweight_ppi=False,
+        restrict_pro_gly=True,
+        precompute_ig=False,
+        ifcl=True,
+        layer_design=layer_design,
+    )
+    # add a net charge constraint
+    chg = pyrosetta.rosetta.protocols.aa_composition.AddNetChargeConstraintMover()
+    # make the file contents
+    file_contents = """
+    DESIRED_CHARGE -3
+    PENALTIES_CHARGE_RANGE -7 -1
+    PENALTIES 4 0 0 0 0 3 4
+    BEFORE_FUNCTION LINEAR
+    AFTER_FUNCTION LINEAR
+    """
+    chg.create_constraint_from_file_contents(file_contents)
+    chg.add_residue_selector(ChainSelector(2))
+    chg.apply(pose)
+    # pack rotamers up to 5 times trying to get a pI under 5
+    for _ in range(0, 5):
+        pack_rotamers(
+            pose,
+            task_factory,
+            sfxn,
         )
-        # add a net charge constraint
-        chg = pyrosetta.rosetta.protocols.aa_composition.AddNetChargeConstraintMover()
-        # make the file contents
-        file_contents = """
-        DESIRED_CHARGE -3
-        PENALTIES_CHARGE_RANGE -7 -1
-        PENALTIES 4 0 0 0 0 0 4
-        BEFORE_FUNCTION LINEAR
-        AFTER_FUNCTION LINEAR
-        """
-        chg.create_constraint_from_file_contents(file_contents)
-        chg.add_residue_selector(ChainSelector(2))
-        chg.apply(pose)
-        # pack rotamers up to 5 times trying to get a pI under 6
-        for _ in range(0, 5):
-            pack_rotamers(
-                pose,
-                task_factory,
-                sfxn,
-            )
-            chB_seq = list(pose.split_by_chain())[1].sequence()
-            # recheck pI
-            chB_pI = ProteinAnalysis(chB_seq).isoelectric_point()
-            # break if below 6, else continue
-            if chB_pI <= 6:
-                break
-            else:
-                continue
-    else:
-        pass
+        chB_seq = list(pose.split_by_chain())[1].sequence()
+        # recheck pI
+        chB_pI = ProteinAnalysis(chB_seq).isoelectric_point()
+        # break if below 5, else continue
+        if chB_pI <= 5:
+            break
+        else:
+            continue
     scores["B_final_seq"] = list(pose.split_by_chain())[1].sequence()
     # reset scores
     for key, value in scores.items():
