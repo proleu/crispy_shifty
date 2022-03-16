@@ -6,12 +6,9 @@ dev TODOs:
     - use Bio SeqIO for fasta wrangling?
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
-        - examples 2-4 with Abbas
-            - show prototyping best practices
-            - then figure out smooth setup
-            - share with lab
-    	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
-            - repredict AF2 intial guess folding.py the FF63-129 and cs_0-108 and JHB1-13
+        - show prototyping best practices
+        - then figure out smooth setup
+        - share with lab
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
         - do it when no one is has crispy env active
@@ -30,26 +27,6 @@ dev TODOs:
     - make `almost_inpainting` blueprint builder func 
 
 TODO: 
-    00 filter scaffold sets # run
-    01 prep inputs # run 
-    02 make states # run
-    --------------------------------------------------
-    00 design bound states # run
-    01 loop bound_states # run
-    02 MPNN bound states #  run
-    03 fold bound states # run 
-    04 pair bound states # run
-    05 design paired states # run
-    06 MPNN paired states # run
-    07 fold paired states_Y # run 
-    08 fold paired states_X # run
     09 detail and filter # run
     10 order and analyze
-
-Paper TODOs:
-use symbolic regression on flexdock trajectory datasets? 
-networks learn to summarize rules about biophysical mechanics, 
-then we use a seperate layer to regress equations
-
-in vivo assay for crispy snippies: cleavable sequence fused to petcon that prevents display
 

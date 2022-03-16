@@ -434,7 +434,7 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
         clear_constraints,
         gen_std_layer_design,
         gen_task_factory,
-        interface_among_chains, 
+        interface_among_chains,
         pack_rotamers,
         score_cms,
         score_per_res,
@@ -476,7 +476,11 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
             # make a residue selector that includes all residues in sub_window
             indices = ",".join(sub_window)
             sub_window_sel = ResidueIndexSelector(indices)
-            chA_sel, chB_sel, chC_sel = ChainSelector(1), ChainSelector(2), ChainSelector(3)
+            chA_sel, chB_sel, chC_sel = (
+                ChainSelector(1),
+                ChainSelector(2),
+                ChainSelector(3),
+            )
             chA_chC_sel = OrResidueSelector(chA_sel, chC_sel)
             to_keep_sel = OrResidueSelector(sub_window_sel, chA_chC_sel)
             to_delete_sel = NotResidueSelector(to_keep_sel)
@@ -500,9 +504,7 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
             truncations_dict[indices] = trimmed_pose
             cms_scores_dict[indices] = cms
         # invert the dict, this destroys any ties but we don't care
-        inverted_cms_scores_dict = {
-            v: k for k, v in cms_scores_dict.items()
-        }
+        inverted_cms_scores_dict = {v: k for k, v in cms_scores_dict.items()}
         # get the sub_window with the highest cms score
         highest_cms_sub_window = inverted_cms_scores_dict[max(inverted_cms_scores_dict)]
         # get the pose with the highest cms score

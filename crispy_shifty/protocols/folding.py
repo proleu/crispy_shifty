@@ -40,7 +40,9 @@ def generate_decoys_from_pose(
     label_first: Optional[bool] = False,
     prefix: Optional[str] = "tmp",
     rank_on: Optional[
-        Union[str, bool] # "mean_plddt", "pTMscore", "rmsd_to_input", "rmsd_to_reference", or False
+        Union[
+            str, bool
+        ]  # "mean_plddt", "pTMscore", "rmsd_to_input", "rmsd_to_reference", or False
     ] = "mean_plddt",
     **kwargs,
 ) -> Iterator[Pose]:
@@ -412,7 +414,7 @@ class SuperfoldRunner:
         """
         self.script = script
         self.update_command()
-        return 
+        return
 
     def setup_tmpdir(self) -> None:
         """
@@ -971,7 +973,7 @@ def fold_paired_state_Y(
             # thread the sequence from chA onto chA
             stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
             stm.apply(decoy)
-            # rename af2 metrics to have Y_ prefix 
+            # rename af2 metrics to have Y_ prefix
             decoy_scores = dict(decoy.scores)
             for key, value in decoy_scores.items():
                 if key in af2_metrics:
@@ -1070,7 +1072,7 @@ def fold_paired_state_X(
                     continue
             if bound_pose is None:
                 raise RuntimeError
-            else: 
+            else:
                 pass
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(final_pose, key, value)
@@ -1140,7 +1142,11 @@ def fold_dimer_Y(
         pose = Y_pose.clone()
         print_timestamp("Setting up for AF2", start_time)
         runner = SuperfoldRunner(
-            pose=pose, fasta_path=fasta_path, load_decoys=True, simple_rmsd=True, **kwargs
+            pose=pose,
+            fasta_path=fasta_path,
+            load_decoys=True,
+            simple_rmsd=True,
+            **kwargs,
         )
         runner.setup_runner(file=fasta_path)
         # initial_guess, reference_pdb both are the tmp.pdb
@@ -1209,15 +1215,13 @@ def fold_dimer_Y(
             stm.apply(decoy)
             decoy_scores = dict(tmp_decoy.scores)
             for key, value in decoy_scores.items():
-                # rename af2 metrics to have Y_ prefix 
+                # rename af2 metrics to have Y_ prefix
                 if key in af2_metrics:
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
                         decoy, f"Y_{key}", value
                     )
                 else:
-                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                        decoy, key, value
-                    )
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
 
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
@@ -1257,18 +1261,22 @@ def fold_dimer_X(
         poses = path_to_pose_or_ppose(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
-        
+
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
-        
+
         X_pose_1, X_pose_2, _, _ = pose.split_by_chain()
-        for X_pose, protomer in zip([X_pose_1, X_pose_2], ['A', 'B']):
+        for X_pose, protomer in zip([X_pose_1, X_pose_2], ["A", "B"]):
             # change the pose to the modified pose
             pose = X_pose.clone()
             print_timestamp("Setting up for AF2", start_time)
             runner = SuperfoldRunner(
-                pose=pose, load_decoys=True, simple_rmsd=True, initial_guess=True, **kwargs
+                pose=pose,
+                load_decoys=True,
+                simple_rmsd=True,
+                initial_guess=True,
+                **kwargs,
             )
             runner.setup_runner()
             runner.update_command()
@@ -1277,7 +1285,7 @@ def fold_dimer_X(
             print_timestamp("AF2 complete, updating pose datacache", start_time)
             # update the scores dict
             scores.update(pose.scores)
-            scores['X_protomer'] = protomer
+            scores["X_protomer"] = protomer
             # update the pose with the updated scores dict
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
@@ -1296,20 +1304,18 @@ def fold_dimer_X(
                 filter_dict=filter_dict,
                 generate_prediction_decoys=True,
                 label_first=True,
-                prefix='tmp',
+                prefix="tmp",
                 rank_on=False,
             ):
                 decoy_scores = dict(decoy.scores)
                 for key, value in decoy_scores.items():
-                    # rename af2 metrics to have X_ prefix 
+                    # rename af2 metrics to have X_ prefix
                     if key in af2_metrics:
                         pyrosetta.rosetta.core.pose.setPoseExtraScore(
                             decoy, f"X_{key}", value
                         )
                     else:
-                        pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                            decoy, key, value
-                        )
+                        pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
 
                 packed_decoy = io.to_packed(decoy)
                 yield packed_decoy
