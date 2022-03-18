@@ -2,10 +2,13 @@ dev TODOs:
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
 
     - ordering utils, domesticator?
-    - TODOs and docstrings in all modules
     - use Bio SeqIO for fasta wrangling?
+    - stapling and repredicting
+    - TODOs and docstrings in all modules
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
+        - finish 1
+        - finish 2
         - show prototyping best practices
         - then figure out smooth setup
         - share with lab
