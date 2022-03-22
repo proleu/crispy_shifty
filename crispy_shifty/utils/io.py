@@ -561,14 +561,14 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
     # assuming they are a list of key-value pairs where odd-indexed elements are keys and even-indexed elements are values. Add
     # in the leading "-" and pass them to pyrosetta.
     pyro_kwargs = {
-        "options": {
-            "-" + args.options[i]: args.options[i + 1]
+        "options": " ".join([
+            "-" + args.options[i] + " " + args.options[i + 1]
             for i in range(0, len(args.options), 2)
-        },
-        "extra_options": {
-            "-" + args.extra_options[i]: args.extra_options[i + 1]
+            ]),
+        "extra_options": " ".join([
+            "-" + args.extra_options[i] + " " + args.extra_options[i + 1]
             for i in range(0, len(args.extra_options), 2)
-        },
+            ]),
     }
     pyrosetta.distributed.maybe_init(**pyro_kwargs)
 
