@@ -34,22 +34,23 @@ for index in indices:
     mpnn_scores_df.loc[index, 'mpnn_msd_temperature'] = mpnn_scores["mpnn_msd_temperature"]
 
     folded_pose = pyrosetta.rosetta.core.pose.Pose()
-    with open(folded_X_path, "rb") as f:
+    with open(folded_Y_path, "rb") as f:
         pyrosetta.rosetta.core.import_pose.pose_from_pdbstring(folded_pose, bz2.decompress(f.read()).decode())
-    folded_seq = folded_pose.sequence()
+    folded_seq_A = folded_pose.chain_sequence(1)
+    folded_seq_B = folded_pose.chain_sequence(2)
 
     protomer = folded_X_metadata["scores"]["X_protomer"]
-    if protomer == 'A':
-        mpnn_chain_id = 0
-    elif protomer == 'B':
-        mpnn_chain_id = 1
-    else:
-        raise ValueError(f"Incorrect protomer \"{protomer}\" for {index}")
+    # if protomer == 'A':
+    #     mpnn_chain_id = 0
+    # elif protomer == 'B':
+    #     mpnn_chain_id = 1
+    # else:
+    #     raise ValueError(f"Incorrect protomer \"{protomer}\" for {index}")
 
     for mpnn_seq_num in range(9):
         mpnn_seq_id = f"mpnn_seq_{mpnn_seq_num:04d}"
         mpnn_seq_split = mpnn_scores[mpnn_seq_id].split('/')
-        if mpnn_seq_split[mpnn_chain_id] == folded_seq:
+        if mpnn_seq_split[0] == folded_seq_A and mpnn_seq_split[1] == folded_seq_B:
             mpnn_scores_df.loc[index, 'mpnn_seq_id'] = mpnn_seq_id
             if mpnn_seq_id == "mpnn_seq_0000":
                 mpnn_scores_df.loc[index, 'designed_by'] = "rosetta"
