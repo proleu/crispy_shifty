@@ -400,6 +400,7 @@ def gen_scorefxn(
     cartesian: bool = False,
     res_type_constraint: bool = False,
     hbonds: bool = False,
+    weights: str = "beta_nov16.wts",
 ) -> ScoreFunction:
     """
     TODO
@@ -412,10 +413,11 @@ def gen_scorefxn(
 
     import pyrosetta
 
+    sfxn = pyrosetta.create_score_function(weights)
+
     if cartesian:
-        sfxn = pyrosetta.create_score_function("beta_nov16_cart.wts")
-    else:
-        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.cart_bonded, 0.5)
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.pro_close, 0.0)
     
     if res_type_constraint:
         sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
