@@ -1,4 +1,13 @@
+# Python standard library
+from abc import ABC, abstractmethod
+from typing import Dict, Iterator, List, Optional, Union
+
+# 3rd party library imports
+# Rosetta library imports
+from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
+from pyrosetta.rosetta.core.pose import Pose
+from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 ########## Azobenzene Crosslinking ##########
 # The main function for azobenzene crosslinking.  Use with the following init:
@@ -16,9 +25,10 @@ from pyrosetta.distributed import requires_init
 #    )
 # )
 # params files can be found in crispy_shifty/params
-# Minimal usage: add_azo(pose, selection)
+# Minimal usage: add_azo(pose, selection, residue_name)
 # pose - input pose
 # selection - ResidueIndexSelector or str specifying two residues
+# residue_name - What is the crosslinker called?
 # Other options:
 # add_constraints - bool, should constraints be added to the crosslinker?
 # filter_by_sidechain_distance - float, negative for no filtering, positive to set a threshold in angstroms for crosslinking to be attempted.  Use this in a try/except block as it will throw an AssertionError
@@ -27,26 +37,59 @@ from pyrosetta.distributed import requires_init
 # force_cys - bool, True to mutate selected residues to Cys, False to error if one of the selected residues is not Cys
 # sc_fast_relax_rounds - int, number of round of fast relax for the linked sidechains and linker only
 # final_fast_relax_rounds - int, number of round of whole-structure fast relax to do after relaxing sidechains and linker
-# cartesian - bool, should the final fast relax be in cartesian space?
 # custom_movemap - override the default movemap for the final relax (untested)
 # rmsd_filter - None to not calculate rmsd.  {"sele":StrOfIndices, "super_sele":StrOfIndices, "type":str(pyrosetta.rosetta.core.scoring.rmsd_atoms member), "save":bool, "cutoff":float}
+@requires_init
 def add_azo(
     pose_in,
     selection,
     residue_name: str,
     add_constraints: bool = False,
     filter_by_sidechain_distance: float = -1,
+    fbsd_ub: float = -1,
+    fbsd_lb: float = -1,
     filter_by_cst_energy: float = -1,
     filter_by_total_score: float = None,
     force_cys: bool = False,
     sc_fast_relax_rounds: int = 1,
-    final_fast_relax_rounds: int = 0,
-    cartesian: bool = False,
+    tors_fast_relax_rounds: int = 0,
+    cart_fast_relax_rounds: int = 0,
     custom_movemap=None,
-    rmsd_filter: dict = None,
+    rmsd_filter: float = -1,
+    rmsd_sele: str = None,
+    super_sele: str = None,
+    rmsd_type: str = "rmsd_protein_bb_ca",
+    save_rmsd: bool = True,
+    invert_rmsd: bool = False,
+    invert_fbsd: bool = False,
+    pass_rmsd: bool = False,
+    ramp_cart_bonded: bool = True,
 ):
     import pyrosetta
 
+    # Force correct typing
+    residue_name = str(residue_name)
+    add_constraints = bool(add_constraints)
+    filter_by_sidechain_distance = float(filter_by_sidechain_distance)
+    fbsd_ub = float(fbsd_ub)
+    fbsd_lb = float(fbsd_lb)
+    filter_by_cst_energy = float(filter_by_cst_energy)
+    if filter_by_total_score is not None:
+        filter_by_total_score = float(filter_by_total_score)
+    force_cys = bool(force_cys)
+    sc_fast_relax_rounds = int(sc_fast_relax_rounds)
+    tors_fast_relax_rounds = int(tors_fast_relax_rounds)
+    cart_fast_relax_rounds = int(cart_fast_relax_rounds)
+    rmsd_filter = float(rmsd_filter)
+    rmsd_sele = str(rmsd_sele)
+    super_sele = str(super_sele)
+    rmsd_type = str(rmsd_type)
+    save_rmsd = bool(save_rmsd)
+    invert_rmsd = bool(invert_rmsd)
+    invert_fbsd = bool(invert_fbsd)
+    pass_rmsd = bool(pass_rmsd)
+    ramp_cart_bonded = bool(ramp_cart_bonded)
+    # Define a bunch of functions
     def get_linker_index(pose, res_indices):
         assert len(res_indices) == 2, "Incorrect number of residues specified"
         nconn1 = pose.residue(res_indices[0]).n_possible_residue_connections()
@@ -54,7 +97,7 @@ def add_azo(
         azo_index = pose.residue(res_indices[0]).residue_connection_partner(nconn1)
         return azo_index
 
-    def filter_by_sc_dist(pose, selection, cutoff):
+    def filter_by_sc_dist(pose, selection, cutoff, ub=None, lb=None):
         cutoff_sq = cutoff ** 2
         res_indices = [i + 1 for i, b in enumerate(selection.apply(pose)) if b]
         assert len(res_indices) == 2, "Incorrect number of residues specified"
@@ -63,7 +106,14 @@ def add_azo(
             .xyz("CB")
             .distance_squared(pose.residue(res_indices[1]).xyz("CB"))
         )
-        return d1 > cutoff_sq
+        print(f"Sidechain distance: {d1**0.5}", flush=True)
+        if ub is None or lb is None:
+            return d1 < cutoff_sq
+        else:
+            assert (
+                ub > lb
+            ), "Upper limit of sidechain distance is less than the lower limit!"
+            return lb ** 2 < d1 < ub ** 2
 
     def add_linker_bonds_asymmetric(pose, res_indices, linker_index):
         bond1 = pyrosetta.rosetta.protocols.cyclic_peptide.DeclareBond()
@@ -73,7 +123,7 @@ def add_azo(
         bond1.apply(pose)
         bond2.apply(pose)
 
-    def add_linker_csts(pose, selection):
+    def add_linker_csts(pose, selection, residue_name):
         res_indices = [i + 1 for i, b in enumerate(selection.apply(pose)) if b]
         azo_index = get_linker_index(pose, res_indices)
         # Distance constraints
@@ -102,6 +152,11 @@ def add_azo(
             atm1.append("V1")
             res2.append(azo_index)
             cst_fxn.append(dist_cst_str)
+        print("R1\tA1\tR2\tA2\tFUNC", flush=True)
+        for i in range(1, len(atm1) + 1):
+            print(
+                f"{res1[i]}\t{atm1[i]}\t{res2[i]}\t{atm2[i]}\t{cst_fxn[i]}", flush=True
+            )
         dist_csts.set(res1, atm1, res2, atm2, cst_fxn)
         dist_csts.apply(pose)
         # Torsion constraints
@@ -172,6 +227,22 @@ def add_azo(
         atm3.append("SG")
         atm4.append("CB")
         cst_fxn.append("AMBERPERIODIC 0 3 2")
+        # C5-N2-N3-C6
+        res1.append(azo_index)
+        res2.append(azo_index)
+        res3.append(azo_index)
+        res4.append(azo_index)
+        atm1.append("C5")
+        atm2.append("N2")
+        atm3.append("N3")
+        atm4.append("C6")
+        if residue_name == "AZT":
+            angle = pyrosetta.rosetta.numeric.conversions.radians(180)
+            cst_fxn.append(f"CIRCULARHARMONIC {angle} 0.1")
+        elif residue_name == "AZC":
+            cst_fxn.append("CIRCULARHARMONIC 0 0.1")
+        else:
+            sys.exit("Residue name not set up for constriants")
         tors_csts.set(res1, atm1, res2, atm2, res3, atm3, res4, atm4, cst_fxn)
         tors_csts.apply(pose)
 
@@ -186,48 +257,85 @@ def add_azo(
         whole_structure: bool = False,
         rounds=1,
         cartesian=False,
+        ramp_cart_bonded=True,
         custom_movemap=None,
     ):
+        # Set up for cart relax
+        if ramp_cart_bonded:
+            import numpy as np
+
+            cb_weights = list(np.logspace(3, 0, rounds))
+        else:
+            cb_weights = [1]
         helper = (
             pyrosetta.rosetta.protocols.cyclic_peptide.crosslinker.CrosslinkerMoverHelper()
         )
         sfxn = pyrosetta.create_score_function("beta_genpot_cst.wts")
-        if whole_structure and cartesian:
-            sfxn = pyrosetta.create_score_function("beta_genpot_cart.wts")
-            sfxn.set_weight(pyrosetta.rosetta.core.scoring.atom_pair_constraint, 1.0)
-            sfxn.set_weight(pyrosetta.rosetta.core.scoring.angle_constraint, 1.0)
-            sfxn.set_weight(pyrosetta.rosetta.core.scoring.dihedral_constraint, 1.0)
+
+        def apply_cart(pose, sfxn, cb_weights, helper, movemap=None):
+            for cbw in cb_weights:
+                print(f"Performing 1 round of cartesian FastRelax with cart_bonded={cbw}",flush=True)
+                print(movemap, flush=True)
+                helper.pre_relax_round_update_steps(
+                    pose, selection.apply(pose), whole_structure, False, True
+                )
+                sfxn.set_weight(pyrosetta.rosetta.core.scoring.pro_close, 0)
+                sfxn.set_weight(pyrosetta.rosetta.core.scoring.cart_bonded, cbw)
+                frlx = pyrosetta.rosetta.protocols.relax.FastRelax(sfxn, 1)
+                if movemap is not None:
+                    frlx.set_movemap(movemap)
+                frlx.cartesian(True)
+                frlx.apply(pose)
+                helper.post_relax_round_update_steps(
+                    pose, selection.apply(pose), whole_structure, False, True
+                )
+
+        # Set up for any relax
         frlx = pyrosetta.rosetta.protocols.relax.FastRelax(sfxn, 1)
-        if whole_structure and cartesian:
-            frlx.cartesian(True)
-        for i in range(0, rounds):
-            helper.pre_relax_round_update_steps(
-                pose, selection.apply(pose), whole_structure, False, True
-            )
-            if not whole_structure:
-                res_indices = [i + 1 for i, b in enumerate(selection.apply(pose)) if b]
-                azo_index = get_linker_index(pose, res_indices)
-                movemap = pyrosetta.rosetta.core.kinematics.MoveMap()
-                movemap.set_bb(False)
-                movemap.set_chi(False)
-                movemap.set_jump(False)
-                for res in res_indices:
-                    movemap.set_chi(res, True)
-                movemap.set_chi(azo_index, True)
-                movemap.set_jump(get_jump_index_for_crosslinker(pose, azo_index), True)
-            if whole_structure and custom_movemap is not None:
-                movemap = custom_movemap
-            frlx.apply(pose)
-            helper.post_relax_round_update_steps(
-                pose, selection.apply(pose), whole_structure, False, True
-            )
+        movemap = None
+        # Set up movemap for whole structure or sc/crosslinker
+        if whole_structure and custom_movemap is not None:
+            movemap = custom_movemap
+        if not whole_structure:
+            res_indices = [i + 1 for i, b in enumerate(selection.apply(pose)) if b]
+            azo_index = get_linker_index(pose, res_indices)
+            movemap = pyrosetta.rosetta.core.kinematics.MoveMap()
+            movemap.set_bb(False)
+            movemap.set_chi(False)
+            movemap.set_jump(False)
+            for res in res_indices:
+                movemap.set_chi(res, True)
+            movemap.set_chi(azo_index, True)
+            movemap.set_jump(get_jump_index_for_crosslinker(pose, azo_index), True)
+            #frlx.set_movemap(movemap)
+            #frlx.set_movemap_disables_packing_of_fixed_chi_positions(True)
+        # Cart relax
+        if cartesian:
+            apply_cart(pose, sfxn, cb_weights, helper, movemap)
+        # Tors relax
+        else:
+            for i in range(0, rounds):
+                if not whole_structure:
+                    print("Performing 1 round of sidechain/crosslinker FastRelax", flush=True)
+                else:
+                    print("Performing 1 round of torsional FastRelax", flush=True)
+                helper.pre_relax_round_update_steps(
+                    pose, selection.apply(pose), whole_structure, False, True
+                )
+                if movemap is not None:
+                    frlx.set_movemap(movemap)
+                    frlx.set_movemap_disables_packing_of_fixed_chi_positions(True)
+                frlx.apply(pose)
+                helper.post_relax_round_update_steps(
+                    pose, selection.apply(pose), whole_structure, False, True
+                )
 
     def cst_energy_filter(pose, selection, cutoff):
         score_pose = pose.clone()
         pyrosetta.rosetta.protocols.constraint_movers.ClearConstraintsMover().apply(
             score_pose
         )
-        add_linker_csts(score_pose, selection)
+        add_linker_csts(score_pose, selection, residue_name)
         sfxn = pyrosetta.rosetta.core.scoring.ScoreFunction()
         sfxn.set_weight(pyrosetta.rosetta.core.scoring.atom_pair_constraint, 1.0)
         sfxn.set_weight(pyrosetta.rosetta.core.scoring.angle_constraint, 1.0)
@@ -242,51 +350,64 @@ def add_azo(
         total_eng = pose.energies().total_energy()
         return total_eng > cutoff
 
-    def filter_by_rmsd(pose, pose_in, selection, **kwargs):
-        from pyrosetta.rosetta.core.select.residue_selector import TrueResidueSelector as TrueResidueSelector
-        from pyrosetta.rosetta.core.select.residue_selector import ResidueIndexSelector as ResidueIndexSelector
-        from pyrosetta.rosetta.core.select.residue_selector import AndResidueSelector as AndResidueSelector
-        from pyrosetta.rosetta.core.select.residue_selector import NotResidueSelector as NotResidueSelector
+    def filter_by_rmsd(
+        pose,
+        pose_in,
+        selection,
+        rmsd_filter,
+        rmsd_sele,
+        super_sele,
+        rmsd_type,
+        save_rmsd,
+    ):
+        from pyrosetta.rosetta.core.select.residue_selector import (
+            TrueResidueSelector as TrueResidueSelector,
+        )
+        from pyrosetta.rosetta.core.select.residue_selector import (
+            ResidueIndexSelector as ResidueIndexSelector,
+        )
+        from pyrosetta.rosetta.core.select.residue_selector import (
+            AndResidueSelector as AndResidueSelector,
+        )
+        from pyrosetta.rosetta.core.select.residue_selector import (
+            NotResidueSelector as NotResidueSelector,
+        )
 
-        if "type" not in kwargs.keys():
-            kwargs["type"] = "rmsd_protein_bb_ca"
-        if "sele" not in kwargs.keys():
-            kwargs["sele"] = AndResidueSelector(
+        if rmsd_sele is None:
+            rmsd_sele = AndResidueSelector(
                 TrueResidueSelector(), NotResidueSelector(selection)
             )
         else:
-            kwargs["sele"] = AndResidueSelector(
-                ResidueIndexSelector(kwargs["sele"]), NotResidueSelector(selection)
+            rmsd_sele = AndResidueSelector(
+                ResidueIndexSelector(rmsd_sele), NotResidueSelector(selection)
             )
-        if "super_sele" not in kwargs.keys():
-            kwargs["super_sele"] = kwargs["sele"]
+        if super_sele is None:
+            super_sele = rmsd_sele
         else:
-            kwargs["super_sele"] = AndResidueSelector(
-                ResidueIndexSelector(kwargs["super_sele"]),
+            super_sele = AndResidueSelector(
+                ResidueIndexSelector(super_sele),
                 NotResidueSelector(selection),
             )
-        if "save" not in kwargs.keys():
-            kwargs["save"] = False
         rmsd_metric = pyrosetta.rosetta.core.simple_metrics.metrics.RMSDMetric()
-        rmsd_metric.set_residue_selector(kwargs["sele"])
-        rmsd_metric.set_residue_selector_reference(kwargs["sele"])
-        rmsd_metric.set_residue_selector_super(kwargs["super_sele"])
-        rmsd_metric.set_residue_selector_super_reference(kwargs["super_sele"])
+        rmsd_metric.set_residue_selector(rmsd_sele)
+        rmsd_metric.set_residue_selector_reference(rmsd_sele)
+        rmsd_metric.set_residue_selector_super(super_sele)
+        rmsd_metric.set_residue_selector_super_reference(super_sele)
         rmsd_metric.set_rmsd_type(
-            eval(f"pyrosetta.rosetta.core.scoring.rmsd_atoms.{kwargs['type']}")
+            eval(f"pyrosetta.rosetta.core.scoring.rmsd_atoms.{rmsd_type}")
         )
         rmsd_metric.set_run_superimpose(True)
         rmsd_metric.set_comparison_pose(pose_in)
         rmsd = rmsd_metric.calculate(pose)
-        if kwargs["save"]:
+        if save_rmsd:
             pyrosetta.rosetta.core.pose.setPoseExtraScore(
                 pose, "crosslinking_rmsd", rmsd
             )
-        if "cutoff" in kwargs.keys():
-            return rmsd > kwargs["cutoff"]
-        else:
-            return False
+        print(f"RMSD: {rmsd}", flush=True)
+        return rmsd > rmsd_filter
 
+    if isinstance(pose_in, pyrosetta.distributed.packed_pose.core.PackedPose):
+        pose_in = pyrosetta.distributed.packed_pose.core.to_pose(pose_in)
     pose = pose_in.clone()
     if type(selection) == str:
         selection = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
@@ -313,10 +434,25 @@ def add_azo(
         assert is_cys(res) or is_dcs(res), f"ERROR: Residue {res} is not a cysteine"
 
     # Filter by sidechain distance
-    if filter_by_sidechain_distance > 0:
-        assert not filter_by_sc_dist(
-            pose, selection, filter_by_sidechain_distance
-        ), f"CB of positions {res_indices[0]} and {res_indices[1]} are greater than {filter_by_sidechain_distance}A apart."
+    check_ub_lb = fbsd_ub > 0 and fbsd_lb > 0
+    if filter_by_sidechain_distance > 0 and not check_ub_lb:
+        if invert_fbsd:
+            assert not filter_by_sc_dist(
+                pose, selection, filter_by_sidechain_distance
+            ), f"CB of positions {res_indices[0]} and {res_indices[1]} are greater than {filter_by_sidechain_distance}A apart."
+        else:
+            assert filter_by_sc_dist(
+                pose, selection, filter_by_sidechain_distance
+            ), f"CB of positions {res_indices[0]} and {res_indices[1]} are greater than {filter_by_sidechain_distance}A apart."
+    elif check_ub_lb:
+        if invert_fbsd:
+            assert not filter_by_sc_dist(
+                    pose, selection, 1, fbsd_ub, fbsd_lb
+                    ), f"CB of positions {res_indices[0]} and {res_indices[1]} are between {fbsd_lb} and {fbsd_ub} apart."
+        else:
+            assert filter_by_sc_dist(
+                pose, selection, 1, fbsd_ub, fbsd_lb
+            ), f"CB of positions {res_indices[0]} and {res_indices[1]} are not between {fbsd_lb} and {fbsd_ub} apart."
 
     # Mutate CYS -> CYX
     mut1 = pyrosetta.rosetta.protocols.simple_moves.ModifyVariantTypeMover()
@@ -360,7 +496,7 @@ def add_azo(
 
     # Add constraints
     if add_constraints:
-        add_linker_csts(pose, selection)
+        add_linker_csts(pose, selection, residue_name)
 
     # Pack linker and sidechains
     if sc_fast_relax_rounds > 0:
@@ -373,9 +509,14 @@ def add_azo(
         ), "Failed constraint energy filter after relaxing linker and sidechains"
 
     # Final fast relax
-    if final_fast_relax_rounds > 0:
+    if tors_fast_relax_rounds > 0:
         pack_and_min(
-            pose, selection, True, final_fast_relax_rounds, cartesian, custom_movemap
+            pose, selection, True, tors_fast_relax_rounds, False, custom_movemap
+        )
+
+    if cart_fast_relax_rounds > 0:
+        pack_and_min(
+            pose, selection, True, cart_fast_relax_rounds, True, custom_movemap
         )
 
     # Filter by constraint energy
@@ -389,9 +530,134 @@ def add_azo(
         assert not total_score_filter(pose, filter_by_total_score)
 
     # Filter by rmsd
-    if rmsd_filter is not None:
-        assert not filter_by_rmsd(
-            pose, pose_in, selection, **rmsd_filter
-        ), "Failed RMSD filter"
-
+    if rmsd_filter > 0:
+        rmsd_passed = (
+            filter_by_rmsd(
+                pose,
+                pose_in,
+                selection,
+                rmsd_filter,
+                rmsd_sele,
+                super_sele,
+                rmsd_type,
+                save_rmsd,
+            ),
+            "Failed RMSD filter",
+        )
+        if not pass_rmsd:
+            if invert_rmsd:
+                assert rmsd_passed, "Failed RMSD filter"
+            else:
+                assert not rmsd_passed, "Failed RMSD filter"
     return pose
+
+
+# Adds azobenzene to chainB, cart minimizes chain B only
+@requires_init
+def add_azo_chainB(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    import copy
+    import sys
+    import pyrosetta
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
+
+    required = ["pdb_path", "selection", "residue_name"]
+    for req in required:
+        if req not in kwargs.keys():
+            sys.exit(f"Missing required argument {req}")
+
+    optional = [
+        "ramp_cart_bonded",
+        "pass_rmsd",
+        "fbsd_ub",
+        "fbsd_lb",
+        "invert_rmsd",
+        "invert_fbsd",
+        "add_constraints",
+        "filter_by_sidechain_distance",
+        "filter_by_cst_energy",
+        "filter_by_total_score",
+        "force_cys",
+        "sc_fast_relax_rounds",
+        "tors_fast_relax_rounds",
+        "cart_fast_relax_rounds",
+        "custom_movemap",
+        "rmsd_filter",
+        "rmsd_sele",
+        "super_sele",
+        "rmsd_type",
+        "save_rmsd",
+    ]
+    provided = []
+    kwargs_bak = copy.deepcopy(kwargs)
+    for key, val in kwargs_bak.items():
+        if key in optional:
+            provided.append(key)
+        else:
+            if key not in required:
+                print(f"Warning: Ignoring unrecognized option {key}")
+                del kwargs[key]
+    pdb_path = kwargs["pdb_path"]
+    del kwargs["pdb_path"]
+    for pose in path_to_pose_or_ppose(
+        path=pdb_path, cluster_scores=True, pack_result=False
+    ):
+        custom_movemap = pyrosetta.rosetta.core.kinematics.MoveMap()
+        custom_movemap.set_bb(False)
+        custom_movemap.set_chi(True)
+        custom_movemap.set_jump(True)
+        chB = [i + 1 for i, b in enumerate(ChainSelector(2).apply(pose)) if b]
+        for res in chB:
+            custom_movemap.set_bb(True)
+        kwargs["pose_in"] = pose
+        kwargs["custom_movemap"] = custom_movemap
+        if "pass_rmsd" in kwargs.keys():
+            pass_rmsd = bool(kwargs["pass_rmsd"])
+            print(f"Updating pass_rmsd from kwargs: {pass_rmsd}")
+        else:
+            pass_rmsd = False
+        if not pass_rmsd:
+            if "rmsd_filter" not in kwargs.keys():
+                kwargs["rmsd_filter"] = 10
+            if "rmsd_sele" not in kwargs.keys():
+                kwargs["rmsd_sele"] = ",".join(
+                    [
+                        str(i + 1)
+                        for i, b in enumerate(
+                            pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
+                                2
+                            ).apply(
+                                pose
+                            )
+                        )
+                        if b
+                    ]
+                )
+            if "super_sele" not in kwargs.keys():
+                kwargs["super_sele"] = ",".join(
+                    [
+                        str(i + 1)
+                        for i, b in enumerate(
+                            pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
+                                1
+                            ).apply(
+                                pose
+                            )
+                        )
+                        if b
+                    ]
+                )
+            if "rmsd_type" not in kwargs.keys():
+                kwargs["rmsd_type"] = "rmsd_protein_bb_heavy"
+            if "save_rmsd" not in kwargs.keys():
+                kwargs["save_rmsd"] = True
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+            pose, "crosslinked_residues", kwargs["selection"]
+        )
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+            pose, "crosslinker_name", kwargs["residue_name"]
+        )
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, "input_pdb", pdb_path)
+        return add_azo(**kwargs)
