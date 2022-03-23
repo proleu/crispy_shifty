@@ -432,9 +432,11 @@ def gen_scorefxn(
     if cartesian:
         sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.cart_bonded, 0.5)
         sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.pro_close, 0.0)
-    
+
     if res_type_constraint:
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
+        sfxn.set_weight(
+            pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
+        )
 
     if hbonds:
         # a scorefunction that likes hbonds- I got this from Ryan Kibler, not sure of the original source. Bcov?
@@ -446,12 +448,23 @@ def gen_scorefxn(
         )
         energy_method_options.hbond_options(hbond_options)
         energy_method_options.approximate_buried_unsat_penalty_burial_atomic_depth(3.5)
-        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_cross_chain(-7.0)
-        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_ser_to_helix_bb(1.0)
-        energy_method_options.approximate_buried_unsat_penalty_hbond_energy_threshold(-1.0)
-        energy_method_options.approximate_buried_unsat_penalty_natural_corrections1(True)
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_cross_chain(
+            -7.0
+        )
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_ser_to_helix_bb(
+            1.0
+        )
+        energy_method_options.approximate_buried_unsat_penalty_hbond_energy_threshold(
+            -1.0
+        )
+        energy_method_options.approximate_buried_unsat_penalty_natural_corrections1(
+            True
+        )
         sfxn.set_energy_method_options(energy_method_options)
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.approximate_buried_unsat_penalty, 17.0)
+        sfxn.set_weight(
+            pyrosetta.rosetta.core.scoring.ScoreType.approximate_buried_unsat_penalty,
+            17.0,
+        )
 
     return sfxn
 
