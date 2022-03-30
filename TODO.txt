@@ -7,6 +7,7 @@ dev TODOs:
     - TODOs and docstrings in all modules
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
+        - ask justas about checkpoints
         - finish 1
         - finish 2
         - show prototyping best practices

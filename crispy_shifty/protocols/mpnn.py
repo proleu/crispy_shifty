@@ -121,6 +121,7 @@ class MPNNRunner(ABC):
         If a `chains_to_mask` is provided, the runner will run on (mask) only that chain.
         If no `design_selector` is provided, all residues on all masked chains will be designed.
         The chain letters in your PDB must be correct.
+        Does not allow the use of --score_only.
         """
 
         from pathlib import Path
