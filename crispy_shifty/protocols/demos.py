@@ -43,7 +43,7 @@ def mpnn_dhr(
     else:
         pdb_path = kwargs["pdb_path"]
         poses = path_to_pose_or_ppose(
-            path=pdb_path, cluster_scores=True, pack_result=False
+            path=pdb_path, cluster_scores=False, pack_result=False
         )
 
     for pose in poses:
@@ -158,10 +158,103 @@ def fold_dhr(
             yield ppose
 
 
-# DHR14: 38-77, 78-117
-# DHR15: 44-89, 90-135
-# DHR27: 52-105, 106-159
-# DHR59: 47-94, 95-142
-# DHR68: 59-119, 120-180
-# DHR70: 49-98, 99-148
-# DHR81: 56-112, 113-169
+@requires_init
+def mpnn_dhr_with_repeat(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to be interface designed with MPNN.
+    :param: kwargs: keyword arguments to be passed to MPNNMultistateDesign, or this
+    function.
+    :return: an iterator of PackedPose objects.
+    """
+
+    from pathlib import Path
+    import sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        ChainSelector,
+        ResidueIndexSelector,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.design import interface_between_selectors
+    from crispy_shifty.protocols.mpnn import MPNNMultistateDesign
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=False, pack_result=False
+        )
+
+    internal_repeats_dict = {
+        "DHR14": ((38, 77), (78, 117)),
+        "DHR15": ((44, 89), (90, 135)),
+        "DHR27": ((52, 105), (106, 159)),
+        "DHR59": ((47, 94), (95, 142)),
+        "DHR68": ((59, 119), (120, 180)),
+        "DHR70": ((49, 98), (99, 148)),
+        "DHR81": ((56, 112), (113, 169)),
+    }
+
+    # get the name of the DHR in a hacky way, reccomend using pathlib for better parsing
+    dhr = pdb_path.split("/")[-1].split(".")[0]
+    # get the internal repeats
+    internal_repeats = internal_repeats_dict[dhr]
+    # each tuple in internal_repeats is a tuple of (start, end)
+    # we want to make a selector for each of these as a comma separated string of all
+    # residues in the range start-end
+    repeat_string_1 = ",".join(
+        [str(i) for i in range(internal_repeats[0][0], internal_repeats[0][1] + 1)]
+    )
+    repeat_string_2 = ",".join(
+        [str(i) for i in range(internal_repeats[1][0], internal_repeats[1][1] + 1)]
+    )
+
+    # poses should contian only one pose in this case we will keep the loop below anyway
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        print_timestamp("Setting up design selector", start_time)
+        # MAKE A SELECTOR THAT SELECTS THE RESIDUES TO BE DESIGNED
+        DESIGN_SELECTOR = ChainSelector(1)
+        # MAKE SELECTORS THAT SELECT THE RESIDUE GROUPS TO BE LINKED
+        LINK_SELECTORS = [
+            [
+                ResidueIndexSelector(repeat_string_1),
+                ResidueIndexSelector(repeat_string_2),
+            ]
+        ]
+        print_timestamp("Designing with MPNN", start_time)
+        # construct the MPNNMultistateDesign object
+        mpnn_design = MPNNMultistateDesign(
+            design_selector=design_selector,
+            residue_selectors=residue_selectors,
+            omit_AAs="CX",
+            **kwargs,
+        )
+        # design the pose
+        mpnn_design.apply(pose)
+        print_timestamp("MPNN design complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        scores["path_in"] = pdb_path
+        scores["parent"] = dhr
+        # update the pose with the updated scores dict
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        # generate all output poses
+        for decoy in mpnn_design.generate_all_poses(pose, include_native=True):
+            ppose = io.to_packed(decoy)
+            yield ppose
