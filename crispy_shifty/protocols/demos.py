@@ -226,11 +226,12 @@ def mpnn_dhr_with_repeat(
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
+        scores["original_sequence"] = pose.sequence()
         print_timestamp("Setting up design selector", start_time)
         # MAKE A SELECTOR THAT SELECTS THE RESIDUES TO BE DESIGNED
-        DESIGN_SELECTOR = ChainSelector(1)
+        design_selector = ChainSelector(1)
         # MAKE SELECTORS THAT SELECT THE RESIDUE GROUPS TO BE LINKED
-        LINK_SELECTORS = [
+        residue_selectors = [
             [
                 ResidueIndexSelector(repeat_string_1),
                 ResidueIndexSelector(repeat_string_2),
@@ -258,3 +259,69 @@ def mpnn_dhr_with_repeat(
         for decoy in mpnn_design.generate_all_poses(pose, include_native=True):
             ppose = io.to_packed(decoy)
             yield ppose
+
+@requires_init
+def batch_fold_dhr(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to fold with the superfold script.
+    :param: kwargs: keyword arguments to be passed to the superfold script.
+    :return: an iterator of PackedPose objects.
+    """
+
+    from operator import lt, gt
+    from pathlib import Path
+    import sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.design import score_SAP
+    from crispy_shifty.protocols.folding import (
+        generate_decoys_from_pose,
+        SuperfoldMultiPDB,
+    )
+    from crispy_shifty.utils.io import cmd, print_timestamp
+
+    start_time = time()
+    # hacky split pdb_path into pdb_path and fasta_path
+    pdb_path = kwargs.pop("pdb_path")
+    # there are multiple paths in the pdb_path, we need to split them and rejoin them
+    pdb_paths = pdb_path.split("____")
+    pdb_path = " ".join(pdb_paths)
+    
+    # this function is special, we don't want a packed_pose_in ever, we maintain it as
+    # a kwarg for backward compatibility with PyRosettaCluster
+    if packed_pose_in is not None:
+        raise ValueError("This function is not intended to have a packed_pose_in")
+    else:
+        pass
+
+    print_timestamp("Setting up for AF2", start_time)
+    runner = SuperfoldMultiPDB(input_file=pdb_path, load_decoys=True, **kwargs)
+    runner.setup_runner()
+    print_timestamp("Running AF2", start_time)
+    runner.apply()
+    print_timestamp("AF2 complete, updating pose datacache", start_time)
+    # get the updated poses from the runner
+    tag_pose_dict = runner.get_tag_pose_dict()
+    # rank the different model results by plddt
+    rank_on = "mean_plddt"
+    print_timestamp("Generating decoys", start_time)
+    for tag, pose in tag_pose_dict.items():
+        for decoy in generate_decoys_from_pose(
+            pose,
+            generate_prediction_decoys=True,
+            label_first=False,
+            prefix=tag,
+            rank_on=rank_on,
+        ):
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, "final_seq", decoy.sequence())
+            sap_score = score_SAP(decoy)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, "sap_score", sap_score)
+            final_ppose = io.to_packed(decoy)
+            yield final_ppose
