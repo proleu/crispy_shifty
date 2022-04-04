@@ -292,7 +292,9 @@ def gen_task_factory(
     task_factory = pyrosetta.rosetta.core.pack.task.TaskFactory()
 
     if not design_sel:
-        design_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        design_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        )
 
     if not pack_sel:
         pack_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
@@ -309,8 +311,14 @@ def gen_task_factory(
         task_factory.push_back(pack_op)
 
         # everything neither designable nor packable
-        design_nbhd_or_pack_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(pack_nbhd_sel, pack_sel)
-        lock_op = OperateOnResidueSubset(PreventRepackingRLT(), design_nbhd_or_pack_sel, True)
+        design_nbhd_or_pack_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(
+                pack_nbhd_sel, pack_sel
+            )
+        )
+        lock_op = OperateOnResidueSubset(
+            PreventRepackingRLT(), design_nbhd_or_pack_sel, True
+        )
         task_factory.push_back(lock_op)
     elif pack_nondesignable:
         # everything not designable
@@ -321,8 +329,14 @@ def gen_task_factory(
         pack_op = OperateOnResidueSubset(RestrictToRepackingRLT(), design_sel, True)
         task_factory.push_back(pack_op)
         # everything neither designable nor packable
-        design_or_pack_sel = pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(design_sel, pack_sel)
-        lock_op = OperateOnResidueSubset(PreventRepackingRLT(), design_or_pack_sel, True)
+        design_or_pack_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.OrResidueSelector(
+                design_sel, pack_sel
+            )
+        )
+        lock_op = OperateOnResidueSubset(
+            PreventRepackingRLT(), design_or_pack_sel, True
+        )
         task_factory.push_back(lock_op)
 
     if extra_rotamers_level > 0:
@@ -396,42 +410,61 @@ def gen_task_factory(
     return task_factory
 
 
-def gen_scorefxn(scorefxn_purpose: str = "clean") -> ScoreFunction:
+def gen_scorefxn(
+    cartesian: bool = False,
+    res_type_constraint: bool = False,
+    hbonds: bool = False,
+    weights: str = "beta_nov16.wts",
+) -> ScoreFunction:
     """
     TODO
     Requires the following init flags:
-    `-corrections::beta_nov16 true`
-
+    `-corrections::beta_nov16 true` or `-corrections::beta_nov16_cart true`
+    :param: cartesian: score function set up for Cartesian scoring
+    :param: res_type_constraint: score function set up for designing with residue type information, as in FavorNativeResidue
+    :param: hbonds: score function set up for designing hbonds
     """
 
     import pyrosetta
 
-    if scorefxn_purpose == "clean":
-        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
-    
-    elif scorefxn_purpose == "design":
-        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
+    sfxn = pyrosetta.create_score_function(weights)
 
-    elif scorefxn_purpose == "hbonds":
+    if cartesian:
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.cart_bonded, 0.5)
+        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.pro_close, 0.0)
+
+    if res_type_constraint:
+        sfxn.set_weight(
+            pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0
+        )
+
+    if hbonds:
         # a scorefunction that likes hbonds- I got this from Ryan Kibler, not sure of the original source. Bcov?
         # use with prune_buns (allow_even_trades=False, atomic_depth_cutoff=3.5, minimum_hbond_energy=-1.0)
         hbond_options = pyrosetta.rosetta.core.scoring.hbonds.HBondOptions()
         hbond_options.use_hb_env_dep(True)
-        energy_method_options = pyrosetta.rosetta.core.scoring.methods.EnergyMethodOptions()
+        energy_method_options = (
+            pyrosetta.rosetta.core.scoring.methods.EnergyMethodOptions()
+        )
         energy_method_options.hbond_options(hbond_options)
         energy_method_options.approximate_buried_unsat_penalty_burial_atomic_depth(3.5)
-        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_cross_chain(-7.0)
-        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_ser_to_helix_bb(1.0)
-        energy_method_options.approximate_buried_unsat_penalty_hbond_energy_threshold(-1.0)
-        energy_method_options.approximate_buried_unsat_penalty_natural_corrections1(True)
-        sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_cross_chain(
+            -7.0
+        )
+        energy_method_options.approximate_buried_unsat_penalty_hbond_bonus_ser_to_helix_bb(
+            1.0
+        )
+        energy_method_options.approximate_buried_unsat_penalty_hbond_energy_threshold(
+            -1.0
+        )
+        energy_method_options.approximate_buried_unsat_penalty_natural_corrections1(
+            True
+        )
         sfxn.set_energy_method_options(energy_method_options)
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.res_type_constraint, 1.0)
-        sfxn.set_weight(pyrosetta.rosetta.core.scoring.ScoreType.approximate_buried_unsat_penalty, 17.0)
-
-    else:
-        raise ValueError(f"Invalid scorefxn_purpose: {scorefxn_purpose}")
+        sfxn.set_weight(
+            pyrosetta.rosetta.core.scoring.ScoreType.approximate_buried_unsat_penalty,
+            17.0,
+        )
 
     return sfxn
 
@@ -448,8 +481,8 @@ def gen_movemap(
     :param: jump: bool, whether to allow jump moves.
     :param: chi: bool, whether to allow chi moves.
     :param: bb: bool, whether to allow backbone moves.
-    :param: nu: bool, whether to allow nu moves.
-    :param: branch: bool, whether to allow branch moves.
+    :param: nu: bool, whether to allow nu moves (for carbohydrates).
+    :param: branch: bool, whether to allow branch moves (for carbohydrates).
     :return: MoveMap for design.
     Sets up the MoveMap for design.
     """
@@ -472,6 +505,7 @@ def fast_design(
     movemap: MoveMap,
     relax_script: str = "InterfaceDesign2019",
     repeats: int = 1,
+    cartesian: bool = False,
 ) -> None:
     """
     :param: pose: Pose, the pose to design.
@@ -493,7 +527,7 @@ def fast_design(
         f"""
         <MOVERS>
             <FastDesign name="fastdesign" repeats="{repeats}" ramp_down_constraints="false" 
-                batch="false" cartesian="false" bondangle="false" bondlength="false" 
+                batch="false" cartesian="{str(cartesian).lower()}" bondangle="false" bondlength="false" 
                 min_type="lbfgs_armijo_nonmonotone" relaxscript="{relax_script}">
             </FastDesign>
         </MOVERS>
@@ -664,7 +698,7 @@ def score_cms(
     return cms
 
 
-def score_ddg(pose: Pose, jump: int=1, name: str = "ddg") -> float:
+def score_ddg(pose: Pose, jump: int = 1, name: str = "ddg") -> float:
     """
     :param: pose: Pose, the pose to score.
     :param: jump: the jump to calculate DDG across
@@ -689,12 +723,12 @@ def score_ddg(pose: Pose, jump: int=1, name: str = "ddg") -> float:
 
 
 def score_SAP(
-        pose: Pose, 
-        name: str = "SAP",
-        sap_calculate_selector: ResidueSelector = None,
-        sasa_selector: ResidueSelector = None,
-        score_selector: ResidueSelector = None,
-    ) -> float:
+    pose: Pose,
+    name: str = "SAP",
+    sap_calculate_selector: ResidueSelector = None,
+    sasa_selector: ResidueSelector = None,
+    score_selector: ResidueSelector = None,
+) -> float:
     """
     :param: pose: Pose, the pose to score.
     :param: name: str, the name of the filter.
@@ -848,7 +882,9 @@ def score_wnm_helix(pose: Pose, name: str = "wnm_hlx") -> float:
     return wnm
 
 
-def score_per_res(pose: Pose, scorefxn: ScoreFunction, name: str = "score") -> Tuple[float, float]:
+def score_per_res(
+    pose: Pose, scorefxn: ScoreFunction, name: str = "score"
+) -> Tuple[float, float]:
     """
     :param: pose: Pose to score.
     :param: scorefxn: ScoreFunction to use.
@@ -1207,7 +1243,9 @@ def one_state_design_bound_state(
             add_metadata_to_pose(pose, "path_in", pdb_path)
             end_time = time()
             total_time = end_time - start_time
-            print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
+            print_timestamp(
+                f"Total time: {total_time:.2f} seconds", start_time=start_time
+            )
             add_metadata_to_pose(pose, "time", total_time)
             clear_terms_from_scores(pose)
 

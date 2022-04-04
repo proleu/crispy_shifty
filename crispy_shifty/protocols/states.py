@@ -903,7 +903,7 @@ def make_free_states(
             pose = pose.clone()
             # make a new FreeStateMaker for each pose
             state_maker = FreeStateMaker(
-                pose, 
+                pose,
                 clash_cutoff=clash_cutoff,
                 int_cutoff=int_cutoff,
                 name=name,
@@ -962,12 +962,12 @@ def make_bound_states(
             pose = pose.clone()
             # make a new BoundStateMaker for each pose
             state_maker = BoundStateMaker(
-                pose, 
+                pose,
                 clash_cutoff=clash_cutoff,
                 int_cutoff=int_cutoff,
                 name=name,
                 pre_break_helix=pre_break_helix,
-                **kwargs
+                **kwargs,
             )
             # generate states
             for ppose in state_maker.generate_states():

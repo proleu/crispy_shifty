@@ -317,7 +317,7 @@ def filter_paired_state(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.design import (
-    #     add_metadata_to_pose,
+        #     add_metadata_to_pose,
         gen_std_layer_design,
         gen_task_factory,
         pack_rotamers,
@@ -344,7 +344,7 @@ def filter_paired_state(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
     # make a repack only task factory
-    task_factory= gen_task_factory(
+    task_factory = gen_task_factory(
         design_sel=TrueResidueSelector(),
         pack_nbhd=True,
         extra_rotamers_level=2,
@@ -387,20 +387,26 @@ def filter_paired_state(
             "Y_score_per_res": Y_score_per_res,
         }
         scores.update(Y_scores)
-        
+
         for chain, chain_id in zip(list(pose.split_by_chain()), "ABC"):
             print_timestamp(f"Scoring {chain_id}...", start_time=start_time)
             # make a solo copy of the chain
             solo_chain = Pose()
             pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                solo_chain, chain, new_chain=True,
+                solo_chain,
+                chain,
+                new_chain=True,
             )
             # repack the chain
-            pack_rotamers(pose=solo_chain, task_factory=task_factory, scorefxn=clean_sfxn)
+            pack_rotamers(
+                pose=solo_chain, task_factory=task_factory, scorefxn=clean_sfxn
+            )
             # get SAP
             sap = score_SAP(pose=solo_chain, name=f"{chain_id}_sap")
             # get total score and score_per_res
-            chain_total_score, chain_score_per_res = score_per_res(solo_chain, clean_sfxn, name=f"{chain_id}_score")
+            chain_total_score, chain_score_per_res = score_per_res(
+                solo_chain, clean_sfxn, name=f"{chain_id}_score"
+            )
             # get wnm_all
             wnm_all = score_wnm_all(solo_chain)[0]
             # get wnm_helix
@@ -419,9 +425,7 @@ def filter_paired_state(
 
         end_time = time()
         total_time = end_time - start_time
-        print_timestamp(
-            f"Total time: {total_time:.2f} seconds", start_time=start_time
-        )
+        print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
         # clear the pose scores
         pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
         for key, value in scores.items():

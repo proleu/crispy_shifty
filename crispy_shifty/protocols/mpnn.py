@@ -121,6 +121,7 @@ class MPNNRunner(ABC):
         If a `chains_to_mask` is provided, the runner will run on (mask) only that chain.
         If no `design_selector` is provided, all residues on all masked chains will be designed.
         The chain letters in your PDB must be correct.
+        Does not allow the use of --score_only.
         """
 
         from pathlib import Path
@@ -894,9 +895,9 @@ def mpnn_dimers(
     :param: kwargs: keyword arguments to be passed to MPNNMultistateDesign, or this function.
     :return: an iterator of PackedPose objects.
     Runs MPNN design on dimers. The input pose can be any number of pairs of dimer protomers, in any state.
-    Useful for designing dimers for two or more states (especially when providing multiple copies of the same 
-    state to bias MSD toward that state) or for providing slight variations of the same state (e.g., different 
-    AF2 model predictions) to show MPNN a slightly more comprehensive view of the backbone space (note this 
+    Useful for designing dimers for two or more states (especially when providing multiple copies of the same
+    state to bias MSD toward that state) or for providing slight variations of the same state (e.g., different
+    AF2 model predictions) to show MPNN a slightly more comprehensive view of the backbone space (note this
     last idea hasn't been tested).
     For the interface selector to work properly, make sure the interface is formed in the last pair of chains
     provided as input. All chains must be the same length.
@@ -966,11 +967,14 @@ def mpnn_dimers(
             "neighborhood": neighborhood_selector,
         }
         # make the inverse dict of selector options
-        selector_inverse_options = {value: key for key, value in selector_options.items()}
+        selector_inverse_options = {
+            value: key for key, value in selector_options.items()
+        }
         if "mpnn_design_area" in kwargs:
             if kwargs["mpnn_design_area"] == "scan":
                 mpnn_design_areas = [
-                    selector_options[key] for key in ["full", "interface", "neighborhood"]
+                    selector_options[key]
+                    for key in ["full", "interface", "neighborhood"]
                 ]
             else:
                 try:
@@ -990,7 +994,9 @@ def mpnn_dimers(
         mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
         num_conditions = len(list(mpnn_conditions))
         print_timestamp(f"Beginning {num_conditions} MPNNDesign runs", start_time)
-        for run_i, (mpnn_temperature, mpnn_design_area) in enumerate(list(mpnn_conditions)):
+        for run_i, (mpnn_temperature, mpnn_design_area) in enumerate(
+            list(mpnn_conditions)
+        ):
             pose = original_pose.clone()
 
             # get a boolean mask of the designable residues in state Y
@@ -999,9 +1005,13 @@ def mpnn_dimers(
             all_interface_residues = []
             for chain_pair in reversed(range(len(chain_sels) // 2)):
                 all_interface_residues += [
-                    i - offset*chain_pair for i, designable in enumerate(designable_filter, start=1) if designable
+                    i - offset * chain_pair
+                    for i, designable in enumerate(designable_filter, start=1)
+                    if designable
                 ]
-            all_interface_residues_str = ",".join(str(i) for i in all_interface_residues)
+            all_interface_residues_str = ",".join(
+                str(i) for i in all_interface_residues
+            )
             print(all_interface_residues_str)
             design_selector = ResidueIndexSelector(all_interface_residues_str)
 

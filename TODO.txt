@@ -1,23 +1,19 @@
 dev TODOs:
-    - make 09
-        - 09_detail_filter_and_order
-        - trim peptides up to 5 aa each side to no shorter than 30
-        - check for ddG changes after deleting each residue
-        - once final trim is reached mutant non-interface surface residues to E until pI is <-5
-    - test 3 X and 3 Y staples for j7, j9, cs_094
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
-
+    - finish miseq analysis
     - ordering utils, domesticator?
-    - TODOs and docstrings in all modules
+        - add 669 and 671 to vectors
     - use Bio SeqIO for fasta wrangling?
+    - stapling and repredicting
+    - TODOs and docstrings in all modules
 
     - Example notebooks for MPNN and superfold in crispy_shifty/examples
-        - examples 2-4 with Abbas
-            - show prototyping best practices
-            - then figure out smooth setup
-            - share with lab
-    	- test folding with single pdb no fasta, pdb+fasta, and ...? TODO 
-            - repredict AF2 intial guess folding.py the FF63-129 and cs_0-108 and JHB1-13
+        - ask justas about checkpoints
+        - finish 1
+        - finish 2
+        - show prototyping best practices
+        - then figure out smooth setup
+        - share with lab
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - finalize env.yml (pip install typing-extensions==3.10.0.2) and build envs on digs, and janelia
         - do it when no one is has crispy env active
@@ -33,29 +29,9 @@ dev TODOs:
 
     - DOTFILES - check init.vim is working, then version control
 
-    - make `almost_inpainting` blueprint builder func /home/pleung/projects/peptide_binders/pdb_files/nihal4.pdb
+    - make `almost_inpainting` blueprint builder func 
 
 TODO: 
-    00 filter scaffold sets # run
-    01 prep inputs # run 
-    02 make states # run
-    --------------------------------------------------
-    00 design bound states # run
-    01 loop bound_states # run
-    02 MPNN bound states #  run
-    03 fold bound states # run 
-    04 pair bound states # run
-    05 design paired states # run
-    06 MPNN paired states # run
-    07 fold paired states_Y # run # rebalance states if needed
-    08 fold paired states_X # run
     09 detail and filter # run
     10 order and analyze
-
-Paper TODOs:
-use symbolic regression on flexdock trajectory datasets? 
-networks learn to summarize rules about biophysical mechanics, 
-then we use a seperate layer to regress equations
-
-in vivo assay for crispy snippies: cleavable sequence fused to petcon that prevents display
 

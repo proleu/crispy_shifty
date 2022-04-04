@@ -1,4 +1,4 @@
-name: crispy
+name: shifty
 channels:
   - pyg
   - pytorch
@@ -68,8 +68,8 @@ dependencies:
   - conda-package-handling=1.7.3=py38h497a2fe_0
   - cramjam=2.3.1=py38h497a2fe_1
   - cryptography=35.0.0=py38h3e25421_1
-    # - cudnn=8.1.0.77=h90431f1_0
-    # - cudatoolkit=11.1.1=h6406543_9
+  - cudatoolkit=11.1.1=h6406543_9
+  - cudnn=8.2.1.32=h86fa8c9_0
   - curl=7.79.1=h2574ce0_1
   - cycler=0.10.0=py_2
   - cytoolz=0.11.0=py38h497a2fe_3
@@ -90,7 +90,7 @@ dependencies:
   - entrypoints=0.3=pyhd8ed1ab_1003
   - expat=2.4.1=h9c3ff4c_0
   - fastparquet=0.7.1=py38h6c62de6_0
-  - ffmpeg=4.4.0=h6987444_5
+  - ffmpeg=4.3.2=hca11adc_1
   - fftw=3.3.9=h27cfd23_1
   - flask=2.0.2=pyhd8ed1ab_0
   - flatbuffers=2.0.0=h9c3ff4c_0
@@ -294,7 +294,7 @@ dependencies:
   - ocl-icd-system=1.0.0=1
   - olefile=0.46=pyh9f0ad1d_1
   - openh264=2.1.1=h780b84a_0
-  - openmm=7.6.0=py38h30ff9b7_0
+  - openmm=7.6.0=py38h7c39f5a_0
   - openssl=1.1.1l=h7f98852_0
   - opt_einsum=3.3.0=pyhd8ed1ab_1
   - packaging=21.0=pyhd8ed1ab_0
@@ -339,7 +339,7 @@ dependencies:
   - pycosat=0.6.3=py38h497a2fe_1006
   - pycparser=2.20=pyh9f0ad1d_2
   - pyct=0.4.8=py38_0
-  - pyg=2.0.2=py38_torch_1.10.0_cu113
+  - pyg=2.0.3=py38_torch_1.9.0_cu111
   - pygments=2.10.0=pyhd8ed1ab_0
   - pyjwt=2.3.0=pyhd8ed1ab_0
   - pykerberos=1.2.1=py38hacac60f_5
@@ -365,12 +365,12 @@ dependencies:
   - python-graphviz=0.17=pyhaef67bd_0
   - python-louvain=0.15=pyhd3deb0d_0
   - python_abi=3.8=2_cp38
-  - pytorch=1.10.0=py3.8_cuda11.3_cudnn8.2.0_0
-  - pytorch-cluster=1.5.9=py38_torch_1.10.0_cu113
+  - pytorch=1.9.1=py3.8_cuda11.1_cudnn8.0.5_0
+  - pytorch-cluster=1.5.9=py38_torch_1.9.0_cu111
   - pytorch-mutex=1.0=cuda
-  - pytorch-scatter=2.0.9=py38_torch_1.10.0_cu113
-  - pytorch-sparse=0.6.12=py38_torch_1.10.0_cu113
-  - pytorch-spline-conv=1.2.1=py38_torch_1.10.0_cu113
+  - pytorch-scatter=2.0.9=py38_torch_1.9.0_cu111
+  - pytorch-sparse=0.6.12=py38_torch_1.9.0_cu111
+  - pytorch-spline-conv=1.2.1=py38_torch_1.9.0_cu111
   - pytz=2021.3=pyhd8ed1ab_0
   - pyu2f=0.1.5=pyhd8ed1ab_0
   - pyviz_comms=2.1.0=pyhd8ed1ab_0
@@ -424,13 +424,14 @@ dependencies:
   - tmalign=20170708=h0e1e685_2
   - tomli=1.2.2=pyhd8ed1ab_0
   - toolz=0.11.1=py_0
-  - torchaudio=0.10.0=py38_cu113
-  - torchvision=0.11.1=py38_cu113
+  - torchaudio=0.9.1=py38
+  - torchvision=0.2.2=py_3
   - tornado=6.1=py38h497a2fe_1
   - tqdm=4.62.3=pyhd8ed1ab_0
   - traitlets=5.1.1=pyhd8ed1ab_0
   - traittypes=0.2.1=pyh9f0ad1d_2
   - typed-ast=1.4.3=py38h497a2fe_0
+  - typing_extensions=4.0.1=pyha770c72_0
   - uncertainties=3.1.6=pyhd8ed1ab_0
   - urllib3=1.26.7=pyhd8ed1ab_0
   - utfcpp=3.2.1=ha770c72_0
@@ -482,5 +483,5 @@ dependencies:
     - tensorboard==2.7.0
     - tensorflow==2.6.0
     - tensorflow-estimator==2.7.0
-    - typing-extensions==3.7.4
+    - typing-extensions>=3.10.0
     - xbin==0.1.7

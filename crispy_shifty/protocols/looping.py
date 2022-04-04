@@ -164,7 +164,7 @@ def remodel_helper(
     remodel_before_loop: int = 1,
     remodel_after_loop: int = 1,
     surround_loop_with_helix: bool = False,
-    new_loop_resl: str = 'V',
+    new_loop_resl: str = "V",
 ) -> str:
     """
     :param: pose: The pose to insert the loop into.
@@ -199,7 +199,9 @@ def remodel_helper(
             pose.chain_begin(2),
         )
         # end2 = pose.chain_end(2)
-        end2 = pose.size() # allows this to work with any number of chains, and it'll just try to loop the first two
+        end2 = (
+            pose.size()
+        )  # allows this to work with any number of chains, and it'll just try to loop the first two
         for i in range(1, end1 + 1):
             if i >= end1 - (remodel_before_loop - 1):
                 if surround_loop_with_helix:
@@ -271,7 +273,7 @@ def loop_remodel(
     remodel_after_loop: int = 1,
     remodel_lengths_by_vector: bool = False,
     surround_loop_with_helix: bool = False,
-    new_loop_resl: str = 'V',
+    new_loop_resl: str = "V",
 ) -> str:
     """
     :param: pose: The pose to insert the loop into.
@@ -322,7 +324,7 @@ def loop_remodel(
             remodel_before_loop=remodel_before_loop,
             remodel_after_loop=remodel_after_loop,
             surround_loop_with_helix=surround_loop_with_helix,
-            new_loop_resl=new_loop_resl
+            new_loop_resl=new_loop_resl,
         )
     else:
         bp_file = remodel_helper(
@@ -332,7 +334,7 @@ def loop_remodel(
             remodel_before_loop=remodel_before_loop,
             remodel_after_loop=remodel_after_loop,
             surround_loop_with_helix=surround_loop_with_helix,
-            new_loop_resl=new_loop_resl
+            new_loop_resl=new_loop_resl,
         )
 
     bp_sfxn = pyrosetta.create_score_function("fldsgn_cen.wts")
