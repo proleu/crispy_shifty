@@ -42,7 +42,7 @@ def path_to_pose_or_ppose(
         if cluster_scores:  # set scores in pose after unpacking, then repack
             try:
                 scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
-            except UnboundLocalError:
+            except IOError:
                 print("Scores may be absent or incorrectly formatted")
                 scores = {}
             pose = io.to_pose(ppose)
@@ -57,7 +57,7 @@ def path_to_pose_or_ppose(
         if cluster_scores:  # set scores in pose after unpacking, then repack
             try:
                 scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
-            except UnboundLocalError:
+            except IOError:
                 print("Scores may be absent or incorrectly formatted")
                 scores = {}
             pose = io.to_pose(ppose)

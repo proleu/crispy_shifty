@@ -2,6 +2,7 @@ dev TODOs:
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
     - finish miseq analysis
     - ordering utils, domesticator?
+        - add 669 and 671 to vectors
     - use Bio SeqIO for fasta wrangling?
     - stapling and repredicting
     - TODOs and docstrings in all modules

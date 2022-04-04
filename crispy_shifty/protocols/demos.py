@@ -206,6 +206,7 @@ def mpnn_dhr_with_repeat(
         "DHR68": ((59, 119), (120, 180)),
         "DHR70": ((49, 98), (99, 148)),
         "DHR81": ((56, 112), (113, 169)),
+        "DHR82": ((59, 116), (117, 174)),
     }
 
     # get the name of the DHR in a hacky way, reccomend using pathlib for better parsing
