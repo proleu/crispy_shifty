@@ -590,20 +590,33 @@ def finalize_peptide(
     :param packed_pose_in: PackedPose object.
     :param kwargs: kwargs such as "pdb_path".
     :return: Iterator of PackedPose objects with chB trimmed and resurfaced.
-    Requires the following init flags:
-    -corrections::beta_nov16 true
     """
+
+    from operator import lt, gt
     from pathlib import Path
     import sys
+    from Bio.SeqUtils.ProtParam import ProteinAnalysis
     import pyrosetta
     import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        AndResidueSelector,
+        ChainSelector,
+        NeighborhoodResidueSelector,
+        NotResidueSelector,
+        OrResidueSelector,
+        ResidueIndexSelector,
+    )
+    from pyrosetta.rosetta.protocols.grafting.simple_movers import DeleteRegionMover
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import (
         path_to_pose_or_ppose,
-        trim_and_resurface_peptide,
     )
+    from crispy_shifty.protocols.design import score_cms
+    from crispy_shifty.protocols.folding import SuperfoldRunner
+    from crispy_shifty.protocols.mpnn import MPNNDesign
+    from crispy_shifty.utils.io import print_timestamp
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -613,9 +626,110 @@ def finalize_peptide(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
     for pose in poses:
+        pose.update_residue_neighbors()
         scores = dict(pose.scores)
-        pose = trim_and_resurface_peptide(pose)
-        for key, value in scores.items():
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
-        final_ppose = io.to_packed(pose)
-        yield final_ppose
+        original_pose = pose.clone()
+         # get the length of the peptide
+        chB = pose.clone()
+        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        rechain.chain_order("2")
+        rechain.apply(chB)
+        chB_length = chB.total_residue()
+        # if length is above 28, try to trim the peptide down to 28
+        if chB_length > 28:
+            # get trimmable regions
+            chB_residue_indices = [
+                str(i) for i in range(pose.chain_begin(2), pose.chain_end(2) + 1)
+            ]
+            internal = chB_residue_indices[5:-5]
+            # now we decide whether to do a sliding window approach or serial truncation
+            if len(internal) > 28:
+                # get all possible sub windows of length internal and score them with cms
+                window_size = len(internal)
+            else:
+                # get all possible sub windows of length 28
+                window_size = 28
+            # get all possible sub windows of length window_size from chB_residue_indices
+            sub_windows = [
+                chB_residue_indices[i : i + window_size]
+                for i in range(len(chB_residue_indices) - window_size + 1)
+            ]
+            # make a dict keyed by sub_window and valued by pose trimmed to that window
+            truncations_dict = {}
+            # make a dict keyed by sub_window and valued score of cms
+            cms_scores_dict = {}
+            # for each sub_window, make a pose and trim it to the sub_window
+            for sub_window in sub_windows:
+                # make a residue selector that includes all residues in sub_window
+                indices = ",".join(sub_window)
+                sub_window_sel = ResidueIndexSelector(indices)
+                chA_sel, chB_sel, chC_sel = (
+                    ChainSelector(1),
+                    ChainSelector(2),
+                    ChainSelector(3),
+                )
+                chA_chC_sel = OrResidueSelector(chA_sel, chC_sel)
+                to_keep_sel = OrResidueSelector(sub_window_sel, chA_chC_sel)
+                to_delete_sel = NotResidueSelector(to_keep_sel)
+                # setup the delete region mover
+                trimmed_pose = pose.clone()
+                trimmer = DeleteRegionMover()
+                trimmer.set_rechain(True)
+                trimmer.set_add_terminal_types_on_rechain(True)
+                trimmer.set_residue_selector(to_delete_sel)
+                trimmer.apply(trimmed_pose)
+                # fix the pdb_info
+                rechain.chain_order("123")
+                rechain.apply(trimmed_pose)
+                # score the pose
+                cms = score_cms(
+                    pose=trimmed_pose,
+                    sel_1=chA_sel,
+                    sel_2=chB_sel,
+                )
+                # add to the dicts
+                truncations_dict[indices] = trimmed_pose
+                cms_scores_dict[indices] = cms
+            # invert the dict, this destroys any ties but we don't care
+            inverted_cms_scores_dict = {v: k for k, v in cms_scores_dict.items()}
+            # get the sub_window with the highest cms score
+            highest_cms_sub_window = inverted_cms_scores_dict[max(inverted_cms_scores_dict)]
+            # get the pose with the highest cms score
+            highest_cms_pose = truncations_dict[highest_cms_sub_window]
+            # exit the if statement with the highest cms score pose set to pose
+            pose = highest_cms_pose
+        else:  # don't need to trim if already 28 or less
+            pass   
+        # now we have a pose with the correct length, we can resurface it
+        trimmed_pose = pose.clone()
+
+        print_timestamp("Setting up design selectors", start_time)
+        # make a designable residue selector of only the chB residues
+        design_sel = ChainSelector(2)
+        print_timestamp("Designing interface with MPNN", start_time)
+        # construct the MPNNDesign object
+        mpnn_design = MPNNDesign(
+            design_selector=design_sel,
+            num_sequences=24,
+            omit_AAs="CX",
+            temperature=0.1,
+            **kwargs,
+        )
+        # design the pose
+        mpnn_design.apply(pose)
+        print_timestamp("MPNN design complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        # get rid of sequences that don't pass protparams filters
+        print_timestamp("Filtering sequences", start_time)
+        # make filter_dict
+        filter_dict = {
+            "pI": -5.5,
+        }
+        chB_pI = ProteinAnalysis(chB_seq).isoelectric_point()
+
+
+        # for key, value in scores.items():
+        #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
+        # final_ppose = io.to_packed(pose)
+        # yield final_ppose
