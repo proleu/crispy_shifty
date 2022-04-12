@@ -626,6 +626,7 @@ def gen_array_tasks(
     sha1: Optional[str] = "",
     simulation_name: Optional[str] = "crispy_shifty",
     time: Optional[str] = "",
+    func_root: Optional[str] = None,
 ):
     """
     :param: distribute_func: function to distribute, formatted as a `str`:
@@ -681,6 +682,8 @@ def gen_array_tasks(
     # use git to find the root of the repo
     repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
     root = repo.git.rev_parse("--show-toplevel")
+    if func_root is None:
+        func_root = root
     env_path = str(Path(root) / "envs" / "crispy")
     if os.path.exists(env_path):
         pass
@@ -793,17 +796,21 @@ def gen_array_tasks(
 
     func_split = distribute_func.split(".")
     func_name = func_split[-1]
-    run_py = "".join(
-        [
-            f"#!{python} \n",
-            "import sys\n",
+    path_inserts=[
             # use the root of the repo location to import the module
             f"sys.path.insert(0, '{root}')\n",
+            ]
+    if func_root!=root:
+        path_inserts.append(f"sys.path.insert(0, '{func_root}')\n")
+    lines=[
+            f"#!{python} \n",
+            "import sys\n",
             "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
             f"from {'.'.join(func_split[:-1])} import {func_name}\n",
             f"wrapper_for_array_tasks({func_name}, sys.argv)",
-        ]
-    )
+            ]
+    lines[2:2]=path_inserts
+    run_py = "".join(lines)
     run_py_file = os.path.join(output_path, "run.py")
     # Write the run.py file
     with open(run_py_file, "w+") as f:
