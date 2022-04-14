@@ -408,10 +408,10 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
     """
     :param pose: Pose object with peptide to trim and resurface.
     :return: Pose object with trimmed and resurfaced peptide.
-    If peptide is longer than 30 residues, it is trimmed to 30 or total length - 10,
+    If peptide is longer than 30 residues, it is trimmed to 28 or total length - 12,
     whichever is longer.
     If peptide pI is greater than 6.0 it will be resurfaced, targeting a goal pI of less
-    than 6.0.
+    than 5.0.
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16`.
     """
     from pathlib import Path
@@ -448,20 +448,20 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
     rechain.chain_order("2")
     rechain.apply(chB)
     chB_length = chB.total_residue()
-    # if length is above 30, try to trim the peptide down to 30
-    if chB_length > 30:
+    # if length is above 28, try to trim the peptide down to 28
+    if chB_length > 28:
         # get trimmable regions
         chB_residue_indices = [
             str(i) for i in range(pose.chain_begin(2), pose.chain_end(2) + 1)
         ]
-        internal = chB_residue_indices[5:-5]
+        internal = chB_residue_indices[6:-6]
         # now we decide whether to do a sliding window approach or serial truncation
-        if len(internal) > 30:
+        if len(internal) > 28:
             # get all possible sub windows of length internal and score them with cms
             window_size = len(internal)
         else:
-            # get all possible sub windows of length 30
-            window_size = 30
+            # get all possible sub windows of length 28
+            window_size = 28
         # get all possible sub windows of length window_size from chB_residue_indices
         sub_windows = [
             chB_residue_indices[i : i + window_size]
@@ -551,9 +551,9 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
     chg = pyrosetta.rosetta.protocols.aa_composition.AddNetChargeConstraintMover()
     # make the file contents
     file_contents = """
-    DESIRED_CHARGE -3
+    DESIRED_CHARGE -4
     PENALTIES_CHARGE_RANGE -7 -1
-    PENALTIES 4 0 0 0 0 3 4
+    PENALTIES 3 0 0 0 2 4 6
     BEFORE_FUNCTION LINEAR
     AFTER_FUNCTION LINEAR
     """
