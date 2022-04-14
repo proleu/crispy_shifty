@@ -534,6 +534,7 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
     """
 
     import argparse
+    import copy
     import pyrosetta
     import sys
 
@@ -577,12 +578,14 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
         args.extra_kwargs[i]: args.extra_kwargs[i + 1]
         for i in range(0, len(args.extra_kwargs), 2)
     }
+    
     instance_kwargs = {
         args.instance[i]: args.instance[i + 1] for i in range(0, len(args.instance), 2)
     }
 
     for pdb_path in args.pdb_path:
         # Add the required kwargs
+        print("check")
         func_kwargs["pdb_path"] = pdb_path
 
         datetime_start = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -593,7 +596,7 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
         # task_kwargs is everything that would be passed in a task in pyrosetta distributed.
         # This isn't a perfect way of figuring out which are which, but it's the best I can do here easily
         # without deviating too far.
-        task_kwargs = func_kwargs
+        task_kwargs = copy.deepcopy(func_kwargs)
         task_kwargs.update(pyro_kwargs)
         save_kwargs = {
             "compressed": True,
