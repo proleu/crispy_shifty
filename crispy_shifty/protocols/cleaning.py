@@ -721,12 +721,111 @@ def finalize_peptide(
         # update the scores dict
         scores.update(pose.scores)
         # get rid of sequences that don't pass protparams filters
-        print_timestamp("Filtering sequences", start_time)
+        print_timestamp("Filtering sequences on sequence metrics", start_time)
         # make filter_dict
         filter_dict = {
-            "pI": -5.5,
+            "pI": -5.0,
         }
-        chB_pI = ProteinAnalysis(chB_seq).isoelectric_point()
+        chB_seqs = {k: v for k, v in scores.items() if "mpnn_seq" in k}
+        # remove sequences that don't pass the filter
+        # for seq_id, seq in chB_seqs.items():
+
+        #     chB_pI = ProteinAnalysis(seq).isoelectric_point()
+        #     # remove scores that don't pass the filter from scores and pose datacache
+        #     if not chB_pI < filter_dict["pI"]:
+        #         scores.pop(seq_id)
+        #         pyrosetta.rosetta.core.pose.clearPoseExtraScore(pose, seq_id)
+        #     else:
+        #         pass
+        # print_timestamp("Filtering sequences with AF2", start_time)
+
+        # # load fasta into a dict
+        # tmp_fasta_dict = fasta_to_dict(fasta_path)
+        # pose_chains = list(pose.split_by_chain())
+        # # slice out the bound state, aka chains A and B
+        # tmp_pose, X_pose = Pose(), Pose()
+        # pyrosetta.rosetta.core.pose.append_pose_to_pose(
+        #     tmp_pose, pose_chains[0], new_chain=True
+        # )
+        # pyrosetta.rosetta.core.pose.append_pose_to_pose(
+        #     tmp_pose, pose_chains[1], new_chain=True
+        # )
+        # # slice out the free state, aka chain C
+        # pyrosetta.rosetta.core.pose.append_pose_to_pose(
+        #     X_pose, pose_chains[2], new_chain=True
+        # )
+        # # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
+        # tmp_fasta_dict = {
+        #     tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
+        # }
+        # # change the pose to the modified pose
+        # pose = tmp_pose.clone()
+        # print_timestamp("Setting up for AF2", start_time)
+        # runner = SuperfoldRunner(
+        #     pose=pose, fasta_path=fasta_path, load_decoys=True, **kwargs
+        # )
+        # runner.setup_runner(file=fasta_path)
+        # # initial_guess, reference_pdb both are the tmp.pdb
+        # initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
+        # reference_pdb = initial_guess
+        # flag_update = {
+        #     "--initial_guess": initial_guess,
+        #     "--reference_pdb": reference_pdb,
+        # }
+        # # now we have to point to the right fasta file
+        # new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
+        # dict_to_fasta(tmp_fasta_dict, new_fasta_path)
+        # runner.set_fasta_path(new_fasta_path)
+        # runner.override_input_file(new_fasta_path)
+        # runner.update_flags(flag_update)
+        # runner.update_command()
+        # print_timestamp("Running AF2", start_time)
+        # runner.apply(pose)
+        # print_timestamp("AF2 complete, updating pose datacache", start_time)
+        # # update the scores dict
+        # scores.update(pose.scores)
+        # # update the pose with the updated scores dict
+        # for key, value in scores.items():
+        #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        # # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
+        # filter_dict = {
+        #     "mean_plddt": (gt, 92.0),
+        #     "rmsd_to_reference": (lt, 1.5),
+        #     "mean_pae_interaction": (lt, 5),
+        # }
+        # rank_on = "mean_plddt"
+        # prefix = "mpnn_seq"
+        # print_timestamp("Generating decoys", start_time)
+        # for decoy in generate_decoys_from_pose(
+        #     pose,
+        #     filter_dict=filter_dict,
+        #     generate_prediction_decoys=True,
+        #     label_first=True,
+        #     prefix=prefix,
+        #     rank_on=rank_on,
+        # ):
+        #     # add the free state back into the decoy
+        #     pyrosetta.rosetta.core.pose.append_pose_to_pose(
+        #         decoy, X_pose, new_chain=True
+        #     )
+        #     # get the chA sequence
+        #     chA_seq = list(decoy.split_by_chain())[0].sequence()
+        #     # setup SimpleThreadingMover
+        #     stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
+        #     # thread the sequence from chA onto chA
+        #     stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
+        #     stm.apply(decoy)
+        #     # rename af2 metrics to have Y_ prefix
+        #     decoy_scores = dict(decoy.scores)
+        #     for key, value in decoy_scores.items():
+        #         if key in af2_metrics:
+        #             pyrosetta.rosetta.core.pose.setPoseExtraScore(
+        #                 decoy, f"Y_{key}", value
+        #             )
+
+        #     packed_decoy = io.to_packed(decoy)
+        #     yield packed_decoy
+
 
 
         # for key, value in scores.items():
