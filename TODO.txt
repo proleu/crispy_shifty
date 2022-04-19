@@ -12,6 +12,7 @@ dev TODOs:
     - use Bio SeqIO for fasta wrangling?
     - stapling and repredicting
     - TODOs and docstrings in all modules
+    - update mpnn.py to enable new options
 
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - finalize env.yml by making conda consistent
@@ -22,6 +23,8 @@ dev TODOs:
     - agg clustering of States before and after plot instead of piecharts
 
     - if really bored
+        - run crispy_shifty_junctions
+        - rewrite mpnn.py to directly generate some jsons etc.
         - add documentation to the InsertResMover and PR
         - SafeSwitchChainOrderMover in python, then CPP?
 
