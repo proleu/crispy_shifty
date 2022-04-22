@@ -1181,8 +1181,8 @@ def pair_dimers(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
     
-    copies_x = kwargs["copies_x"]
-    copies_y = kwargs["copies_y"]
+    copies_x = int(kwargs["copies_x"])
+    copies_y = int(kwargs["copies_y"])
 
     for pose in poses:
 
@@ -1194,14 +1194,15 @@ def pair_dimers(
         if '/net' not in parent_path:
             path_split = parent_path.split('/')
             # fix paths from my recent directory restructuring
-            parent_path = "/home/broerman/crispy_shifty/" + '/'.join(parent_path[:2]) + "/round_2/design/" + "/".join(path_split[-3:])
+            parent_path = "/home/broerman/crispy_shifty/projects/crispy_shifty_dimers/round_2/design/" + "/".join(path_split[-3:])
             scores['parent_path'] = parent_path
         with open(parent_path, "r") as f:
             x_pose = io.to_pose(io.pose_from_pdbstring(f.read()))
 
-        full_pose = pyrosetta.rosetta.core.pose.Pose()
-        vec_i = 0
-        for _ in range(copies_x):
+        full_pose = yeet_pose_xyz(x_pose.clone(), yeet_vecs[0])
+        full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[1]), full_pose.num_jump()+1)
+        vec_i = 2
+        for _ in range(copies_x-1):
             full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
             vec_i += 1
             full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
@@ -1210,10 +1211,8 @@ def pair_dimers(
             full_pose.append_pose_by_jump(yeet_pose_xyz(pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
             vec_i += 1
 
-        # then rechain
-        sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-        sc.chain_order(''.join([str(i) for i in range(1,full_pose.num_chains()+1)]))
-        sc.apply(pose)
+        # probably should rechain but couldn't get that to work
+            
         # reset scores
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(full_pose, key, value)
