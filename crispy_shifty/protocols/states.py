@@ -1192,7 +1192,10 @@ def pair_dimers(
         scores = dict(pose.scores)
         parent_path = scores['parent_path']
         if '/net' not in parent_path:
-            parent_path = '/home/broerman/projects/crispy_shifty/' + parent_path
+            path_split = parent_path.split('/')
+            # fix paths from my recent directory restructuring
+            parent_path = "/home/broerman/crispy_shifty/" + '/'.join(parent_path[:2]) + "/round_2/design/" + "/".join(path_split[-3:])
+            scores['parent_path'] = parent_path
         with open(parent_path, "r") as f:
             x_pose = io.to_pose(io.pose_from_pdbstring(f.read()))
 
