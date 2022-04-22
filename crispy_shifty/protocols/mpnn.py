@@ -525,6 +525,7 @@ class MPNNMultistateDesign(MPNNDesign):
     def __init__(
         self,
         residue_selectors: List[List[ResidueSelector]],
+        residue_betas: List[List[float]],
         *args,
         **kwargs,
     ):
@@ -535,6 +536,7 @@ class MPNNMultistateDesign(MPNNDesign):
         """
         super().__init__(*args, **kwargs)
         self.residue_selectors = residue_selectors
+        self.residue_betas = residue_betas
 
     def setup_runner(self, pose: Pose) -> None:
         """
@@ -569,13 +571,13 @@ class MPNNMultistateDesign(MPNNDesign):
         designable_dict = dict(zip(range(1, pose.size() + 1), designable_filter))
         tied_positions_dict = {"tmp": []}
         # now need the one indexed indices of all the True residues in the residue_selectors
-        for sel_list in self.residue_selectors:
+        for sel_list, beta_list in zip(self.residue_selectors, self.residue_betas):
             residue_indices_lists = []
-            for sel in sel_list:
+            for sel, beta in zip(sel_list, beta_list):
                 residue_indices_list = []
                 for i, selected in enumerate(sel.apply(pose), start=1):
                     if selected:
-                        residue_indices_list.append(i)
+                        residue_indices_list.append((i, beta))
                     else:
                         pass
                 residue_indices_lists.append(residue_indices_list)
@@ -583,10 +585,10 @@ class MPNNMultistateDesign(MPNNDesign):
             tied_positions_list = list(zip(*residue_indices_lists))
             for tied_positions in tied_positions_list:
                 # get the chains for the tied positions
-                tied_position_dict = defaultdict(list)
+                tied_position_dict = defaultdict(lambda: [[],[]])
                 # we only tie a position if all the residues are up for design
                 designable = True
-                for tied_position in tied_positions:
+                for tied_position, residue_beta in tied_positions:
                     # check if the residue is designable
                     if designable_dict[tied_position]:
                         pass
@@ -599,7 +601,8 @@ class MPNNMultistateDesign(MPNNDesign):
                         tied_position - pose.chain_begin(chain_numbers[chain]) + 1
                     )
                     # add the residue index and chain to the dict
-                    tied_position_dict[chain].append(residue_index)
+                    tied_position_dict[chain][0].append(residue_index)
+                    tied_position_dict[chain][1].append(residue_beta)
                 # skip this tied position if any of the residues are not designable
                 if not designable:
                     continue
@@ -947,10 +950,24 @@ def mpnn_dimers(
     else:
         mpnn_temperatures = [0.2]
 
+    # a list of lists containing beta values for each chain pair
+    # scan and default assume two chain pairs- two different conformations per protomer
+    if "mpnn_betas" in kwargs:
+        if kwargs["mpnn_betas"] == "scan":
+            mpnn_betas_list = [[0.5,0.5], [0.4,0.6], [0.3,0.7]]
+        else:
+            mpnn_betas_list = [[float(beta) for beta in list(kwargs["mpnn_betas"])]]
+    else:
+        mpnn_betas_list = [[0.4,0.6]]
+
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         original_pose = pose.clone()
+
+        # there should be a beta value corresponding to each chain pair (these are dimers, so chains come only in pairs)
+        for mpnn_betas in mpnn_betas_list:
+            assert len(mpnn_betas) == pose.num_chains()//2
 
         # setup dict for MPNN design areas
         print_timestamp("Setting up design selectors", start_time)
@@ -991,10 +1008,10 @@ def mpnn_dimers(
         # get the length of one state
         offset = pose.chain_end(2)
         # iterate over the mpnn parameter combinations
-        mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
+        mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas, mpnn_betas_list))
         num_conditions = len(list(mpnn_conditions))
         print_timestamp(f"Beginning {num_conditions} MPNNDesign runs", start_time)
-        for run_i, (mpnn_temperature, mpnn_design_area) in enumerate(
+        for run_i, (mpnn_temperature, mpnn_design_area, mpnn_betas) in enumerate(
             list(mpnn_conditions)
         ):
             pose = original_pose.clone()
@@ -1024,6 +1041,7 @@ def mpnn_dimers(
             mpnn_design = MPNNMultistateDesign(
                 design_selector=design_selector,
                 residue_selectors=residue_selectors,
+                residue_betas=[mpnn_betas, mpnn_betas],
                 omit_AAs="CX",
                 **kwargs,
             )
@@ -1036,6 +1054,7 @@ def mpnn_dimers(
                 {
                     "mpnn_msd_temperature": mpnn_temperature,
                     "mpnn_msd_design_area": selector_inverse_options[mpnn_design_area],
+                    "mpnn_msd_betas": ",".join(str(beta) for beta in mpnn_betas),
                 }
             )
             # update the pose with the updated scores dict
