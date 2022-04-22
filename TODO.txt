@@ -1,9 +1,9 @@
 order TODOs:
     - final chB for cs_200-223
-    - AF2 IG Y for cs_001-120
-    - staples
+    - staples for 201Br1
 dev TODOs:
     - TAR/delete old stuff
+    - crispy crispy stuff
     - check FF63/65, FF74/5/7, FF129, cs_094 states and resample
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
     - finish miseq analysis
@@ -13,8 +13,10 @@ dev TODOs:
     - stapling and repredicting
     - TODOs and docstrings in all modules
     - update mpnn.py to enable new options
+    - project ouroboros
 
     - remember to maintain the envs and repos on perlmutter and janelia clusters
+    - add a new yaml with dnachisel stuff, updated pyrosetta and new pystapler
     - finalize env.yml by making conda consistent
         - do it when no one is has crispy env active
         - add crispy kernel to ipython kernelspecs on janelia
@@ -29,7 +31,6 @@ dev TODOs:
         - SafeSwitchChainOrderMover in python, then CPP?
 
     - DOTFILES - check init.vim is working, then version control
-
     - make `almost_inpainting` blueprint builder func 
 
 TODO: 
