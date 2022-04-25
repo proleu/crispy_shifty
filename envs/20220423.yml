@@ -3,7 +3,7 @@ channels:
   - pyg
   - pytorch
   - schrodinger
-  - https://pose:foldtree@conda.rosettacommons.org
+  - https://pose:foldtree@conda.graylab.jhu.edu
   - conda-forge
   - bioconda
   - defaults

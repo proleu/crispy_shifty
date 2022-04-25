@@ -159,6 +159,7 @@ def fold_binder(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.folding import generate_decoys_from_pose, SuperfoldRunner
     from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
     from crispy_shifty.utils.io import cmd, print_timestamp
 
@@ -205,8 +206,6 @@ def fold_binder(
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
             "mean_plddt": (gt, 90.0),
-            "rmsd_to_reference": (lt, 2.0),
-            "mean_pae_interaction": (lt, 10),
         }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
