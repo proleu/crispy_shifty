@@ -525,7 +525,7 @@ class MPNNMultistateDesign(MPNNDesign):
     def __init__(
         self,
         residue_selectors: List[List[ResidueSelector]],
-        residue_betas: List[List[float]],
+        residue_betas: Optional[List[List[float]]] = None,
         *args,
         **kwargs,
     ):
@@ -553,6 +553,11 @@ class MPNNMultistateDesign(MPNNDesign):
         self.is_setup = False
         # make the jsonl file for the tied postions
         tied_positions_path = os.path.join(self.tmpdir, "tied_positions.jsonl")
+        # set up residue_betas if not passed
+        if self.residue_betas is None:
+            self.residue_betas = []
+            for sel_list in self.residue_selectors:
+                self.residue_betas.append([1.0] * len(sel_list))
         # make a dict keyed by pose residue indices with chains as values
         chains_dict = {
             i: pose.pdb_info().chain(i) for i in range(1, pose.total_residue() + 1)
