@@ -1149,3 +1149,74 @@ def pair_bound_state(
         ppose = io.to_packed(pose)
         # yield the ppose
         yield ppose
+
+@requires_init
+def pair_dimers(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param packed_pose_in: The input pose.
+    :param kwargs: The keyword arguments to pass to the pairing and looping protocols.
+    :return: An iterator of PackedPoses.
+    Find a state X crispy shifty for a given state Y.
+    Do so by finding the best free state for a given bound state. Phil's is beautiful
+    and reloops the parent to match the loop length of the dimer. Since I only looped 
+    the dimer with the same length as the parent, I can be lazy and just use the original 
+    parent.
+    """
+    import sys
+    from pathlib import Path
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
+        )
+    
+    copies_x = int(kwargs["copies_x"])
+    copies_y = int(kwargs["copies_y"])
+
+    for pose in poses:
+
+        yeet_vecs = [(1,0,0), (0,1,0), (0,0,1), (-1,0,0), (0,-1,0), (0,0,-1)]
+
+        # get scores
+        scores = dict(pose.scores)
+        parent_path = scores['parent_path']
+        if '/net' not in parent_path:
+            path_split = parent_path.split('/')
+            # fix paths from my recent directory restructuring
+            parent_path = "/home/broerman/crispy_shifty/projects/crispy_shifty_dimers/round_2/design/" + "/".join(path_split[-3:])
+            scores['parent_path'] = parent_path
+        with open(parent_path, "r") as f:
+            x_pose = io.to_pose(io.pose_from_pdbstring(f.read()))
+
+        full_pose = yeet_pose_xyz(x_pose.clone(), yeet_vecs[0])
+        full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[1]), full_pose.num_jump()+1)
+        vec_i = 2
+        for _ in range(copies_x-1):
+            full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
+            vec_i += 1
+            full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
+            vec_i += 1
+        for _ in range(copies_y):
+            full_pose.append_pose_by_jump(yeet_pose_xyz(pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
+            vec_i += 1
+
+        # probably should rechain but couldn't get that to work
+            
+        # reset scores
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(full_pose, key, value)
+        # then pack
+        ppose = io.to_packed(full_pose)
+        # yield the ppose
+        yield ppose

@@ -132,7 +132,7 @@ def fix_path_prefixes(
 
 
 def df_to_fastas(
-    df: pd.DataFrame, prefix: str, out_path: Optional[str] = None
+    df: pd.DataFrame, prefix: str, out_path: Optional[str] = None, exclude: Optional[str] = None
 ) -> pd.DataFrame:
     """
     :param: df: pandas dataframe.
@@ -154,7 +154,7 @@ def df_to_fastas(
     tqdm.pandas()
 
     # get columns that have sequences based on prefix
-    sequence_cols = [col for col in df.columns if prefix in col]
+    sequence_cols = [col for col in df.columns if (prefix in col) and (col != exclude)]
 
     def mask(row: pd.Series, out_path: Optional[str] = None) -> str:
         name = row.name
