@@ -26,7 +26,8 @@ dev TODOs:
 
     - if really bored
         - run crispy_shifty_junctions
-        - rewrite mpnn.py to directly generate some jsons etc.
+        - rewrite mpnn.py to directly generate some jsons etc? 
+            - maybe a bad idea with current pace of mpnn development
         - add documentation to the InsertResMover and PR
         - SafeSwitchChainOrderMover in python, then CPP?
 
@@ -37,3 +38,8 @@ TODO:
     09 detail and filter # run
     10 order and analyze
 
+crispy_crispies:
+    - af2 apo, af2 apo of svt hits sap/interface/net charge of svt hits
+    - mpnn redesign of svt hits (with buttressing helixes?)
+    - order GLP1 plate?
+    - pos/neg design with crossdocking within glucagon family?
