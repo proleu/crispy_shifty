@@ -484,8 +484,8 @@ def add_metadata_to_input(
         fixed_resis_option = kwargs["fixed_resis"]
         if fixed_resis_option not in ["distribute","exact"]:
             raise ValueError("fixed_resis must be either 'distribute' or 'exact'")
-        resis_1 = [int(x) for x in metadata_series["Important"].split(' ')]
-        resis_2 = [int(x) for x in metadata_series["Semiimportant"].split(' ')]
+        resis_1 = [int(x) for x in metadata_series["Important"].astype(str).split(' ')]
+        resis_2 = [int(x) for x in metadata_series["Semiimportant"].astype(str).split(' ')]
         resis_list = [resis_1] * len(poses)
         if resis_2:
             resis_list += [resis_2] * len(poses)
