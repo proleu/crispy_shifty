@@ -127,12 +127,12 @@ def remove_terminal_loops(
         elif dssp[0:2] == "LH":  # leave it alone if it has a short terminal loop
             pass
         else:  # get beginning index of first occurrence of LH in dssp
-            rosetta_idx_n_term = dssp.find("LH") + 1
+            rosetta_idx_n_term = str(dssp.find("LH") + 1)
             # setup trimming mover
             trimmer = (
                 pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
             )
-            trimmer.region(str(trimmed_pose.chain_begin(1)), str(rosetta_idx_n_term))
+            trimmer.region(str(trimmed_pose.chain_begin(1)), rosetta_idx_n_term)
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
         # get secondary structure
@@ -151,12 +151,12 @@ def remove_terminal_loops(
             # )
             # trimmer.start("1")
             # trimmer.end(rosetta_idx_c_term)
-            rosetta_idx_c_term = dssp.rfind("HL") + 2
+            rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
             # setup trimming mover
             trimmer = (
                 pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
             )
-            trimmer.region(str(rosetta_idx_c_term), str(trimmed_pose.chain_end(1)))
+            trimmer.region(rosetta_idx_c_term, str(trimmed_pose.chain_end(1)))
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
         # trimmed_length = len(trimmed_pose.residues)
@@ -484,8 +484,8 @@ def add_metadata_to_input(
         fixed_resis_option = kwargs["fixed_resis"]
         if fixed_resis_option not in ["distribute","exact"]:
             raise ValueError("fixed_resis must be either 'distribute' or 'exact'")
-        resis_1 = [int(x) for x in metadata_series["Important"].astype(str).split(' ')]
-        resis_2 = [int(x) for x in metadata_series["Semiimportant"].astype(str).split(' ')]
+        resis_1 = [int(x) for x in str(metadata_series["Important"]).split(' ') if x != "nan"]
+        resis_2 = [int(x) for x in str(metadata_series["Semiimportant"]).split(' ') if x != "nan"]
         resis_list = [resis_1] * len(poses)
         if resis_2:
             resis_list += [resis_2] * len(poses)
@@ -500,6 +500,7 @@ def add_metadata_to_input(
         <ScoreFunction name="sfxn" weights="beta_nov16" symmetric="0"/>
     </SCOREFXNS>
     <RESIDUE_SELECTORS>
+        <Layer name="core" select_core="true" select_boundary="false" select_surface="false" use_sidechain_neighbors="true"/>
         <Chain name="chA" chains="A" />
     </RESIDUE_SELECTORS>
     <TASKOPERATIONS>
@@ -570,7 +571,7 @@ def add_metadata_to_input(
         if skip_trimming:
             trimmed_pose = pose
             trimmed_length = trimmed_pose.chain_end(1)
-            metadata["trim_n"] = 0
+            metadata["trim_n"] = "0"
             metadata["trimmed_length"] = str(trimmed_length)
             for key, value in metadata.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, key, str(value))
@@ -583,11 +584,11 @@ def add_metadata_to_input(
 
         if fixed_resis_option:
 
-            trim_n = metadata["trim_n"]
+            trim_n = int(metadata["trim_n"])
             fixed_resis = [x-trim_n for x in fixed_resis]
 
             if fixed_resis_option == "distribute":
-                trimmed_length = metadata["trimmed_length"]
+                trimmed_length = int(metadata["trimmed_length"])
                 full_fixed_resis = []
                 for fixed_resi in fixed_resis:
                     i = fixed_resi - repeat_len
