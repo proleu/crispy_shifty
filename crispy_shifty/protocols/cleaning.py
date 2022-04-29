@@ -458,6 +458,9 @@ def add_metadata_to_input(
         metadata_series = pd.read_csv(kwargs["metadata_csv"], index_col="pdb").loc[key, :]
         if metadata_series["skip_trimming"] == True:
             skip_trimming = True
+        if metadata_series["repeat_len"]:
+            repeat_len = int(metadata_series["repeat_len"])
+            metadata["repeat_len"] = repeat_len
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -486,11 +489,12 @@ def add_metadata_to_input(
         fixed_resis_option = kwargs["fixed_resis"]
         if fixed_resis_option not in ["distribute","exact"]:
             raise ValueError("fixed_resis must be either 'distribute' or 'exact'")
-        resis_1 = [int(x) for x in str(metadata_series["Important"]).split(' ') if x != "nan"]
-        resis_2 = [int(x) for x in str(metadata_series["Semiimportant"]).split(' ') if x != "nan"]
+        resis_1 = [int(x) for x in str(metadata_series["important"]).split(' ') if x != "nan"]
+        resis_2 = [int(x) for x in str(metadata_series["semi_important"]).split(' ') if x != "nan"]
+        exclude_resis = [int(x) for x in str(metadata_series["exclude_fixed"]).split(' ') if x != "nan"]
         resis_list = [resis_1] * len(poses)
         if resis_2:
-            resis_list += [resis_2] * len(poses)
+            resis_list += [resis_1 + resis_2] * len(poses)
             poses += poses # double the length of the input pose list to match
     else:
         fixed_resis_option = False
@@ -574,9 +578,10 @@ def add_metadata_to_input(
             topo += ss_i
             if ss_counter == num_ss_per_repeat:
                 repeat_end = i
-        repeat_len = repeat_end - repeat_start
         metadata["topo"] = topo
-        metadata["repeat_len"] = repeat_len
+        if "repeat_len" not in metadata:
+            repeat_len = repeat_end - repeat_start
+            metadata["repeat_len"] = repeat_len
 
         if skip_trimming:
             trimmed_pose = pose
@@ -603,11 +608,13 @@ def add_metadata_to_input(
                 for fixed_resi in fixed_resis:
                     i = fixed_resi - repeat_len
                     while i > 0:
-                        full_fixed_resis.append(i)
+                        if i not in exclude_resis:
+                            full_fixed_resis.append(i)
                         i -= repeat_len
                     i = fixed_resi
                     while i <= trimmed_length:
-                        full_fixed_resis.append(i)
+                        if i not in exclude_resis:
+                            full_fixed_resis.append(i)
                         i += repeat_len
                 fixed_resis = full_fixed_resis
 
