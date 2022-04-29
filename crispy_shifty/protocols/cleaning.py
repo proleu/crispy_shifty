@@ -458,7 +458,7 @@ def add_metadata_to_input(
         metadata_series = pd.read_csv(kwargs["metadata_csv"], index_col="pdb").loc[key, :]
         if metadata_series["skip_trimming"] == True:
             skip_trimming = True
-        if metadata_series["repeat_len"]:
+        if pd.notna(metadata_series["repeat_len"]):
             repeat_len = int(metadata_series["repeat_len"])
             metadata["repeat_len"] = repeat_len
 
