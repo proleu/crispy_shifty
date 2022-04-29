@@ -151,12 +151,12 @@ def remove_terminal_loops(
             # )
             # trimmer.start("1")
             # trimmer.end(rosetta_idx_c_term)
-            rosetta_idx_c_term = dssp.rfind("HL") + 2
+            rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
             # setup trimming mover
             trimmer = (
                 pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
             )
-            trimmer.region(str(rosetta_idx_c_term+1), str(trimmed_pose.chain_end(1)))
+            trimmer.region(str(rosetta_idx_c_term), str(trimmed_pose.chain_end(1)))
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
         # trimmed_length = len(trimmed_pose.residues)
