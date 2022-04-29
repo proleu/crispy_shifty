@@ -454,7 +454,7 @@ def add_metadata_to_input(
     skip_trimming = False
     if "metadata_csv" in kwargs:
         metadata_series = pd.read_csv(kwargs["metadata_csv"], index_col="pdb").loc[key, :]
-        if metadata_series["skip_trimming"].lower() == "true":
+        if metadata_series["skip_trimming"] == True:
             skip_trimming = True
 
     # generate poses or convert input packed pose into pose
