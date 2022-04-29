@@ -551,19 +551,27 @@ def add_metadata_to_input(
         ss_counter = 0
         repeat_start = 0
         repeat_end = 0
+        ss_2 = '-'
+        ss_1 = '-'
+        ss_i = ss.get_dssp_secstruct(1)
         for i in range(1, pose.chain_end(1)):
-            ss_i = ss.get_dssp_secstruct(i)
-            if ss_i != ss.get_dssp_secstruct(i + 1):
-                if ss_i != 'L':
-                    topo += ss_i
-                    if ss_counter == 0:
-                        repeat_start = i
-                    if ss_counter == num_ss_per_repeat:
-                        repeat_end = i
-                    ss_counter += 1
-        ss_i = ss.get_dssp_secstruct(pose.chain_end(1))
-        if ss_i != 'L':
+            ss_n = ss.get_dssp_secstruct(i+1)
+            # print(ss_2, ss_1, ss_i, ss_n)
+            # if the secondary structure is ending, is a helix or a sheet, and has lasted at least 3 residues:
+            if ss_i != ss_n and ss_i in 'HS' and ss_i == ss_1 and ss_i == ss_2:
+                topo += ss_i
+                if ss_counter == 0:
+                    repeat_start = i
+                if ss_counter == num_ss_per_repeat:
+                    repeat_end = i
+                ss_counter += 1
+            ss_2 = ss_1
+            ss_1 = ss_i
+            ss_i = ss_n
+        if ss_i in 'HS' and ss_i == ss_1 and ss_i == ss_2:
             topo += ss_i
+            if ss_counter == num_ss_per_repeat:
+                repeat_end = i
         repeat_len = repeat_end - repeat_start
         metadata["topo"] = topo
         metadata["repeat_len"] = repeat_len
@@ -593,15 +601,15 @@ def add_metadata_to_input(
                 for fixed_resi in fixed_resis:
                     i = fixed_resi - repeat_len
                     while i > 0:
-                        full_fixed_resis.append(fixed_resi)
+                        full_fixed_resis.append(i)
                         i -= repeat_len
                     i = fixed_resi
                     while i <= trimmed_length:
-                        full_fixed_resis.append(fixed_resi)
+                        full_fixed_resis.append(i)
                         i += repeat_len
                 fixed_resis = full_fixed_resis
 
-            metadata["fixed_resis"] = ','.join(str(x) for x in fixed_resis)
+            metadata["fixed_resis"] = ','.join(str(x) for x in sorted(fixed_resis))
             pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, "fixed_resis", metadata["fixed_resis"])
 
         scores = dict(trimmed_pose.scores)
