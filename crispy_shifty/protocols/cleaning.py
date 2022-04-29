@@ -144,13 +144,15 @@ def remove_terminal_loops(
         elif dssp[-2:] == "HL":
             pass
         else:  # get ending index of last occurrence of HL in dssp
-            rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
+            # rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
             # setup trimming mover
             # trimmer = (
             #     pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
             # )
             # trimmer.start("1")
             # trimmer.end(rosetta_idx_c_term)
+            rosetta_idx_c_term = dssp.rfind("HL") + 2
+            # setup trimming mover
             trimmer = (
                 pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
             )
