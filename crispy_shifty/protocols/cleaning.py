@@ -127,12 +127,12 @@ def remove_terminal_loops(
         elif dssp[0:2] == "LH":  # leave it alone if it has a short terminal loop
             pass
         else:  # get beginning index of first occurrence of LH in dssp
-            rosetta_idx_n_term = str(dssp.find("LH") + 1)
+            rosetta_idx_n_term = dssp.find("LH") + 1
             # setup trimming mover
             trimmer = (
                 pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
             )
-            trimmer.region(str(trimmed_pose.chain_begin(1)), rosetta_idx_n_term)
+            trimmer.region(str(trimmed_pose.chain_begin(1)), str(rosetta_idx_n_term))
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
         # get secondary structure
@@ -151,7 +151,7 @@ def remove_terminal_loops(
             # )
             # trimmer.start("1")
             # trimmer.end(rosetta_idx_c_term)
-            rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
+            rosetta_idx_c_term = dssp.rfind("HL") + 2
             # setup trimming mover
             trimmer = (
                 pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
