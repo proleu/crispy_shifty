@@ -1127,7 +1127,12 @@ def one_state_design_bound_state(
 
     start_time = time()
     # hardcode precompute_ig
-    design_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
+    fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseSelector()
+    int_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
+    design_sel = pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
+        int_sel,
+        pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(fixed_sel)
+    )
     print_timestamp("Generated interface selector", start_time=start_time)
     layer_design = gen_std_layer_design()
     task_factory = gen_task_factory(
@@ -1167,6 +1172,14 @@ def one_state_design_bound_state(
 
     for pose in poses:
         start_time = time()
+
+        # don't design any fixed residues
+        if "fixed_resis" in pose.scores:
+            fixed_resi_str = pose.scores["fixed_resis"]
+            fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
+        else:
+            fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseSelector()
+
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
 

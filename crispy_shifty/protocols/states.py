@@ -1169,18 +1169,6 @@ def pair_bound_state(
                 )
             )
         )
-        # don't design any fixed residues
-        if fixed_resi_str:
-            fixed_sel = (
-                pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
-                    fixed_resi_str
-                )
-            )
-            design_sel.add_residue_selector(
-                pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(
-                    fixed_sel
-                )
-            )
         task_factory = gen_task_factory(
             design_sel=design_sel,
             pack_nbhd=True,
@@ -1193,6 +1181,18 @@ def pair_bound_state(
             ifcl=True,
             layer_design=layer_design,
         )
+        # don't design any fixed residues
+        # in the free state, these residues should be locked in to the input rotamers to preserve and pack around their binding conformation
+        if fixed_resi_str:
+            fixed_sel = (
+                pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+                    fixed_resi_str
+                )
+            )
+            lock_op = pyrosetta.rosetta.core.pack.task.operation.OperateOnResidueSubset(
+                pyrosetta.rosetta.core.pack.task.operation.PreventRepackingRLT(), fixed_sel, False
+            )
+            task_factory.push_back(lock_op)
         print_timestamp("Designing loop...", start_time)
         struct_profile(
             closed_x_pose,
