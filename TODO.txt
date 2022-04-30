@@ -1,8 +1,6 @@
-order TODOs:
-    - final chB for cs_200-223
-    - staples for 201Br1
 dev TODOs:
     - TAR/delete old stuff
+    - pynvim in crispy env
     - crispy crispy stuff
     - check FF63/65, FF74/5/7, FF129, cs_094 states and resample
     - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129

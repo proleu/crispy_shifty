@@ -635,8 +635,9 @@ def finalize_peptide(
         rechain.chain_order("2")
         rechain.apply(chB)
         chB_length = chB.total_residue()
-        # if length is above 28, try to trim the peptide down to 28
+        # if length is above 28, try to trim the peptide down to 28 
         if chB_length > 28:
+            print_timestamp("Trimming chB")
             # get trimmable regions
             chB_residue_indices = [
                 str(i) for i in range(pose.chain_begin(2), pose.chain_end(2) + 1)
@@ -710,7 +711,7 @@ def finalize_peptide(
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
             design_selector=design_sel,
-            num_sequences=24,
+            num_sequences=96,
             omit_AAs="CX",
             temperature=0.1,
             **kwargs,
@@ -728,17 +729,19 @@ def finalize_peptide(
         }
         chB_seqs = {k: v for k, v in scores.items() if "mpnn_seq" in k}
         # remove sequences that don't pass the filter
-        # for seq_id, seq in chB_seqs.items():
+        for seq_id, seq in chB_seqs.items():
 
-        #     chB_pI = ProteinAnalysis(seq).isoelectric_point()
-        #     # remove scores that don't pass the filter from scores and pose datacache
-        #     if not chB_pI < filter_dict["pI"]:
-        #         scores.pop(seq_id)
-        #         pyrosetta.rosetta.core.pose.clearPoseExtraScore(pose, seq_id)
-        #     else:
-        #         pass
-        # print_timestamp("Filtering sequences with AF2", start_time)
-
+            # get just chB seq
+            chB_seq = seq.split("/")[1]
+            # get chB pI
+            chB_pI = ProteinAnalysis(chB_seq).isoelectric_point()
+            # remove scores that don't pass the filter from scores and pose datacache
+            if not chB_pI < filter_dict["pI"]:
+                scores.pop(seq_id)
+                pyrosetta.rosetta.core.pose.clearPoseExtraScore(pose, seq_id)
+            else:
+                pass
+        print_timestamp("Filtering sequences with AF2", start_time)
         # # load fasta into a dict
         # tmp_fasta_dict = fasta_to_dict(fasta_path)
         # pose_chains = list(pose.split_by_chain())
