@@ -1176,11 +1176,12 @@ def one_state_design_bound_state(
         scores = dict(pose.scores)
 
         # don't design any fixed residues
+        fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
         if "fixed_resis" in scores:
             fixed_resi_str = scores["fixed_resis"]
-            fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
-        else:
-            fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+            # handle an empty string
+            if fixed_resi_str:
+                fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
         not_fixed_sel.set_residue_selector(fixed_sel)
 
         # for the neighborhood residue selector
