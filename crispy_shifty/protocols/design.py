@@ -1127,11 +1127,11 @@ def one_state_design_bound_state(
 
     start_time = time()
     # hardcode precompute_ig
-    fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseSelector()
+    not_fixed_sel = pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector()
     int_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
     design_sel = pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
         int_sel,
-        pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(fixed_sel)
+        not_fixed_sel
     )
     print_timestamp("Generated interface selector", start_time=start_time)
     layer_design = gen_std_layer_design()
@@ -1173,12 +1173,15 @@ def one_state_design_bound_state(
     for pose in poses:
         start_time = time()
 
+        scores = dict(pose.scores)
+
         # don't design any fixed residues
-        if "fixed_resis" in pose.scores:
-            fixed_resi_str = pose.scores["fixed_resis"]
+        if "fixed_resis" in scores:
+            fixed_resi_str = scores["fixed_resis"]
             fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
         else:
-            fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseSelector()
+            fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        not_fixed_sel.set_residue_selector(fixed_sel)
 
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
@@ -1215,7 +1218,7 @@ def one_state_design_bound_state(
             print("complete.")
 
             print_timestamp("Scoring loop distance...", end="", start_time=start_time)
-            pre_break_helix = int(float(pose.scores["pre_break_helix"]))
+            pre_break_helix = int(float(scores["pre_break_helix"]))
             score_loop_dist(pose, pre_break_helix, name="loop_dist")
             print("complete.")
 
