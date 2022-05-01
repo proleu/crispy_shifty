@@ -749,7 +749,7 @@ def gen_array_tasks(
                 f"#SBATCH -o {slurm_dir}/{simulation_name}-%A_%a.out \n",
                 "#SBATCH -p regular\n",
                 f"#SBATCH --time={time}\n",  # the shorter the better within reason
-                "module load cudatoolkit/11.4\n",
+                "module load cudatoolkit/11.5\n",
                 "N=$(( SLURM_ARRAY_TASK_ID - 1 ))\n",
                 "N2=$(( N + 1 ))\n",
                 "start_idx=$(( N*4 + 1 ))\n",
