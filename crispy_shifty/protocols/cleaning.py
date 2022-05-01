@@ -595,6 +595,7 @@ def finalize_peptide(
     from operator import lt, gt
     from pathlib import Path
     import sys
+    from time import time
     from Bio.SeqUtils.ProtParam import ProteinAnalysis
     import pyrosetta
     import pyrosetta.distributed.io as io
@@ -614,9 +615,15 @@ def finalize_peptide(
         path_to_pose_or_ppose,
     )
     from crispy_shifty.protocols.design import score_cms
-    from crispy_shifty.protocols.folding import SuperfoldRunner
-    from crispy_shifty.protocols.mpnn import MPNNDesign
+    from crispy_shifty.protocols.folding import (
+        af2_metrics,
+        generate_decoys_from_pose,
+        SuperfoldRunner,
+    )
+    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict, MPNNDesign
     from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -629,15 +636,16 @@ def finalize_peptide(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         original_pose = pose.clone()
-         # get the length of the peptide
+        # TODO need to yeet chain C
+        # get the length of the peptide
         chB = pose.clone()
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
         rechain.chain_order("2")
         rechain.apply(chB)
         chB_length = chB.total_residue()
-        # if length is above 28, try to trim the peptide down to 28 
+        # if length is above 28, try to trim the peptide down to 28
         if chB_length > 28:
-            print_timestamp("Trimming chB")
+            print_timestamp("Trimming chB", start_time)
             # get trimmable regions
             chB_residue_indices = [
                 str(i) for i in range(pose.chain_begin(2), pose.chain_end(2) + 1)
@@ -694,20 +702,18 @@ def finalize_peptide(
             # invert the dict, this destroys any ties but we don't care
             inverted_cms_scores_dict = {v: k for k, v in cms_scores_dict.items()}
             # get the sub_window with the highest cms score
-            highest_cms_sub_window = inverted_cms_scores_dict[max(inverted_cms_scores_dict)]
+            highest_cms_sub_window = inverted_cms_scores_dict[
+                max(inverted_cms_scores_dict)
+            ]
             # get the pose with the highest cms score
             highest_cms_pose = truncations_dict[highest_cms_sub_window]
             # exit the if statement with the highest cms score pose set to pose
             pose = highest_cms_pose
         else:  # don't need to trim if already 28 or less
-            pass   
-        # now we have a pose with the correct length, we can resurface it
-        trimmed_pose = pose.clone()
-
-        print_timestamp("Setting up design selectors", start_time)
+            pass
         # make a designable residue selector of only the chB residues
         design_sel = ChainSelector(2)
-        print_timestamp("Designing interface with MPNN", start_time)
+        print_timestamp("Resurfacing chB with MPNN", start_time)
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
             design_selector=design_sel,
@@ -730,6 +736,7 @@ def finalize_peptide(
         chB_seqs = {k: v for k, v in scores.items() if "mpnn_seq" in k}
         # remove sequences that don't pass the filter
         for seq_id, seq in chB_seqs.items():
+            print(seq_id, seq) # TODO: remove
 
             # get just chB seq
             chB_seq = seq.split("/")[1]
@@ -742,96 +749,108 @@ def finalize_peptide(
             else:
                 pass
         print_timestamp("Filtering sequences with AF2", start_time)
-        # # load fasta into a dict
-        # tmp_fasta_dict = fasta_to_dict(fasta_path)
-        # pose_chains = list(pose.split_by_chain())
-        # # slice out the bound state, aka chains A and B
-        # tmp_pose, X_pose = Pose(), Pose()
-        # pyrosetta.rosetta.core.pose.append_pose_to_pose(
-        #     tmp_pose, pose_chains[0], new_chain=True
-        # )
-        # pyrosetta.rosetta.core.pose.append_pose_to_pose(
-        #     tmp_pose, pose_chains[1], new_chain=True
-        # )
-        # # slice out the free state, aka chain C
-        # pyrosetta.rosetta.core.pose.append_pose_to_pose(
-        #     X_pose, pose_chains[2], new_chain=True
-        # )
-        # # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
-        # tmp_fasta_dict = {
-        #     tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
-        # }
-        # # change the pose to the modified pose
-        # pose = tmp_pose.clone()
-        # print_timestamp("Setting up for AF2", start_time)
-        # runner = SuperfoldRunner(
-        #     pose=pose, fasta_path=fasta_path, load_decoys=True, **kwargs
-        # )
+        pose_chains = list(pose.split_by_chain())
+        # slice out the bound state, aka chains A and B
+        tmp_pose, X_pose = Pose(), Pose()
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            tmp_pose, pose_chains[0], new_chain=True
+        )
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            tmp_pose, pose_chains[1], new_chain=True
+        )
+        # slice out the free state, aka chain C
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            X_pose, pose_chains[2], new_chain=True
+        )
+        # make a temporary fasta dict from the remaining mpnn_seq scores
+        tmp_fasta_dict = {k: v for k, v in pose.scores.items() if "mpnn_seq" in k}
+        # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
+        tmp_fasta_dict = {
+            tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
+        }
+        # change the pose to the modified pose
+        pose = tmp_pose.clone()
+        print_timestamp("Setting up for AF2", start_time)
+        # setup with dummy fasta path
+        runner = SuperfoldRunner(
+            pose=pose, fasta_path="dummy", load_decoys=True, **kwargs
+        )
         # runner.setup_runner(file=fasta_path)
-        # # initial_guess, reference_pdb both are the tmp.pdb
-        # initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
-        # reference_pdb = initial_guess
-        # flag_update = {
-        #     "--initial_guess": initial_guess,
-        #     "--reference_pdb": reference_pdb,
-        # }
-        # # now we have to point to the right fasta file
-        # new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
-        # dict_to_fasta(tmp_fasta_dict, new_fasta_path)
-        # runner.set_fasta_path(new_fasta_path)
-        # runner.override_input_file(new_fasta_path)
-        # runner.update_flags(flag_update)
-        # runner.update_command()
-        # print_timestamp("Running AF2", start_time)
-        # runner.apply(pose)
-        # print_timestamp("AF2 complete, updating pose datacache", start_time)
-        # # update the scores dict
-        # scores.update(pose.scores)
-        # # update the pose with the updated scores dict
-        # for key, value in scores.items():
-        #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
-        # # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
-        # filter_dict = {
-        #     "mean_plddt": (gt, 92.0),
-        #     "rmsd_to_reference": (lt, 1.5),
-        #     "mean_pae_interaction": (lt, 5),
-        # }
-        # rank_on = "mean_plddt"
-        # prefix = "mpnn_seq"
-        # print_timestamp("Generating decoys", start_time)
-        # for decoy in generate_decoys_from_pose(
-        #     pose,
-        #     filter_dict=filter_dict,
-        #     generate_prediction_decoys=True,
-        #     label_first=True,
-        #     prefix=prefix,
-        #     rank_on=rank_on,
-        # ):
-        #     # add the free state back into the decoy
-        #     pyrosetta.rosetta.core.pose.append_pose_to_pose(
-        #         decoy, X_pose, new_chain=True
-        #     )
-        #     # get the chA sequence
-        #     chA_seq = list(decoy.split_by_chain())[0].sequence()
-        #     # setup SimpleThreadingMover
-        #     stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
-        #     # thread the sequence from chA onto chA
-        #     stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
-        #     stm.apply(decoy)
-        #     # rename af2 metrics to have Y_ prefix
-        #     decoy_scores = dict(decoy.scores)
-        #     for key, value in decoy_scores.items():
-        #         if key in af2_metrics:
-        #             pyrosetta.rosetta.core.pose.setPoseExtraScore(
-        #                 decoy, f"Y_{key}", value
-        #             )
+        runner.setup_runner()  # TODO
+        # initial_guess, reference_pdb both are the tmp.pdb
+        initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
+        reference_pdb = initial_guess
+        flag_update = {
+            "--initial_guess": initial_guess,
+            "--reference_pdb": reference_pdb,
+        }
+        # now we have to point to the right fasta file
+        new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
+        dict_to_fasta(tmp_fasta_dict, new_fasta_path)
+        runner.set_fasta_path(new_fasta_path)
+        runner.override_input_file(new_fasta_path)
+        runner.update_flags(flag_update)
+        runner.update_command()
+        print(runner.get_command())
+        print_timestamp("Running AF2", start_time)
+        break
+        runner.apply(pose)
+        print_timestamp("AF2 complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        # update the pose with the updated scores dict
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
+        filter_dict = {
+            #             "mean_plddt": (gt, 92.0),
+            #             "rmsd_to_reference": (lt, 1.5),
+            #             "mean_pae_interaction": (lt, 5),
+        }
+        rank_on = "mean_plddt"
+        prefix = "mpnn_seq"
+        print_timestamp("Adding passing sequences back into pose", start_time)
+        # TODO need to get 3 diverse sequences, return one pose with one threaded
+        # TODO the other two sequences will be Br1 and Br2
+        passing_decoys = []
+        for decoy in generate_decoys_from_pose(
+            pose,
+            filter_dict=filter_dict,
+            generate_prediction_decoys=True,
+            label_first=True,
+            prefix=prefix,
+            rank_on=rank_on,
+        ):
+            # add the free state back into the decoy
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                decoy, X_pose, new_chain=True
+            )
+            # rename af2 metrics to have Y_ prefix
+            decoy_scores = dict(decoy.scores)
+            for key, value in decoy_scores.items():
+                if key in af2_metrics:
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        decoy, f"Y_{key}", value
+                    )
 
-        #     packed_decoy = io.to_packed(decoy)
+            passing_decoys.append(decoy)
+        # if len(passing_decoys) == 0:
+        #     print_timestamp("No passing sequences, exiting", start_time)
+        #     yield None
+        # elif len(passing_decoys) == 1:
+        #     # just return the one decoy
+        #     print_timestamp("Only one passing sequence, yielding", start_time)
+        #     packed_decoy = io.to_packed(passing_decoys[0])
         #     yield packed_decoy
+        # else:
+        #     # get the first decoy
+        #     print_timestamp("More than one passing sequence, yielding", start_time)
+        #     to_return = passing_decoys[0]
+        #     putative_seqs = [
+        #         passing_decoy.sequence()
+        #         for passing_decoy in passing_decoys[1:]
+        #     ]
+        #     # rank the sequence list by Levenshtein distance to the first decoy sequence
 
-
-
-        # for key, value in scores.items():
-        #     pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
-        # final_ppose = io.to_packed(pose)
-        # yield final_ppose
+        #     # make a list of sequences in the decoys
+        #     , get 3 which have high Levenshtein distance from

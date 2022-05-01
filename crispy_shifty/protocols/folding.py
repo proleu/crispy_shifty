@@ -1063,6 +1063,7 @@ def fold_paired_state_X(
                         pyrosetta.rosetta.core.pose.append_pose_to_pose(
                             final_pose, chain, new_chain=True
                         )
+                    # TODO: yeet decoy
                     pyrosetta.rosetta.core.pose.append_pose_to_pose(
                         final_pose, decoy, new_chain=True
                     )
