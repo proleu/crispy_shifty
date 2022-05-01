@@ -688,6 +688,15 @@ class FreeStateMaker(StateMaker):
                 # set and update the scores of the combined pose
                 for key, value in self.scores.items():
                     setPoseExtraScore(combined_pose, key, str(value))
+                if "fixed_resis" in self.scores:
+                    deletion_len = start_pose_b - end_pose_a - 1
+                    fixed_resi_str = self.scores["fixed_resis"]
+                    fixed_resis = [int(resi) for resi in fixed_resi_str.split(",")]
+                    for fixed_i, resi in enumerate(fixed_resis):
+                        if resi >= start_pose_b:
+                            fixed_resis[fixed_i] -= deletion_len
+                    fixed_resi_str = ",".join(map(str, fixed_resis))
+                    setPoseExtraScore(combined_pose, "fixed_resis", fixed_resi_str)
                 setPoseExtraScore(combined_pose, "bb_clash", float(bb_clash))
                 setPoseExtraScore(combined_pose, "parent", self.original_name)
                 setPoseExtraScore(
@@ -828,6 +837,15 @@ class BoundStateMaker(StateMaker):
                     # set and update the scores of the combined pose
                     for key, value in self.scores.items():
                         setPoseExtraScore(dock, key, str(value))
+                    if "fixed_resis" in self.scores:
+                        deletion_len = start_pose_b - end_pose_a - 1
+                        fixed_resi_str = self.scores["fixed_resis"]
+                        fixed_resis = [int(resi) for resi in fixed_resi_str.split(",")]
+                        for fixed_i, resi in enumerate(fixed_resis):
+                            if resi >= start_pose_b:
+                                fixed_resis[fixed_i] -= deletion_len
+                        fixed_resi_str = ",".join(map(str, fixed_resis))
+                        setPoseExtraScore(dock, "fixed_resis", fixed_resi_str)
                     setPoseExtraScore(dock, "bb_clash", float(bb_clash))
                     setPoseExtraScore(dock, "docked_helix", str(helix_to_dock))
                     setPoseExtraScore(dock, "parent", self.original_name)
@@ -875,6 +893,12 @@ def make_free_states(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
+    # get whether to include or discard additional chains in the input pose
+    include_additional_chains = False
+    if "include_additional_chains" in kwargs:
+        if kwargs.pop("include_additional_chains").lower() == "true":
+            include_additional_chains = True
+
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
@@ -885,6 +909,17 @@ def make_free_states(
     for pose in poses:
         # get scores from pose
         scores = dict(pose.scores)
+
+        # always generate states from the first chain if multiple are present.
+        # Depending on whether to handle the additional chains, get either a populated or empty list of additional chains
+        additional_chains = []
+        if pose.num_chains() > 1:
+            for i, pose_chain in enumerate(pose.split_by_chain()):
+                if i == 0:
+                    pose = pose_chain
+                elif include_additional_chains:
+                    additional_chains.append(pose_chain)
+
         clash_cutoff = 3000
         # interfaces must be a ratio of 1:3 or 3:1 between the n and c term halves
         int_cutoff = 0.33
@@ -912,6 +947,12 @@ def make_free_states(
             )
             # generate states
             for ppose in state_maker.generate_states():
+                # add the additional chains to the pose, if any
+                if additional_chains:
+                    out_pose = io.to_pose(ppose)
+                    for additional_chain in additional_chains:
+                        pyrosetta.rosetta.core.pose.append_pose_to_pose(out_pose, additional_chain, True)
+                    ppose = io.to_packed(out_pose)
                 yield ppose
 
 
@@ -934,6 +975,12 @@ def make_bound_states(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
+    # get whether to include or discard additional chains in the input pose
+    include_additional_chains = False
+    if "include_additional_chains" in kwargs:
+        if kwargs.pop("include_additional_chains").lower() == "true":
+            include_additional_chains = True
+
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
@@ -944,6 +991,17 @@ def make_bound_states(
     for pose in poses:
         # get scores from pose
         scores = dict(pose.scores)
+
+        # always generate states from the first chain if multiple are present.
+        # Depending on whether to handle the additional chains, get either a populated or empty list of additional chains
+        additional_chains = []
+        if pose.num_chains() > 1:
+            for i, pose_chain in enumerate(pose.split_by_chain()):
+                if i == 0:
+                    pose = pose_chain
+                elif include_additional_chains:
+                    additional_chains.append(pose_chain)
+
         clash_cutoff = 5000
         # interfaces must be a ratio of 1:3 or 3:1 between the n and c term halves and the bound helix
         int_cutoff = 0.33
@@ -971,6 +1029,12 @@ def make_bound_states(
             )
             # generate states
             for ppose in state_maker.generate_states():
+                # add the additional chains to the pose, if any
+                if additional_chains:
+                    out_pose = io.to_pose(ppose)
+                    for additional_chain in additional_chains:
+                        pyrosetta.rosetta.core.pose.append_pose_to_pose(out_pose, additional_chain, True)
+                    ppose = io.to_packed(out_pose)
                 yield ppose
 
 
@@ -1027,6 +1091,9 @@ def pair_bound_state(
         scores = dict(pose.scores)
         pdb = scores["pdb"]
         pre_break_helix = scores["pre_break_helix"]
+        fixed_resi_str = ""
+        if "fixed_resis" in scores:
+            fixed_resi_str = scores["fixed_resis"]
         # find a state 0 from the same parent pdb with the same pre-break helix
         state_0 = reference_csv[
             (reference_csv["pdb"] == pdb)
@@ -1071,7 +1138,8 @@ def pair_bound_state(
         if closure_type == "loop_remodel":
             print_timestamp("Successful blueprint rebuild of state X", start_time)
             try:
-                assert pose.chain_end(1) == len(maybe_closed_x_pose.sequence())
+                # assert pose.chain_end(1) == len(maybe_closed_x_pose.sequence())
+                assert pose.chain_end(1) == maybe_closed_x_pose.chain_end(1)
                 closed_x_pose = maybe_closed_x_pose.clone()
             except AssertionError:
                 raise RuntimeError(
@@ -1092,8 +1160,13 @@ def pair_bound_state(
             )
         )
         design_sel = (
-            pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
-                new_loop_sel, 8, True
+            pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
+                pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
+                    new_loop_sel, 8, True
+                ),
+                pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
+                    "A"
+                )
             )
         )
         task_factory = gen_task_factory(
@@ -1108,6 +1181,18 @@ def pair_bound_state(
             ifcl=True,
             layer_design=layer_design,
         )
+        # don't design any fixed residues
+        # in the free state, these residues should be locked in to the input rotamers to preserve and pack around their binding conformation
+        if fixed_resi_str:
+            fixed_sel = (
+                pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+                    fixed_resi_str
+                )
+            )
+            lock_op = pyrosetta.rosetta.core.pack.task.operation.OperateOnResidueSubset(
+                pyrosetta.rosetta.core.pack.task.operation.PreventRepackingRLT(), fixed_sel, False
+            )
+            task_factory.push_back(lock_op)
         print_timestamp("Designing loop...", start_time)
         struct_profile(
             closed_x_pose,
@@ -1149,6 +1234,7 @@ def pair_bound_state(
         ppose = io.to_packed(pose)
         # yield the ppose
         yield ppose
+
 
 @requires_init
 def pair_dimers(

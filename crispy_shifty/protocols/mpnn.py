@@ -715,6 +715,13 @@ def mpnn_bound_state(
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
+        # don't design any fixed residues
+        fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        if "fixed_resis" in scores:
+            fixed_resi_str = scores["fixed_resis"]
+            # handle an empty string
+            if fixed_resi_str:
+                fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
         original_pose = pose.clone()
         # iterate over the mpnn parameter combinations
         mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
@@ -725,10 +732,16 @@ def mpnn_bound_state(
             print_timestamp(
                 f"Beginning MPNNDesign run {i+1}/{num_conditions}", start_time
             )
+            design_sel = pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
+                mpnn_design_area,
+                pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(
+                    fixed_sel
+                )
+            )
             print_timestamp("Designing interface with MPNN", start_time)
             # construct the MPNNDesign object
             mpnn_design = MPNNDesign(
-                design_selector=mpnn_design_area,
+                design_selector=design_sel,
                 omit_AAs="CX",
                 temperature=mpnn_temperature,
                 **kwargs,

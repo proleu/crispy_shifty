@@ -86,7 +86,7 @@ def remove_terminal_loops(
     :param kwargs: kwargs such as "pdb_path" and "metadata".
     :return: Iterator of PackedPose objects with terminal loops removed.
     Use DSSP and delete region mover to idealize inputs. Add metadata.
-    Assumes a monomer. Must provide either a packed_pose_in or "pdb_path" kwarg.
+    Trims chain A. Must provide either a packed_pose_in or "pdb_path" kwarg.
     """
 
     import sys
@@ -99,6 +99,11 @@ def remove_terminal_loops(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
+    if "chains_to_keep" in kwargs:
+        chains_to_keep = kwargs["chains_to_keep"]
+    else:
+        chains_to_keep = "1"
+
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
@@ -110,7 +115,7 @@ def remove_terminal_loops(
     for pose in poses:
         # setup rechain mover to sanitize the trimmed pose
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-        rechain.chain_order("1")
+        rechain.chain_order(chains_to_keep)
         trimmed_pose = pose.clone()
         rechain.apply(trimmed_pose)
         # get secondary structure
@@ -118,15 +123,16 @@ def remove_terminal_loops(
         dssp = trimmed_pose.secstruct()
         # get leading loop from ss
         if dssp[0] == "H":  # in case no leading loop is detected
-            pass
+            rosetta_idx_n_term = "0"
         elif dssp[0:2] == "LH":  # leave it alone if it has a short terminal loop
-            pass
+            rosetta_idx_n_term = "0"
         else:  # get beginning index of first occurrence of LH in dssp
             rosetta_idx_n_term = str(dssp.find("LH") + 1)
             # setup trimming mover
             trimmer = (
                 pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
             )
+            trimmer.set_rechain(True)
             trimmer.region(str(trimmed_pose.chain_begin(1)), rosetta_idx_n_term)
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
@@ -139,20 +145,29 @@ def remove_terminal_loops(
         elif dssp[-2:] == "HL":
             pass
         else:  # get ending index of last occurrence of HL in dssp
+            # rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
+            # setup trimming mover
+            # trimmer = (
+            #     pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
+            # )
+            # trimmer.start("1")
+            # trimmer.end(rosetta_idx_c_term)
             rosetta_idx_c_term = str(dssp.rfind("HL") + 2)
             # setup trimming mover
             trimmer = (
-                pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
+                pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
             )
-            trimmer.start("1")
-            trimmer.end(rosetta_idx_c_term)
+            trimmer.set_rechain(True)
+            trimmer.region(rosetta_idx_c_term, str(trimmed_pose.chain_end(1)))
             trimmer.apply(trimmed_pose)
             rechain.apply(trimmed_pose)
-        trimmed_length = len(trimmed_pose.residues)
+        # trimmed_length = len(trimmed_pose.residues)
+        trimmed_length = trimmed_pose.chain_end(1)
         if "metadata" in kwargs:
             metadata = kwargs["metadata"]
         else:
             metadata = {}
+        metadata["trim_n"] = rosetta_idx_n_term
         metadata["trimmed_length"] = str(trimmed_length)
         for key, value in metadata.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, key, str(value))
@@ -402,6 +417,222 @@ def prep_input_scaffold(
         ):
             for final_ppose in redesign_disulfides(trimmed_ppose, **kwargs):
                 yield final_ppose
+
+
+@requires_init
+def add_metadata_to_input(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param packed_pose_in: PackedPose object.
+    :param kwargs: kwargs such as "pdb_path".
+    :return: Iterator of PackedPose objects with ends trimmed.
+    Removes trailing loops and adds metadata. Repeat_len is only meaningful for
+    repetitive scaffolds.
+    Requires the following init flags:
+    -corrections::beta_nov16 true
+    -holes:dalphaball /software/rosetta/DAlphaBall.gcc
+    """
+    from pathlib import Path
+    import pandas as pd
+    import sys
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.distributed.tasks.rosetta_scripts import (
+        SingleoutputRosettaScriptsTask,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import (
+        path_to_pose_or_ppose,
+        remove_terminal_loops,
+    )
+
+    key = kwargs["pdb_path"]
+    metadata = {}
+    metadata["pdb"] = key
+
+    skip_trimming = False
+    if "metadata_csv" in kwargs:
+        metadata_series = pd.read_csv(kwargs["metadata_csv"], index_col="pdb").loc[key, :]
+        if metadata_series["skip_trimming"] == True:
+            skip_trimming = True
+        if pd.notna(metadata_series["repeat_len"]):
+            repeat_len = int(metadata_series["repeat_len"])
+            metadata["repeat_len"] = repeat_len
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = [pose for pose in path_to_pose_or_ppose(
+            path=key, cluster_scores=False, pack_result=False
+        )]
+
+    # skip_trimming = False
+    # if "skip_trimming" in kwargs:
+    #     skip_trimming_str = kwargs["skip_trimming"]
+    #     if "metadata_csv" in kwargs:
+    #         if metadata_series["skip_trimming"].lower() == "true":
+    #             skip_trimming = True
+    #     else:
+    #         if skip_trimming_str.lower() == "true":
+    #             skip_trimming = True
+    if "num_ss_per_repeat" in kwargs:
+        num_ss_per_repeat = int(kwargs["num_ss_per_repeat"])
+    else:
+        num_ss_per_repeat = 2 # DHR, for example
+    # get the fixed resis from the metadata csv, then make two combinations: one with
+    # the important resis, and one with both important and semiimportant resis
+    if "fixed_resis" in kwargs:
+        fixed_resis_option = kwargs["fixed_resis"]
+        if fixed_resis_option not in ["distribute","exact"]:
+            raise ValueError("fixed_resis must be either 'distribute' or 'exact'")
+        resis_1 = [int(x) for x in str(metadata_series["important"]).split(' ') if x != "nan"]
+        resis_2 = [int(x) for x in str(metadata_series["semi_important"]).split(' ') if x != "nan"]
+        exclude_resis = [int(x) for x in str(metadata_series["exclude_fixed"]).split(' ') if x != "nan"]
+        resis_list = [resis_1] * len(poses)
+        if resis_2:
+            resis_list += [resis_1 + resis_2] * len(poses)
+            poses += poses # double the length of the input pose list to match
+    else:
+        fixed_resis_option = False
+        resis_list = [None] * len(poses)
+
+    xml = """
+    <ROSETTASCRIPTS>
+    <SCOREFXNS>
+        <ScoreFunction name="sfxn" weights="beta_nov16" symmetric="0"/>
+    </SCOREFXNS>
+    <RESIDUE_SELECTORS>
+        <Layer name="core" select_core="true" select_boundary="false" select_surface="false" use_sidechain_neighbors="true"/>
+        <Chain name="chA" chains="A" />
+    </RESIDUE_SELECTORS>
+    <TASKOPERATIONS>
+    </TASKOPERATIONS>
+    <FILTERS>
+        <BuriedUnsatHbonds name="buns_parent" use_reporter_behavior="true" report_all_heavy_atom_unsats="true" scorefxn="sfxn" residue_selector="chA" ignore_surface_res="false" print_out_info_to_pdb="false" confidence="0" use_ddG_style="true" burial_cutoff="0.01" dalphaball_sasa="true" probe_radius="1.1" max_hbond_energy="1.5" burial_cutoff_apo="0.2" />
+        <ExposedHydrophobics name="exposed_hydrophobics_parent" />
+        <Geometry name="geometry_parent" confidence="0" />
+        <Holes name="holes_core_parent" threshold="0.0" residue_selector="core" confidence="0"/>
+        <Holes name="holes_all_parent" threshold="0.0" confidence="0"/>
+        <SSPrediction name="mismatch_probability_parent" confidence="0" cmd="/software/psipred4/runpsipred_single" use_probability="1" mismatch_probability="1" use_svm="1" />
+        <PackStat name="packstat_parent" threshold="0" chain="0" repeats="5"/>
+        <SSShapeComplementarity name="sc_all_parent" verbose="1" loops="1" helices="1" />
+        <ScoreType name="total_score_pose" scorefxn="sfxn" score_type="total_score" threshold="0" confidence="0" />
+        <ResidueCount name="count" />
+        <CalculatorFilter name="score_per_res_parent" equation="total_score_full / res" threshold="-2.0" confidence="0">
+            <Var name="total_score_full" filter="total_score_pose"/>
+            <Var name="res" filter="count"/>
+        </CalculatorFilter>
+    </FILTERS>
+    <SIMPLE_METRICS>
+        <SapScoreMetric name="sap_parent" />
+    </SIMPLE_METRICS>
+    <MOVERS>
+    </MOVERS>
+    <PROTOCOLS>
+        <Add filter_name="buns_parent" />
+        <Add filter_name="exposed_hydrophobics_parent" />
+        <Add filter_name="geometry_parent" />
+        <Add filter_name="holes_core_parent"/>
+        <Add filter_name="holes_all_parent"/>
+        <Add filter_name="mismatch_probability_parent" />
+        <Add filter_name="packstat_parent"/>
+        <Add filter_name="sc_all_parent" />
+        <Add filter_name="score_per_res_parent" />
+        <Add metrics="sap_parent" labels="sap_parent" />
+    </PROTOCOLS>
+    </ROSETTASCRIPTS>
+    """
+    score_pose = SingleoutputRosettaScriptsTask(xml)
+
+    final_pposes = []
+    for pose, fixed_resis in zip(poses, resis_list):
+
+        # add topology to pose
+        ss = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
+        topo = ""
+        ss_counter = 0
+        repeat_start = 0
+        repeat_end = 0
+        ss_2 = '-'
+        ss_1 = '-'
+        ss_i = ss.get_dssp_secstruct(1)
+        for i in range(1, pose.chain_end(1)):
+            ss_n = ss.get_dssp_secstruct(i+1)
+            # print(ss_2, ss_1, ss_i, ss_n)
+            # if the secondary structure is ending, is a helix or a sheet, and has lasted at least 3 residues:
+            if ss_i != ss_n and ss_i in 'HS' and ss_i == ss_1 and ss_i == ss_2:
+                topo += ss_i
+                if ss_counter == 0:
+                    repeat_start = i
+                if ss_counter == num_ss_per_repeat:
+                    repeat_end = i
+                ss_counter += 1
+            ss_2 = ss_1
+            ss_1 = ss_i
+            ss_i = ss_n
+        if ss_i in 'HS' and ss_i == ss_1 and ss_i == ss_2:
+            topo += ss_i
+            if ss_counter == num_ss_per_repeat:
+                repeat_end = i
+        metadata["topo"] = topo
+        if "repeat_len" not in metadata:
+            repeat_len = repeat_end - repeat_start
+            metadata["repeat_len"] = repeat_len
+
+        if skip_trimming:
+            trimmed_pose = pose
+            trimmed_length = trimmed_pose.chain_end(1)
+            metadata["trim_n"] = "0"
+            metadata["trimmed_length"] = str(trimmed_length)
+            for key, value in metadata.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, key, str(value))
+        else:
+            for trimmed_ppose in remove_terminal_loops(
+                packed_pose_in=io.to_packed(pose), metadata=metadata, **kwargs
+            ):
+                trimmed_pose = io.to_pose(trimmed_ppose)
+                break
+
+        if fixed_resis_option:
+
+            trim_n = int(metadata["trim_n"])
+            fixed_resis = [x-trim_n for x in fixed_resis]
+
+            if fixed_resis_option == "distribute":
+                trimmed_length = int(metadata["trimmed_length"])
+                full_fixed_resis = []
+                for fixed_resi in fixed_resis:
+                    i = fixed_resi - repeat_len
+                    while i > 0:
+                        if i not in exclude_resis:
+                            full_fixed_resis.append(i)
+                        i -= repeat_len
+                    i = fixed_resi
+                    while i <= trimmed_length:
+                        if i not in exclude_resis:
+                            full_fixed_resis.append(i)
+                        i += repeat_len
+                fixed_resis = full_fixed_resis
+
+            metadata["fixed_resis"] = ','.join(str(x) for x in sorted(fixed_resis))
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, "fixed_resis", metadata["fixed_resis"])
+
+        scores = dict(trimmed_pose.scores)
+        designed_ppose = score_pose(trimmed_pose.clone())
+        designed_pose = io.to_pose(designed_ppose)
+        scores.update(dict(designed_pose.scores))
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                designed_pose, key, str(value)
+            )  # store values as strings for safety
+        designed_ppose = io.to_packed(designed_pose)
+        final_pposes.append(designed_ppose)
+    for ppose in final_pposes:
+        yield ppose
 
 
 def trim_and_resurface_peptide(pose: Pose) -> Pose:

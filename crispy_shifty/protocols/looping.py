@@ -920,15 +920,34 @@ def loop_bound_state(
     for looped_pose in looped_poses:
         scores = dict(looped_pose.scores)
         new_loop_str = scores["new_loop_str"]
+        # don't design any fixed residues
+        fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        if "fixed_resis" in scores:
+            fixed_resi_str = scores["fixed_resis"]
+            # handle an empty string
+            if fixed_resi_str:
+                # adjust the fixed residue indices to account for the new loop
+                new_loop_resis = [int(i) for i in new_loop_str.split(",")]
+                new_loop_len = len(new_loop_resis)
+                fixed_resis = [int(resi) for resi in fixed_resi_str.split(",")]
+                for fixed_i, resi in enumerate(fixed_resis):
+                    if resi >= new_loop_resis[0]:
+                        fixed_resis[fixed_i] += new_loop_len
+                fixed_resi_str = ",".join(map(str, fixed_resis))
+                scores["fixed_resis"] = fixed_resi_str
+                fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
         print_timestamp("Building loop...", start_time)
         new_loop_sel = (
             pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
                 new_loop_str
             )
         )
-        design_sel = (
+        design_sel = pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
             pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
                 new_loop_sel, 8, True
+            ),
+            pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(
+                fixed_sel
             )
         )
         task_factory = gen_task_factory(
