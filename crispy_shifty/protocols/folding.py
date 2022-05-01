@@ -837,13 +837,11 @@ def fold_bound_state(
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
-        # TODO temporarily disable filtering since I don't know how well these scaffolds fold
-        filter_dict = {}
-        # filter_dict = {
-        #     "mean_plddt": (gt, 92.0),
-        #     "rmsd_to_reference": (lt, 1.5),
-        #     "mean_pae_interaction": (lt, 5),
-        # }
+        filter_dict = {
+            "mean_plddt": (gt, 92.0),
+            "rmsd_to_reference": (lt, 1.5),
+            "mean_pae_interaction": (lt, 5),
+        }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         for decoy in generate_decoys_from_pose(
