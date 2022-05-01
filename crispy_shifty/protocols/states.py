@@ -2,10 +2,11 @@
 from abc import ABC, abstractmethod
 from typing import Iterator, List, Optional, Tuple, Union
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
@@ -26,9 +27,7 @@ def yeet_pose_xyz(
     """
     import pyrosetta
     from pyrosetta.rosetta.core.select.residue_selector import TrueResidueSelector
-    from pyrosetta.rosetta.protocols.toolbox.pose_manipulation import (
-        rigid_body_move,
-    )
+    from pyrosetta.rosetta.protocols.toolbox.pose_manipulation import rigid_body_move
 
     assert len(xyz) == 3
     pose = pose.clone()
@@ -61,7 +60,7 @@ def grow_terminal_helices(
     """
 
     import pyrosetta
-    from pyrosetta.rosetta.core.pose import append_pose_to_pose, Pose
+    from pyrosetta.rosetta.core.pose import Pose, append_pose_to_pose
 
     # Get the chains of the pose
     chains = list(pose.split_by_chain())
@@ -172,7 +171,7 @@ def extend_helix_termini(
     """
 
     import pyrosetta
-    from pyrosetta.rosetta.core.pose import append_pose_to_pose, Pose
+    from pyrosetta.rosetta.core.pose import Pose, append_pose_to_pose
     from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
 
     # get the scores of the pose
@@ -390,8 +389,9 @@ def check_pairwise_interfaces(
     :return: True if the pose passes the cutoffs.
     """
 
-    from itertools import combinations
     import string
+    from itertools import combinations
+
     import pyrosetta
     from pyrosetta.rosetta.core.select.residue_selector import (
         ChainSelector,
@@ -886,6 +886,7 @@ def make_free_states(
     """
     import sys
     from pathlib import Path
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -951,7 +952,9 @@ def make_free_states(
                 if additional_chains:
                     out_pose = io.to_pose(ppose)
                     for additional_chain in additional_chains:
-                        pyrosetta.rosetta.core.pose.append_pose_to_pose(out_pose, additional_chain, True)
+                        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                            out_pose, additional_chain, True
+                        )
                     ppose = io.to_packed(out_pose)
                 yield ppose
 
@@ -968,6 +971,7 @@ def make_bound_states(
     """
     import sys
     from pathlib import Path
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -1033,7 +1037,9 @@ def make_bound_states(
                 if additional_chains:
                     out_pose = io.to_pose(ppose)
                     for additional_chain in additional_chains:
-                        pyrosetta.rosetta.core.pose.append_pose_to_pose(out_pose, additional_chain, True)
+                        pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                            out_pose, additional_chain, True
+                        )
                     ppose = io.to_packed(out_pose)
                 yield ppose
 
@@ -1057,6 +1063,7 @@ def pair_bound_state(
     import sys
     from pathlib import Path
     from time import time
+
     import pandas as pd
     import pyrosetta
     import pyrosetta.distributed.io as io
@@ -1159,15 +1166,11 @@ def pair_bound_state(
                 new_loop_str
             )
         )
-        design_sel = (
-            pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
-                pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
-                    new_loop_sel, 8, True
-                ),
-                pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
-                    "A"
-                )
-            )
+        design_sel = pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
+            pyrosetta.rosetta.core.select.residue_selector.NeighborhoodResidueSelector(
+                new_loop_sel, 8, True
+            ),
+            pyrosetta.rosetta.core.select.residue_selector.ChainSelector("A"),
         )
         task_factory = gen_task_factory(
             design_sel=design_sel,
@@ -1190,7 +1193,9 @@ def pair_bound_state(
                 )
             )
             lock_op = pyrosetta.rosetta.core.pack.task.operation.OperateOnResidueSubset(
-                pyrosetta.rosetta.core.pack.task.operation.PreventRepackingRLT(), fixed_sel, False
+                pyrosetta.rosetta.core.pack.task.operation.PreventRepackingRLT(),
+                fixed_sel,
+                False,
             )
             task_factory.push_back(lock_op)
         print_timestamp("Designing loop...", start_time)
@@ -1246,12 +1251,13 @@ def pair_dimers(
     :return: An iterator of PackedPoses.
     Find a state X crispy shifty for a given state Y.
     Do so by finding the best free state for a given bound state. Phil's is beautiful
-    and reloops the parent to match the loop length of the dimer. Since I only looped 
-    the dimer with the same length as the parent, I can be lazy and just use the original 
+    and reloops the parent to match the loop length of the dimer. Since I only looped
+    the dimer with the same length as the parent, I can be lazy and just use the original
     parent.
     """
     import sys
     from pathlib import Path
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -1266,39 +1272,59 @@ def pair_dimers(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
-    
+
     copies_x = int(kwargs["copies_x"])
     copies_y = int(kwargs["copies_y"])
 
     for pose in poses:
 
-        yeet_vecs = [(1,0,0), (0,1,0), (0,0,1), (-1,0,0), (0,-1,0), (0,0,-1)]
+        yeet_vecs = [
+            (1, 0, 0),
+            (0, 1, 0),
+            (0, 0, 1),
+            (-1, 0, 0),
+            (0, -1, 0),
+            (0, 0, -1),
+        ]
 
         # get scores
         scores = dict(pose.scores)
-        parent_path = scores['parent_path']
-        if '/net' not in parent_path:
-            path_split = parent_path.split('/')
+        parent_path = scores["parent_path"]
+        if "/net" not in parent_path:
+            path_split = parent_path.split("/")
             # fix paths from my recent directory restructuring
-            parent_path = "/home/broerman/crispy_shifty/projects/crispy_shifty_dimers/round_2/design/" + "/".join(path_split[-3:])
-            scores['parent_path'] = parent_path
+            parent_path = (
+                "/home/broerman/crispy_shifty/projects/crispy_shifty_dimers/round_2/design/"
+                + "/".join(path_split[-3:])
+            )
+            scores["parent_path"] = parent_path
         with open(parent_path, "r") as f:
             x_pose = io.to_pose(io.pose_from_pdbstring(f.read()))
 
         full_pose = yeet_pose_xyz(x_pose.clone(), yeet_vecs[0])
-        full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[1]), full_pose.num_jump()+1)
+        full_pose.append_pose_by_jump(
+            yeet_pose_xyz(x_pose.clone(), yeet_vecs[1]), full_pose.num_jump() + 1
+        )
         vec_i = 2
-        for _ in range(copies_x-1):
-            full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
+        for _ in range(copies_x - 1):
+            full_pose.append_pose_by_jump(
+                yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]),
+                full_pose.num_jump() + 1,
+            )
             vec_i += 1
-            full_pose.append_pose_by_jump(yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
+            full_pose.append_pose_by_jump(
+                yeet_pose_xyz(x_pose.clone(), yeet_vecs[vec_i]),
+                full_pose.num_jump() + 1,
+            )
             vec_i += 1
         for _ in range(copies_y):
-            full_pose.append_pose_by_jump(yeet_pose_xyz(pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump()+1)
+            full_pose.append_pose_by_jump(
+                yeet_pose_xyz(pose.clone(), yeet_vecs[vec_i]), full_pose.num_jump() + 1
+            )
             vec_i += 1
 
         # probably should rechain but couldn't get that to work
-            
+
         # reset scores
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(full_pose, key, value)

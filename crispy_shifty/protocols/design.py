@@ -1,16 +1,17 @@
 # Python standard library
 from typing import Iterator, List, Optional, Tuple, Union
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
+from pyrosetta.rosetta.core.kinematics import MoveMap
+from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pose import Pose
+from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 from pyrosetta.rosetta.protocols.filters import Filter
-from pyrosetta.rosetta.core.pack.task import TaskFactory
-from pyrosetta.rosetta.core.scoring import ScoreFunction
-from pyrosetta.rosetta.core.kinematics import MoveMap
 
 # Custom library imports
 
@@ -60,8 +61,9 @@ def clear_terms_from_scores(pose: Pose, terms: Optional[List[str]] = None) -> No
     :return: None.
     Clears beta nov16 terms from the pose by default, or the given terms if provided.
     """
-    from pathlib import Path
     import sys
+    from pathlib import Path
+
     import pyrosetta
 
     # insert the root of the repo into the sys.path
@@ -116,8 +118,8 @@ def interface_between_selectors(
         return int_sel
     else:
         from pyrosetta.rosetta.core.select.residue_selector import (
-            NeighborhoodResidueSelector,
             AndResidueSelector,
+            NeighborhoodResidueSelector,
         )
 
         sel_1_nbhd = NeighborhoodResidueSelector(sel_1, 8, True)
@@ -135,9 +137,10 @@ def interface_among_chains(
     Returns a selector that selects the interface between the given chains of a pose.
     """
     from itertools import combinations
+
     from pyrosetta.rosetta.core.select.residue_selector import (
-        OrResidueSelector,
         ChainSelector,
+        OrResidueSelector,
     )
 
     int_sel = OrResidueSelector()
@@ -159,6 +162,7 @@ def gen_std_layer_design(layer_aas_list: list = None) -> dict:
     """
 
     from itertools import product
+
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         LayerSelector,
@@ -914,8 +918,9 @@ def score_CA_dist(pose: Pose, resi_1: int, resi_2: int, name: str = "dist") -> f
     Measures the CA distance between two residues.
     """
 
-    from pathlib import Path
     import sys
+    from pathlib import Path
+
     import pyrosetta
 
     # insert the root of the repo into the sys.path
@@ -936,8 +941,8 @@ def score_loop_dist(pose: Pose, pre_break_helix: int, name: str = "loop_dist") -
     Measures the distance between two helices.
     """
 
-    from pathlib import Path
     import sys
+    from pathlib import Path
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -956,9 +961,10 @@ def one_state_design_unlooped_dimer(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
 
+    import sys
     from pathlib import Path
     from time import time
-    import sys
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -1114,9 +1120,10 @@ def one_state_design_bound_state(
     `-corrections::beta_nov16 true`
     """
 
+    import sys
     from pathlib import Path
     from time import time
-    import sys
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -1130,8 +1137,7 @@ def one_state_design_bound_state(
     not_fixed_sel = pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector()
     int_sel = interface_among_chains(chain_list=[1, 2, 3], vector_mode=True)
     design_sel = pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
-        int_sel,
-        not_fixed_sel
+        int_sel, not_fixed_sel
     )
     print_timestamp("Generated interface selector", start_time=start_time)
     layer_design = gen_std_layer_design()
@@ -1176,12 +1182,18 @@ def one_state_design_bound_state(
         scores = dict(pose.scores)
 
         # don't design any fixed residues
-        fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        fixed_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        )
         if "fixed_resis" in scores:
             fixed_resi_str = scores["fixed_resis"]
             # handle an empty string
             if fixed_resi_str:
-                fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
+                fixed_sel = (
+                    pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+                        fixed_resi_str
+                    )
+                )
         not_fixed_sel.set_residue_selector(fixed_sel)
 
         # for the neighborhood residue selector

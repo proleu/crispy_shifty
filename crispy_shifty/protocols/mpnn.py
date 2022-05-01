@@ -4,9 +4,10 @@ from typing import Dict, Iterator, List, Optional, Union
 
 # 3rd party library imports
 import numpy as np
+from pyrosetta.distributed import requires_init
+
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
@@ -62,7 +63,8 @@ def fasta_to_dict(fasta: str, new_tags: bool = False) -> Dict[str, str]:
 
     return seqs_dict
 
-def levenshtein_distance(seq_a:str, seq_b:str) -> int:
+
+def levenshtein_distance(seq_a: str, seq_b: str) -> int:
     """
     :param seq_a: first sequence to compare.
     :param seq_b: second sequence to compare.
@@ -81,20 +83,21 @@ def levenshtein_distance(seq_a:str, seq_b:str) -> int:
     c = 0
     for id1 in range(1, len(seq_a) + 1):
         for id2 in range(1, len(seq_b) + 1):
-            if (seq_a[id1-1] == seq_b[id2-1]):
+            if seq_a[id1 - 1] == seq_b[id2 - 1]:
                 distance_matrix[id1][id2] = distance_matrix[id1 - 1][id2 - 1]
             else:
                 a = distance_matrix[id1][id2 - 1]
                 b = distance_matrix[id1 - 1][id2]
                 c = distance_matrix[id1 - 1][id2 - 1]
-                if (a <= b and a <= c):
+                if a <= b and a <= c:
                     distance_matrix[id1][id2] = a + 1
-                elif (b <= a and b <= c):
+                elif b <= a and b <= c:
                     distance_matrix[id1][id2] = b + 1
                 else:
                     distance_matrix[id1][id2] = c + 1
     levenshtein_distance = int(distance_matrix[id1][id2])
     return levenshtein_distance
+
 
 @requires_init
 def thread_full_sequence(
@@ -130,7 +133,12 @@ class MPNNRunner(ABC):
     Abstract base class for MPNN runners.
     """
 
-    import os, pwd, uuid, shutil, subprocess
+    import os
+    import pwd
+    import shutil
+    import subprocess
+    import uuid
+
     import pyrosetta.distributed.io as io
 
     def __init__(
@@ -241,7 +249,9 @@ class MPNNRunner(ABC):
         practice locations for the tmpdir in the following order: TMPDIR, PSCRATCH,
         CSCRATCH, /net/scratch. Uses the cwd if none of these are available.
         """
-        import os, pwd, uuid
+        import os
+        import pwd
+        import uuid
 
         if os.environ.get("TMPDIR") is not None:
             tmpdir_root = os.environ.get("TMPDIR")
@@ -292,9 +302,13 @@ class MPNNRunner(ABC):
         Setup the MPNNRunner. Make a tmpdir and write input files to the tmpdir.
         Output sequences and scores will be written temporarily to the tmpdir as well.
         """
-        import json, os, subprocess, sys
-        import git
+        import json
+        import os
+        import subprocess
+        import sys
         from pathlib import Path
+
+        import git
         import pyrosetta
         import pyrosetta.distributed.io as io
 
@@ -445,12 +459,15 @@ class MPNNDesign(MPNNRunner):
         Each sequence designed by MPNN is then appended to the pose datacache.
         Cleanup the tmpdir.
         """
-        import os, subprocess, sys
-        import git
+        import os
+        import subprocess
+        import sys
         from pathlib import Path
+
+        import git
         import pyrosetta
-        from pyrosetta.rosetta.core.pose import setPoseExtraScore
         import pyrosetta.distributed.io as io
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -494,8 +511,8 @@ class MPNNDesign(MPNNRunner):
         :return: None
         Dump the pose mpnn_seq_* sequences to a single fasta.
         """
-        from pathlib import Path
         import sys
+        from pathlib import Path
 
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -520,8 +537,9 @@ class MPNNDesign(MPNNRunner):
         Generate poses from the provided pose with the newly designed sequences.
         Maintain the scores of the provided pose in the new poses.
         """
-        from pathlib import Path
         import sys
+        from pathlib import Path
+
         from pyrosetta.rosetta.core.pose import setPoseExtraScore
 
         # insert the root of the repo into the sys.path
@@ -579,7 +597,8 @@ class MPNNMultistateDesign(MPNNDesign):
         Setup the MPNNRunner. Make a tmpdir and write input files to the tmpdir.
         Output sequences and scores will be written temporarily to the tmpdir as well.
         """
-        import json, os
+        import json
+        import os
         from collections import defaultdict
 
         # take advantage of the superclass's setup_runner() to do most of the work
@@ -624,7 +643,7 @@ class MPNNMultistateDesign(MPNNDesign):
             tied_positions_list = list(zip(*residue_indices_lists))
             for tied_positions in tied_positions_list:
                 # get the chains for the tied positions
-                tied_position_dict = defaultdict(lambda: [[],[]])
+                tied_position_dict = defaultdict(lambda: [[], []])
                 # we only tie a position if all the residues are up for design
                 designable = True
                 for tied_position, residue_beta in tied_positions:
@@ -672,10 +691,11 @@ def mpnn_bound_state(
     :return: an iterator of PackedPose objects.
     """
 
+    import sys
     from itertools import product
     from pathlib import Path
-    import sys
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
@@ -750,12 +770,18 @@ def mpnn_bound_state(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         # don't design any fixed residues
-        fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        fixed_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        )
         if "fixed_resis" in scores:
             fixed_resi_str = scores["fixed_resis"]
             # handle an empty string
             if fixed_resi_str:
-                fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
+                fixed_sel = (
+                    pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+                        fixed_resi_str
+                    )
+                )
         original_pose = pose.clone()
         # iterate over the mpnn parameter combinations
         mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
@@ -766,10 +792,12 @@ def mpnn_bound_state(
             print_timestamp(
                 f"Beginning MPNNDesign run {i+1}/{num_conditions}", start_time
             )
-            design_sel = pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
-                mpnn_design_area,
-                pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(
-                    fixed_sel
+            design_sel = (
+                pyrosetta.rosetta.core.select.residue_selector.AndResidueSelector(
+                    mpnn_design_area,
+                    pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(
+                        fixed_sel
+                    ),
                 )
             )
             print_timestamp("Designing interface with MPNN", start_time)
@@ -809,16 +837,17 @@ def mpnn_paired_state(
     :return: an iterator of PackedPose objects.
     """
 
+    import sys
     from itertools import product
     from pathlib import Path
-    import sys
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
         ChainSelector,
-        OrResidueSelector,
         NeighborhoodResidueSelector,
+        OrResidueSelector,
         ResidueIndexSelector,
         TrueResidueSelector,
     )
@@ -958,16 +987,17 @@ def mpnn_dimers(
     provided as input. All chains must be the same length.
     """
 
+    import sys
     from itertools import product
     from pathlib import Path
-    import sys
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
         ChainSelector,
-        OrResidueSelector,
         NeighborhoodResidueSelector,
+        OrResidueSelector,
         ResidueIndexSelector,
     )
 
@@ -1006,11 +1036,11 @@ def mpnn_dimers(
     # scan and default assume two chain pairs- two different conformations per protomer
     if "mpnn_betas" in kwargs:
         if kwargs["mpnn_betas"] == "scan":
-            mpnn_betas_list = [[0.5,0.5], [0.4,0.6], [0.3,0.7]]
+            mpnn_betas_list = [[0.5, 0.5], [0.4, 0.6], [0.3, 0.7]]
         else:
             mpnn_betas_list = [[float(beta) for beta in list(kwargs["mpnn_betas"])]]
     else:
-        mpnn_betas_list = [[0.4,0.6]]
+        mpnn_betas_list = [[0.4, 0.6]]
 
     for pose in poses:
         pose.update_residue_neighbors()
@@ -1019,7 +1049,7 @@ def mpnn_dimers(
 
         # there should be a beta value corresponding to each chain pair (these are dimers, so chains come only in pairs)
         for mpnn_betas in mpnn_betas_list:
-            assert len(mpnn_betas) == pose.num_chains()//2
+            assert len(mpnn_betas) == pose.num_chains() // 2
 
         # setup dict for MPNN design areas
         print_timestamp("Setting up design selectors", start_time)
@@ -1060,7 +1090,9 @@ def mpnn_dimers(
         # get the length of one state
         offset = pose.chain_end(2)
         # iterate over the mpnn parameter combinations
-        mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas, mpnn_betas_list))
+        mpnn_conditions = list(
+            product(mpnn_temperatures, mpnn_design_areas, mpnn_betas_list)
+        )
         num_conditions = len(list(mpnn_conditions))
         print_timestamp(f"Beginning {num_conditions} MPNNDesign runs", start_time)
         for run_i, (mpnn_temperature, mpnn_design_area, mpnn_betas) in enumerate(

@@ -1,11 +1,12 @@
 # Python standard library
 from typing import Iterator, List, Optional, Tuple
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.rosetta.core.pose import Pose
-from pyrosetta.distributed import requires_init
 
 
 def loop_match(pose: Pose, length: int, connections: str = "[A+B]") -> str:
@@ -176,7 +177,9 @@ def remodel_helper(
     Writes a blueprint file to the current directory or TMPDIR and returns the filename.
     """
 
-    import os, uuid
+    import os
+    import uuid
+
     import pyrosetta
 
     tors = get_torsions(pose)
@@ -287,6 +290,7 @@ def loop_remodel(
     DSSP and SS agnostic in principle but in practice more or less matches.
     """
     import os
+
     import numpy as np
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
@@ -393,22 +397,23 @@ def loop_dimer(
     from copy import deepcopy
     from pathlib import Path
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).absolute().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.utils.io import print_timestamp
     from crispy_shifty.protocols.design import (
+        clear_constraints,
         gen_std_layer_design,
         gen_task_factory,
         pack_rotamers,
-        struct_profile,
-        clear_constraints,
-        score_wnm,
         score_ss_sc,
+        score_wnm,
+        struct_profile,
     )
+    from crispy_shifty.utils.io import print_timestamp
 
     # testing to properly set the TMPDIR on distributed jobs
     # import os
@@ -561,22 +566,23 @@ def loop_dimer(
 @requires_init
 def loop_complex(pose: Pose, all_chains_to_loop: list, all_loop_lengths: list):
 
+    import sys
     from pathlib import Path
     from time import time
-    import sys
+
     import pyrosetta
 
     sys.path.insert(0, str(Path(__file__).absolute().parent.parent))
-    from crispy_shifty.utils.io import print_timestamp
     from crispy_shifty.protocols.design import (
+        clear_constraints,
         gen_std_layer_design,
         gen_task_factory,
         packrotamers,
-        struct_profile,
-        clear_constraints,
-        score_wnm,
         score_ss_sc,
+        score_wnm,
+        struct_profile,
     )
+    from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
 
@@ -778,6 +784,7 @@ def loop_all_hinges(
 ) -> Iterator[PackedPose]:
 
     import sys
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -838,6 +845,7 @@ def loop_bound_state(
     from copy import deepcopy
     from pathlib import Path
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -921,7 +929,9 @@ def loop_bound_state(
         scores = dict(looped_pose.scores)
         new_loop_str = scores["new_loop_str"]
         # don't design any fixed residues
-        fixed_sel = pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        fixed_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.FalseResidueSelector()
+        )
         if "fixed_resis" in scores:
             fixed_resi_str = scores["fixed_resis"]
             # handle an empty string
@@ -935,7 +945,11 @@ def loop_bound_state(
                         fixed_resis[fixed_i] += new_loop_len
                 fixed_resi_str = ",".join(map(str, fixed_resis))
                 scores["fixed_resis"] = fixed_resi_str
-                fixed_sel = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(fixed_resi_str)
+                fixed_sel = (
+                    pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
+                        fixed_resi_str
+                    )
+                )
         print_timestamp("Building loop...", start_time)
         new_loop_sel = (
             pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
@@ -948,7 +962,7 @@ def loop_bound_state(
             ),
             pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(
                 fixed_sel
-            )
+            ),
         )
         task_factory = gen_task_factory(
             design_sel=design_sel,

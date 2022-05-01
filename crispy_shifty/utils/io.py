@@ -1,24 +1,24 @@
 # Python standard library
 import bz2
 import collections
-from datetime import datetime
 import json
 import os
-from typing import Any, Callable, Dict, List, Iterator, NoReturn, Optional, Tuple, Union
 import uuid
+from datetime import datetime
+from typing import Any, Callable, Dict, Iterator, List, NoReturn, Optional, Tuple, Union
 
 # 3rd party library imports
 import pandas as pd
+import pyrosetta.distributed.io as io
 import toolz
-from tqdm.auto import tqdm
 
 # Rosetta library imports
 from pyrosetta.distributed import requires_init
 from pyrosetta.distributed.cluster.exceptions import OutputError
-import pyrosetta.distributed.io as io
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
+from tqdm.auto import tqdm
 
 # Custom library imports
 
@@ -30,7 +30,8 @@ def cmd(command: str = "", wait: bool = True) -> str:
     :return: stdout.
     Run a command.
     """
-    import os, subprocess
+    import os
+    import subprocess
 
     p = subprocess.Popen(
         command,
@@ -53,7 +54,8 @@ def cmd_no_stderr(command: str = "", wait: bool = True) -> str:
     :return: stdout.
     Run a command and suppress stderr.
     """
-    import os, subprocess
+    import os
+    import subprocess
 
     with open(os.devnull, "w") as devnull:
         p = subprocess.Popen(
@@ -86,6 +88,7 @@ def fix_path_prefixes(
     or overwrite the file in place.
     """
     import os
+
     import pandas as pd
 
     # infer what to do with the file
@@ -132,7 +135,10 @@ def fix_path_prefixes(
 
 
 def df_to_fastas(
-    df: pd.DataFrame, prefix: str, out_path: Optional[str] = None, exclude: Optional[str] = None
+    df: pd.DataFrame,
+    prefix: str,
+    out_path: Optional[str] = None,
+    exclude: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     :param: df: pandas dataframe.
@@ -144,6 +150,7 @@ def df_to_fastas(
     """
     import sys
     from pathlib import Path
+
     import pandas as pd
     from tqdm.auto import tqdm
 
@@ -181,8 +188,10 @@ def get_yml() -> str:
     Inspired by pyrosetta.distributed.cluster.converter_tasks.get_yml()
     Works on jupyterhub
     """
-    import subprocess, sys
+    import subprocess
+    import sys
     from pathlib import Path
+
     from pyrosetta.distributed.cluster.config import source_domains
 
     # insert the root of the repo into the sys.path
@@ -535,8 +544,9 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
 
     import argparse
     import copy
-    import pyrosetta
     import sys
+
+    import pyrosetta
 
     parser = argparse.ArgumentParser(
         description="Parses arguments passed to the minimal run.py"
@@ -562,14 +572,18 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
     # assuming they are a list of key-value pairs where odd-indexed elements are keys and even-indexed elements are values. Add
     # in the leading "-" and pass them to pyrosetta.
     pyro_kwargs = {
-        "options": " ".join([
-            "-" + args.options[i] + " " + args.options[i + 1]
-            for i in range(0, len(args.options), 2)
-            ]),
-        "extra_options": " ".join([
-            "-" + args.extra_options[i] + " " + args.extra_options[i + 1]
-            for i in range(0, len(args.extra_options), 2)
-            ]),
+        "options": " ".join(
+            [
+                "-" + args.options[i] + " " + args.options[i + 1]
+                for i in range(0, len(args.options), 2)
+            ]
+        ),
+        "extra_options": " ".join(
+            [
+                "-" + args.extra_options[i] + " " + args.extra_options[i + 1]
+                for i in range(0, len(args.extra_options), 2)
+            ]
+        ),
     }
     pyrosetta.distributed.maybe_init(**pyro_kwargs)
 
@@ -578,7 +592,7 @@ def wrapper_for_array_tasks(func: Callable, args: List[str]) -> None:
         args.extra_kwargs[i]: args.extra_kwargs[i + 1]
         for i in range(0, len(args.extra_kwargs), 2)
     }
-    
+
     instance_kwargs = {
         args.instance[i]: args.instance[i + 1] for i in range(0, len(args.instance), 2)
     }
@@ -665,10 +679,13 @@ def gen_array_tasks(
     :time: `str` specifying walltime. Must be compatible with queue. Example `55:00`
     would be 55 min.
     """
-    import os, stat, sys
+    import os
+    import stat
+    import sys
+    from pathlib import Path
+
     import git
     from more_itertools import ichunked
-    from pathlib import Path
     from pyrosetta.distributed.cluster.converters import _parse_sha1 as parse_sha1
     from tqdm.auto import tqdm
 
@@ -799,20 +816,20 @@ def gen_array_tasks(
 
     func_split = distribute_func.split(".")
     func_name = func_split[-1]
-    path_inserts=[
-            # use the root of the repo location to import the module
-            f"sys.path.insert(0, '{root}')\n",
-            ]
-    if func_root!=root:
+    path_inserts = [
+        # use the root of the repo location to import the module
+        f"sys.path.insert(0, '{root}')\n",
+    ]
+    if func_root != root:
         path_inserts.append(f"sys.path.insert(0, '{func_root}')\n")
-    lines=[
-            f"#!{python} \n",
-            "import sys\n",
-            "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
-            f"from {'.'.join(func_split[:-1])} import {func_name}\n",
-            f"wrapper_for_array_tasks({func_name}, sys.argv)",
-            ]
-    lines[2:2]=path_inserts
+    lines = [
+        f"#!{python} \n",
+        "import sys\n",
+        "from crispy_shifty.utils.io import wrapper_for_array_tasks\n",
+        f"from {'.'.join(func_split[:-1])} import {func_name}\n",
+        f"wrapper_for_array_tasks({func_name}, sys.argv)",
+    ]
+    lines[2:2] = path_inserts
     run_py = "".join(lines)
     run_py_file = os.path.join(output_path, "run.py")
     # Write the run.py file
@@ -888,6 +905,7 @@ def test_func(
 
     import sys
     from pathlib import Path
+
     import pycorn  # test env
     import pyrosetta.distributed.io as io
 

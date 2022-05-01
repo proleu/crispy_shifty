@@ -1,15 +1,16 @@
 # Python standard library
 from typing import Iterator, List, Optional, Tuple, Union
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
-from pyrosetta.rosetta.core.pose import Pose
-from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
-from pyrosetta.rosetta.core.pack.task import TaskFactory
-from pyrosetta.rosetta.core.scoring import ScoreFunction
 from pyrosetta.rosetta.core.kinematics import MoveMap
+from pyrosetta.rosetta.core.pack.task import TaskFactory
+from pyrosetta.rosetta.core.pose import Pose
+from pyrosetta.rosetta.core.scoring import ScoreFunction
+from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 
@@ -41,6 +42,7 @@ def almost_linkres(
     """
     import sys
     from pathlib import Path
+
     import pyrosetta
 
     # insert the root of the repo into the sys.path
@@ -111,9 +113,10 @@ def two_state_design_paired_state(
     Needs `-corrections:beta_nov16 true` in init.
     """
 
+    import sys
     from pathlib import Path
     from time import time
-    import sys
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
@@ -129,11 +132,11 @@ def two_state_design_paired_state(
     from crispy_shifty.protocols.design import (
         add_metadata_to_pose,
         fast_design,
-        interface_among_chains,
         gen_movemap,
         gen_score_filter,
         gen_std_layer_design,
         gen_task_factory,
+        interface_among_chains,
         score_per_res,
         score_ss_sc,
     )
@@ -303,9 +306,10 @@ def filter_paired_state(
     init statement.
     """
 
+    import sys
     from pathlib import Path
     from time import time
-    import sys
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
@@ -316,8 +320,7 @@ def filter_paired_state(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import (
-        #     add_metadata_to_pose,
+    from crispy_shifty.protocols.design import (  # add_metadata_to_pose,
         gen_std_layer_design,
         gen_task_factory,
         pack_rotamers,
@@ -325,8 +328,8 @@ def filter_paired_state(
         score_ddg,
         score_per_res,
         score_SAP,
-        score_wnm_helix,
         score_wnm_all,
+        score_wnm_helix,
     )
     from crispy_shifty.utils.io import print_timestamp
 

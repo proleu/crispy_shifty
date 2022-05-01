@@ -2,12 +2,14 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Iterator, List, Optional, Union
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
+
 
 ########## Azobenzene Crosslinking ##########
 # The main function for azobenzene crosslinking.  Use with the following init:
@@ -274,7 +276,10 @@ def add_azo(
 
         def apply_cart(pose, sfxn, cb_weights, helper, movemap=None):
             for cbw in cb_weights:
-                print(f"Performing 1 round of cartesian FastRelax with cart_bonded={cbw}",flush=True)
+                print(
+                    f"Performing 1 round of cartesian FastRelax with cart_bonded={cbw}",
+                    flush=True,
+                )
                 print(movemap, flush=True)
                 helper.pre_relax_round_update_steps(
                     pose, selection.apply(pose), whole_structure, False, True
@@ -307,8 +312,8 @@ def add_azo(
                 movemap.set_chi(res, True)
             movemap.set_chi(azo_index, True)
             movemap.set_jump(get_jump_index_for_crosslinker(pose, azo_index), True)
-            #frlx.set_movemap(movemap)
-            #frlx.set_movemap_disables_packing_of_fixed_chi_positions(True)
+            # frlx.set_movemap(movemap)
+            # frlx.set_movemap_disables_packing_of_fixed_chi_positions(True)
         # Cart relax
         if cartesian:
             apply_cart(pose, sfxn, cb_weights, helper, movemap)
@@ -316,7 +321,10 @@ def add_azo(
         else:
             for i in range(0, rounds):
                 if not whole_structure:
-                    print("Performing 1 round of sidechain/crosslinker FastRelax", flush=True)
+                    print(
+                        "Performing 1 round of sidechain/crosslinker FastRelax",
+                        flush=True,
+                    )
                 else:
                     print("Performing 1 round of torsional FastRelax", flush=True)
                 helper.pre_relax_round_update_steps(
@@ -361,16 +369,16 @@ def add_azo(
         save_rmsd,
     ):
         from pyrosetta.rosetta.core.select.residue_selector import (
-            TrueResidueSelector as TrueResidueSelector,
+            AndResidueSelector as AndResidueSelector,
+        )
+        from pyrosetta.rosetta.core.select.residue_selector import (
+            NotResidueSelector as NotResidueSelector,
         )
         from pyrosetta.rosetta.core.select.residue_selector import (
             ResidueIndexSelector as ResidueIndexSelector,
         )
         from pyrosetta.rosetta.core.select.residue_selector import (
-            AndResidueSelector as AndResidueSelector,
-        )
-        from pyrosetta.rosetta.core.select.residue_selector import (
-            NotResidueSelector as NotResidueSelector,
+            TrueResidueSelector as TrueResidueSelector,
         )
 
         if rmsd_sele is None:
@@ -447,8 +455,8 @@ def add_azo(
     elif check_ub_lb:
         if invert_fbsd:
             assert not filter_by_sc_dist(
-                    pose, selection, 1, fbsd_ub, fbsd_lb
-                    ), f"CB of positions {res_indices[0]} and {res_indices[1]} are between {fbsd_lb} and {fbsd_ub} apart."
+                pose, selection, 1, fbsd_ub, fbsd_lb
+            ), f"CB of positions {res_indices[0]} and {res_indices[1]} are between {fbsd_lb} and {fbsd_ub} apart."
         else:
             assert filter_by_sc_dist(
                 pose, selection, 1, fbsd_ub, fbsd_lb
@@ -559,9 +567,11 @@ def add_azo_chainB(
 ) -> Iterator[PackedPose]:
     import copy
     import sys
+
     import pyrosetta
-    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
+
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     required = ["pdb_path", "selection", "residue_name"]
     for req in required:

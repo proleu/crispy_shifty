@@ -1,10 +1,11 @@
 # Python standard library
 from typing import Iterator, Optional, Union
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 
 # Custom library imports
@@ -30,6 +31,7 @@ def path_to_pose_or_ppose(
 
     """
     import bz2
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed import cluster
@@ -91,6 +93,7 @@ def remove_terminal_loops(
 
     import sys
     from pathlib import Path
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.scoring.dssp import Dssp
@@ -214,8 +217,9 @@ def redesign_disulfides(
     `-detect_disulf false`
     `-holes:dalphaball /software/rosetta/DAlphaBall.gcc`
     """
-    from pathlib import Path
     import sys
+    from pathlib import Path
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed.tasks.rosetta_scripts import (
@@ -225,8 +229,8 @@ def redesign_disulfides(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import (
-        path_to_pose_or_ppose,
         break_all_disulfides,
+        path_to_pose_or_ppose,
     )
 
     # generate poses or convert input packed pose into pose
@@ -369,8 +373,9 @@ def prep_input_scaffold(
     -detect_disulf false
     -holes:dalphaball /software/rosetta/DAlphaBall.gcc
     """
-    from pathlib import Path
     import sys
+    from pathlib import Path
+
     import pandas as pd
     import pyrosetta
     import pyrosetta.distributed.io as io
@@ -381,8 +386,8 @@ def prep_input_scaffold(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import (
-        path_to_pose_or_ppose,
         break_all_disulfides,
+        path_to_pose_or_ppose,
         redesign_disulfides,
         remove_terminal_loops,
     )
@@ -433,9 +438,10 @@ def add_metadata_to_input(
     -corrections::beta_nov16 true
     -holes:dalphaball /software/rosetta/DAlphaBall.gcc
     """
-    from pathlib import Path
-    import pandas as pd
     import sys
+    from pathlib import Path
+
+    import pandas as pd
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed.tasks.rosetta_scripts import (
@@ -455,7 +461,9 @@ def add_metadata_to_input(
 
     skip_trimming = False
     if "metadata_csv" in kwargs:
-        metadata_series = pd.read_csv(kwargs["metadata_csv"], index_col="pdb").loc[key, :]
+        metadata_series = pd.read_csv(kwargs["metadata_csv"], index_col="pdb").loc[
+            key, :
+        ]
         if metadata_series["skip_trimming"] == True:
             skip_trimming = True
         if pd.notna(metadata_series["repeat_len"]):
@@ -466,9 +474,12 @@ def add_metadata_to_input(
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
     else:
-        poses = [pose for pose in path_to_pose_or_ppose(
-            path=key, cluster_scores=False, pack_result=False
-        )]
+        poses = [
+            pose
+            for pose in path_to_pose_or_ppose(
+                path=key, cluster_scores=False, pack_result=False
+            )
+        ]
 
     # skip_trimming = False
     # if "skip_trimming" in kwargs:
@@ -482,20 +493,30 @@ def add_metadata_to_input(
     if "num_ss_per_repeat" in kwargs:
         num_ss_per_repeat = int(kwargs["num_ss_per_repeat"])
     else:
-        num_ss_per_repeat = 2 # DHR, for example
+        num_ss_per_repeat = 2  # DHR, for example
     # get the fixed resis from the metadata csv, then make two combinations: one with
     # the important resis, and one with both important and semiimportant resis
     if "fixed_resis" in kwargs:
         fixed_resis_option = kwargs["fixed_resis"]
-        if fixed_resis_option not in ["distribute","exact"]:
+        if fixed_resis_option not in ["distribute", "exact"]:
             raise ValueError("fixed_resis must be either 'distribute' or 'exact'")
-        resis_1 = [int(x) for x in str(metadata_series["important"]).split(' ') if x != "nan"]
-        resis_2 = [int(x) for x in str(metadata_series["semi_important"]).split(' ') if x != "nan"]
-        exclude_resis = [int(x) for x in str(metadata_series["exclude_fixed"]).split(' ') if x != "nan"]
+        resis_1 = [
+            int(x) for x in str(metadata_series["important"]).split(" ") if x != "nan"
+        ]
+        resis_2 = [
+            int(x)
+            for x in str(metadata_series["semi_important"]).split(" ")
+            if x != "nan"
+        ]
+        exclude_resis = [
+            int(x)
+            for x in str(metadata_series["exclude_fixed"]).split(" ")
+            if x != "nan"
+        ]
         resis_list = [resis_1] * len(poses)
         if resis_2:
             resis_list += [resis_1 + resis_2] * len(poses)
-            poses += poses # double the length of the input pose list to match
+            poses += poses  # double the length of the input pose list to match
     else:
         fixed_resis_option = False
         resis_list = [None] * len(poses)
@@ -557,14 +578,14 @@ def add_metadata_to_input(
         ss_counter = 0
         repeat_start = 0
         repeat_end = 0
-        ss_2 = '-'
-        ss_1 = '-'
+        ss_2 = "-"
+        ss_1 = "-"
         ss_i = ss.get_dssp_secstruct(1)
         for i in range(1, pose.chain_end(1)):
-            ss_n = ss.get_dssp_secstruct(i+1)
+            ss_n = ss.get_dssp_secstruct(i + 1)
             # print(ss_2, ss_1, ss_i, ss_n)
             # if the secondary structure is ending, is a helix or a sheet, and has lasted at least 3 residues:
-            if ss_i != ss_n and ss_i in 'HS' and ss_i == ss_1 and ss_i == ss_2:
+            if ss_i != ss_n and ss_i in "HS" and ss_i == ss_1 and ss_i == ss_2:
                 topo += ss_i
                 if ss_counter == 0:
                     repeat_start = i
@@ -574,7 +595,7 @@ def add_metadata_to_input(
             ss_2 = ss_1
             ss_1 = ss_i
             ss_i = ss_n
-        if ss_i in 'HS' and ss_i == ss_1 and ss_i == ss_2:
+        if ss_i in "HS" and ss_i == ss_1 and ss_i == ss_2:
             topo += ss_i
             if ss_counter == num_ss_per_repeat:
                 repeat_end = i
@@ -589,7 +610,9 @@ def add_metadata_to_input(
             metadata["trim_n"] = "0"
             metadata["trimmed_length"] = str(trimmed_length)
             for key, value in metadata.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, key, str(value))
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    trimmed_pose, key, str(value)
+                )
         else:
             for trimmed_ppose in remove_terminal_loops(
                 packed_pose_in=io.to_packed(pose), metadata=metadata, **kwargs
@@ -600,7 +623,7 @@ def add_metadata_to_input(
         if fixed_resis_option:
 
             trim_n = int(metadata["trim_n"])
-            fixed_resis = [x-trim_n for x in fixed_resis]
+            fixed_resis = [x - trim_n for x in fixed_resis]
 
             if fixed_resis_option == "distribute":
                 trimmed_length = int(metadata["trimmed_length"])
@@ -618,8 +641,10 @@ def add_metadata_to_input(
                         i += repeat_len
                 fixed_resis = full_fixed_resis
 
-            metadata["fixed_resis"] = ','.join(str(x) for x in sorted(fixed_resis))
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(trimmed_pose, "fixed_resis", metadata["fixed_resis"])
+            metadata["fixed_resis"] = ",".join(str(x) for x in sorted(fixed_resis))
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                trimmed_pose, "fixed_resis", metadata["fixed_resis"]
+            )
 
         scores = dict(trimmed_pose.scores)
         designed_ppose = score_pose(trimmed_pose.clone())
@@ -645,10 +670,11 @@ def trim_and_resurface_peptide(pose: Pose) -> Pose:
     than 5.0.
     Assumes that pyrosetta.init() has been called with `-corrections:beta_nov16`.
     """
-    from pathlib import Path
     import sys
-    from Bio.SeqUtils.ProtParam import ProteinAnalysis
+    from pathlib import Path
+
     import pyrosetta
+    from Bio.SeqUtils.ProtParam import ProteinAnalysis
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
@@ -823,13 +849,14 @@ def finalize_peptide(
     :return: Iterator of PackedPose objects with chB trimmed and resurfaced.
     """
 
-    from operator import lt, gt
-    from pathlib import Path
     import sys
+    from operator import gt, lt
+    from pathlib import Path
     from time import time
-    from Bio.SeqUtils.ProtParam import ProteinAnalysis
+
     import pyrosetta
     import pyrosetta.distributed.io as io
+    from Bio.SeqUtils.ProtParam import ProteinAnalysis
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
@@ -842,16 +869,19 @@ def finalize_peptide(
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from crispy_shifty.protocols.cleaning import (
-        path_to_pose_or_ppose,
-    )
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.design import score_cms
     from crispy_shifty.protocols.folding import (
+        SuperfoldRunner,
         af2_metrics,
         generate_decoys_from_pose,
-        SuperfoldRunner,
     )
-    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict, levenshtein_distance, MPNNDesign
+    from crispy_shifty.protocols.mpnn import (
+        MPNNDesign,
+        dict_to_fasta,
+        fasta_to_dict,
+        levenshtein_distance,
+    )
     from crispy_shifty.protocols.states import yeet_pose_xyz
     from crispy_shifty.utils.io import print_timestamp
 
@@ -1098,22 +1128,25 @@ def finalize_peptide(
             # get the first decoy
             to_return = passing_decoys[0]
             putative_seqs = [
-                passing_decoy.sequence()
-                for passing_decoy in passing_decoys[1:]
+                passing_decoy.sequence() for passing_decoy in passing_decoys[1:]
             ]
-            print(putative_seqs) # TODO: remove
+            print(putative_seqs)  # TODO: remove
             decoy_seq = to_return.sequence()
             # rank the sequence list by Levenshtein distance to the first decoy sequence
             ranked_seqs = sorted(
                 putative_seqs,
                 key=lambda x: levenshtein_distance(decoy_seq, x),
-                reverse=True, # we want the largest distance from the first decoy
+                reverse=True,  # we want the largest distance from the first decoy
             )
             # get the first two sequences
             first_seq, second_seq = ranked_seqs[0], ranked_seqs[1]
             # add these sequences back into the pose scores
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", first_seq)
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", second_seq)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                to_return, "chBr1_seq", first_seq
+            )
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                to_return, "chBr2_seq", second_seq
+            )
             # yield the first decoy
             packed_decoy = io.to_packed(to_return)
             yield packed_decoy
