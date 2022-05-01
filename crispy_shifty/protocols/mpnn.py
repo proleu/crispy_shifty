@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Iterator, List, Optional, Union
 
 # 3rd party library imports
+import numpy as np
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
 from pyrosetta.distributed import requires_init
@@ -61,6 +62,39 @@ def fasta_to_dict(fasta: str, new_tags: bool = False) -> Dict[str, str]:
 
     return seqs_dict
 
+def levenshtein_distance(seq_a:str, seq_b:str) -> int:
+    """
+    :param seq_a: first sequence to compare.
+    :param seq_b: second sequence to compare.
+    :return: levenshtein distance between the two sequences.
+    Calculate the levenshtein distance between two sequences.
+    """
+    # https://en.wikipedia.org/wiki/Levenshtein_distance
+    # initialize distance matrix
+    distance_matrix = np.zeros((len(seq_a) + 1, len(seq_b) + 1))
+    for id1 in range(len(seq_a) + 1):
+        distance_matrix[id1][0] = id1
+    for id2 in range(len(seq_b) + 1):
+        distance_matrix[0][id2] = id2
+    a = 0
+    b = 0
+    c = 0
+    for id1 in range(1, len(seq_a) + 1):
+        for id2 in range(1, len(seq_b) + 1):
+            if (seq_a[id1-1] == seq_b[id2-1]):
+                distance_matrix[id1][id2] = distance_matrix[id1 - 1][id2 - 1]
+            else:
+                a = distance_matrix[id1][id2 - 1]
+                b = distance_matrix[id1 - 1][id2]
+                c = distance_matrix[id1 - 1][id2 - 1]
+                if (a <= b and a <= c):
+                    distance_matrix[id1][id2] = a + 1
+                elif (b <= a and b <= c):
+                    distance_matrix[id1][id2] = b + 1
+                else:
+                    distance_matrix[id1][id2] = c + 1
+    levenshtein_distance = int(distance_matrix[id1][id2])
+    return levenshtein_distance
 
 @requires_init
 def thread_full_sequence(

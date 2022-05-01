@@ -851,7 +851,8 @@ def finalize_peptide(
         generate_decoys_from_pose,
         SuperfoldRunner,
     )
-    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict, MPNNDesign
+    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict, levenshtein_distance, MPNNDesign
+    from crispy_shifty.protocols.states import yeet_pose_xyz
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
@@ -867,7 +868,17 @@ def finalize_peptide(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         original_pose = pose.clone()
-        # TODO need to yeet chain C
+        # yeet chain C
+        chC = pose.split_by_chain()[2]
+        yeet_pose_xyz(chC)
+        # remove chain C from pose, then append the yeeted chain back
+        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        rechain.chain_order("12")
+        rechain.apply(pose)
+        pyrosetta.rosetta.core.pose.append_pose_to_pose(pose, chC, new_chain=True)
+        # rebuild PDBInfo
+        rechain.chain_order("123")
+        rechain.apply(pose)
         # get the length of the peptide
         chB = pose.clone()
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
@@ -962,13 +973,11 @@ def finalize_peptide(
         print_timestamp("Filtering sequences on sequence metrics", start_time)
         # make filter_dict
         filter_dict = {
-            "pI": -5.0,
+            "pI": 5.0,
         }
         chB_seqs = {k: v for k, v in scores.items() if "mpnn_seq" in k}
         # remove sequences that don't pass the filter
         for seq_id, seq in chB_seqs.items():
-            print(seq_id, seq) # TODO: remove
-
             # get just chB seq
             chB_seq = seq.split("/")[1]
             # get chB pI
@@ -1007,7 +1016,7 @@ def finalize_peptide(
             pose=pose, fasta_path="dummy", load_decoys=True, **kwargs
         )
         # runner.setup_runner(file=fasta_path)
-        runner.setup_runner()  # TODO
+        runner.setup_runner()
         # initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
         reference_pdb = initial_guess
@@ -1022,9 +1031,7 @@ def finalize_peptide(
         runner.override_input_file(new_fasta_path)
         runner.update_flags(flag_update)
         runner.update_command()
-        print(runner.get_command())
         print_timestamp("Running AF2", start_time)
-        break
         runner.apply(pose)
         print_timestamp("AF2 complete, updating pose datacache", start_time)
         # update the scores dict
@@ -1034,15 +1041,15 @@ def finalize_peptide(
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
-            #             "mean_plddt": (gt, 92.0),
-            #             "rmsd_to_reference": (lt, 1.5),
-            #             "mean_pae_interaction": (lt, 5),
+            "mean_plddt": (gt, 99.0),
+            # "rmsd_to_reference": (lt, 1.5),
+            # "mean_pae_interaction": (lt, 5),
         }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         print_timestamp("Adding passing sequences back into pose", start_time)
-        # TODO need to get 3 diverse sequences, return one pose with one threaded
-        # TODO the other two sequences will be Br1 and Br2
+        # try to get 3 diverse sequences, return one pose with one threaded
+        # the other two sequences will be Br1 and Br2
         passing_decoys = []
         for decoy in generate_decoys_from_pose(
             pose,
@@ -1065,23 +1072,48 @@ def finalize_peptide(
                     )
 
             passing_decoys.append(decoy)
-        # if len(passing_decoys) == 0:
-        #     print_timestamp("No passing sequences, exiting", start_time)
-        #     yield None
-        # elif len(passing_decoys) == 1:
-        #     # just return the one decoy
-        #     print_timestamp("Only one passing sequence, yielding", start_time)
-        #     packed_decoy = io.to_packed(passing_decoys[0])
-        #     yield packed_decoy
-        # else:
-        #     # get the first decoy
-        #     print_timestamp("More than one passing sequence, yielding", start_time)
-        #     to_return = passing_decoys[0]
-        #     putative_seqs = [
-        #         passing_decoy.sequence()
-        #         for passing_decoy in passing_decoys[1:]
-        #     ]
-        #     # rank the sequence list by Levenshtein distance to the first decoy sequence
-
-        #     # make a list of sequences in the decoys
-        #     , get 3 which have high Levenshtein distance from
+        if len(passing_decoys) == 0:
+            yield None
+        elif len(passing_decoys) == 1:
+            to_return = passing_decoys[0]
+            # set chBr[1|2]_seq scores as 'X'
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", "X")
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
+            # just yield the one decoy
+            packed_decoy = io.to_packed(to_return)
+            yield packed_decoy
+        elif len(passing_decoys) == 2:
+            # get the first decoy
+            to_return = passing_decoys[0]
+            # get the sequence of the second decoy
+            chBr1_seq = passing_decoys[1].sequence()
+            # set chBr1_seq score as the other passing sequence
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", "X")
+            # set chBr2_seq score as 'X'
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
+            # yield the first decoy
+            packed_decoy = io.to_packed(to_return)
+            yield packed_decoy
+        else:
+            # get the first decoy
+            to_return = passing_decoys[0]
+            putative_seqs = [
+                passing_decoy.sequence()
+                for passing_decoy in passing_decoys[1:]
+            ]
+            print(putative_seqs) # TODO: remove
+            decoy_seq = to_return.sequence()
+            # rank the sequence list by Levenshtein distance to the first decoy sequence
+            ranked_seqs = sorted(
+                putative_seqs,
+                key=lambda x: levenshtein_distance(decoy_seq, x),
+                reverse=True, # we want the largest distance from the first decoy
+            )
+            # get the first two sequences
+            first_seq, second_seq = ranked_seqs[0], ranked_seqs[1]
+            # add these sequences back into the pose scores
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", first_seq)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", second_seq)
+            # yield the first decoy
+            packed_decoy = io.to_packed(to_return)
+            yield packed_decoy
