@@ -1043,7 +1043,7 @@ def finalize_peptide(
         print_timestamp("Setting up for AF2", start_time)
         # setup with dummy fasta path
         runner = SuperfoldRunner(
-            pose=pose, fasta_path="dummy", load_decoys=True, **kwargs
+            pose=pose, fasta_path="dummy", load_decoys=True, models="1", **kwargs
         )
         # runner.setup_runner(file=fasta_path)
         runner.setup_runner()
