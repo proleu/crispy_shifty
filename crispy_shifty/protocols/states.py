@@ -30,7 +30,6 @@ def yeet_pose_xyz(
     from pyrosetta.rosetta.protocols.toolbox.pose_manipulation import rigid_body_move
 
     assert len(xyz) == 3
-    pose = pose.clone()
     entire = TrueResidueSelector()
     subset = entire.apply(pose)
     # get which direction in cartesian unit vectors (xyz) to yeet pose

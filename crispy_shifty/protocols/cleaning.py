@@ -898,17 +898,25 @@ def finalize_peptide(
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
         original_pose = pose.clone()
-        # yeet chain C
-        chC = pose.split_by_chain()[2]
-        yeet_pose_xyz(chC)
-        # remove chain C from pose, then append the yeeted chain back
-        rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-        rechain.chain_order("12")
-        rechain.apply(pose)
-        pyrosetta.rosetta.core.pose.append_pose_to_pose(pose, chC, new_chain=True)
-        # rebuild PDBInfo
-        rechain.chain_order("123")
-        rechain.apply(pose)
+        # see if kwargs tell us to yeet the pose
+        if "yeet_chain" in kwargs:
+            chain_to_yeet = str(kwargs["yeet_chain"])
+            print_timestamp("Yeeting pose", start_time)
+            rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+            # yeet chain C
+            chC = pose.clone()
+            rechain.chain_order(chain_to_yeet)
+            rechain.apply(chC)
+            yeet_pose_xyz(chC)
+            # remove chain C from pose, then append the yeeted chain back
+            rechain.chain_order("12")
+            rechain.apply(pose)
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(pose, chC, new_chain=True)
+            # rebuild PDBInfo
+            rechain.chain_order("123")
+            rechain.apply(pose)
+        else:
+            pass
         # get the length of the peptide
         chB = pose.clone()
         rechain = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
@@ -980,7 +988,7 @@ def finalize_peptide(
             # get the pose with the highest cms score
             highest_cms_pose = truncations_dict[highest_cms_sub_window]
             # exit the if statement with the highest cms score pose set to pose
-            pose = highest_cms_pose
+            pose = highest_cms_pose.clone()
         else:  # don't need to trim if already 28 or less
             pass
         # make a designable residue selector of only the chB residues
@@ -989,7 +997,7 @@ def finalize_peptide(
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
             design_selector=design_sel,
-            num_sequences=96,
+            num_sequences=48,
             omit_AAs="CX",
             temperature=0.1,
             **kwargs,
@@ -1019,6 +1027,7 @@ def finalize_peptide(
             else:
                 pass
         print_timestamp("Filtering sequences with AF2", start_time)
+        # fold only the bound state
         pose_chains = list(pose.split_by_chain())
         # slice out the bound state, aka chains A and B
         tmp_pose, X_pose = Pose(), Pose()
@@ -1043,7 +1052,7 @@ def finalize_peptide(
         print_timestamp("Setting up for AF2", start_time)
         # setup with dummy fasta path
         runner = SuperfoldRunner(
-            pose=pose, fasta_path="dummy", load_decoys=True, models="1", **kwargs
+            pose=pose, fasta_path="dummy", load_decoys=True, **kwargs
         )
         # runner.setup_runner(file=fasta_path)
         runner.setup_runner()
@@ -1071,9 +1080,8 @@ def finalize_peptide(
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
-            "mean_plddt": (gt, 99.0),
-            # "rmsd_to_reference": (lt, 1.5),
-            # "mean_pae_interaction": (lt, 5),
+            "mean_plddt": (gt, 92.0),
+            "rmsd_to_reference": (lt, 1.5),
         }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
@@ -1100,10 +1108,14 @@ def finalize_peptide(
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
                         decoy, f"Y_{key}", value
                     )
-
+            scores.update(decoy.scores)
+            # fix decoy scores
+            pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
             passing_decoys.append(decoy)
         if len(passing_decoys) == 0:
-            yield None
+            continue # TODO I believe this is correct
         elif len(passing_decoys) == 1:
             to_return = passing_decoys[0]
             # set chBr[1|2]_seq scores as 'X'
@@ -1113,30 +1125,46 @@ def finalize_peptide(
             packed_decoy = io.to_packed(to_return)
             yield packed_decoy
         elif len(passing_decoys) == 2:
+            decoys = list(
+                sorted(
+                    passing_decoys,
+                    key=lambda x: x.scores["Y_mean_pae_interaction"],
+                    reverse=False, # we want the lowest mean_pae_interaction
+                )
+            )
             # get the first decoy
             to_return = passing_decoys[0]
             # get the sequence of the second decoy
-            chBr1_seq = passing_decoys[1].sequence()
+            chBr1_seq = passing_decoys[1].sequence(passing_decoys[1].chain_begin(2), passing_decoys[1].chain_end(2))
             # set chBr1_seq score as the other passing sequence
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", "X")
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", chBr1_seq)
             # set chBr2_seq score as 'X'
             pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
             # yield the first decoy
             packed_decoy = io.to_packed(to_return)
             yield packed_decoy
         else:
+            decoys = list(
+                sorted(
+                    passing_decoys,
+                    key=lambda x: x.scores["Y_mean_pae_interaction"],
+                    reverse=False, # we want the lowest mean_pae_interaction
+                )
+            )
             # get the first decoy
             to_return = passing_decoys[0]
             putative_seqs = [
-                passing_decoy.sequence() for passing_decoy in passing_decoys[1:]
+                passing_decoy.sequence(passing_decoy.chain_begin(2), passing_decoy.chain_end(2))
+                for passing_decoy in passing_decoys[1:]
             ]
-            print(putative_seqs)  # TODO: remove
-            decoy_seq = to_return.sequence()
+            decoy_seq = to_return.sequence(to_return.chain_begin(2), to_return.chain_end(2))
             # rank the sequence list by Levenshtein distance to the first decoy sequence
-            ranked_seqs = sorted(
-                putative_seqs,
-                key=lambda x: levenshtein_distance(decoy_seq, x),
-                reverse=True,  # we want the largest distance from the first decoy
+            ranked_seqs = list(
+                sorted(
+                    putative_seqs,
+                    key=lambda x: levenshtein_distance(decoy_seq, x),
+                    reverse=True,  # we want the largest distance from the first decoy
+                )
             )
             # get the first two sequences
             first_seq, second_seq = ranked_seqs[0], ranked_seqs[1]
