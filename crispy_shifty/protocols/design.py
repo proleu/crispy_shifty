@@ -593,6 +593,65 @@ def struct_profile(pose: Pose, design_sel: ResidueSelector) -> None:
     sp_mover.apply(pose)
 
 
+def seq_profile(
+    pose: Pose, 
+    design_sel: Optional[ResidueSelector] = None,
+    matrix: Optional[str] = "IDENTITY", 
+    weight: Optional[float] = 1.0,
+    scaling: Optional[str] = "prob",
+    seq_profile_source: Optional[str] = "current",
+    seq_profile_fname: Optional[str] = "",
+) -> None:
+    """
+    :param: pose: Pose, the pose to design.
+    :param: design_sel: ResidueSelector, the selection of residues to which to apply the sequence profile.
+    :param: matrix: str, allowed values: "IDENTITY", "MATCH", "BLOSUM62"
+    :param: weight: float, adjust the post-scaling strength of the constraints.
+    :param: scaling: str, allowed values: "prob", "global", "none". Set how to scale the given values. "prob" does a Boltzmann-weighted probability based on the profile score (the unweighted scores for all 20 amino acid identities at any given position sum to -1.0). "global" does a global linear fixed-zero rescaling such that all (pre-weighted) values fall in the range of -1.0 to 1.0. "none" does no adjustment of values.
+    :param: seq_profile_source: str, allowed values: "current", "starting", "native", "fasta", "pssm", "pdb". The source of the sequence profile to use. Current uses the current structure, starting uses the starting input structure, native uses the structure specified by -in:file:native, fasta uses the sequence specified by -in:file:fasta, pssm uses the sequence profile in a blast-formatted pssm file specified by seq_profile_fname, pdb uses the pdb file specified by seq_profile_fname.
+    :param: seq_profile_source: str, the path to a file containing the sequence profile.
+    :return: None.
+    Runs StructProfile with the given design selection. Example usage: to penalize changing the existing residues in a certain region
+    of the pose selected by design_sel, use the following: seq_profile(pose, design_sel, "IDENTITY", 1.0, "prob", "current")
+    """
+
+    import pyrosetta
+
+    if seq_profile_source == "current":
+        src_str = 'use_current="true"'
+    # starting may behave strangely outside of rosettascripts, not sure...
+    elif seq_profile_source == "starting":
+        src_str = 'use_starting="true"'
+    # need to specify -in:file:native
+    elif seq_profile_source == "native":
+        src_str = 'use_native="true"'
+    # need to specify -in:file:fasta
+    elif seq_profile_source == "fasta":
+        src_str = 'use_fasta="true"'
+    # need to point seq_profile_fname to the pssm file
+    elif seq_profile_source == "pssm":
+        src_str = f'pssm="{seq_profile_fname}"'
+    # need to point seq_profile_fname to the pssm file
+    elif seq_profile_source == "pdb":
+        src_str = f'pdbname="{seq_profile_fname}"'
+    else:
+        raise ValueError(f"seq_profile_source must be one of 'current', 'starting', 'native', 'fasta', 'pssm', 'pdb', not {seq_profile_source}")
+    
+    if design_sel is not None:
+        nondesignable_sel = pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(design_sel)
+        exclude_resnums_str = ' exclude_resnums="' + ','.join(str(i) for i in pyrosetta.rosetta.core.select.get_residues_from_subset(nondesignable_sel.apply(pose))) + '"'
+    # can only set the string_exclude_resnums_ internal variable by parsing an xml tag... annoying
+    objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
+        f"""
+        <MOVERS>
+            <FavorSequenceProfile name="seq_profile" matrix={matrix} weight="{weight}" scaling="{scaling}" {src_str}{exclude_resnums_str}/>
+        </MOVERS>
+        """
+    )
+    seq_profile_mover = objs.get_mover("seq_profile")
+    seq_profile_mover.apply(pose)
+
+
 def clear_constraints(pose: Pose) -> None:
     """
     :param: pose: Pose, the pose to design.
