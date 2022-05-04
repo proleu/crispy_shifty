@@ -401,7 +401,7 @@ def redesign_disulfides_fixed(
     <RESIDUE_SELECTORS>
         <ResidueName name="cys" residue_name3="CYS"/>
         <Not name="not_cys" selector="cys"/>
-        <Neighborhood name="around_cys" selector="cys"/>
+        <Neighborhood name="around_cys" selector="cys" distance="6"/>
         <Or name="cys_or_around_cys" selectors="cys,around_cys"/>
         <Not name="not_cys_or_around_cys" selector="cys_or_around_cys"/>
         <Index name="fixed" resnums="{fixed_resis_str}" />
