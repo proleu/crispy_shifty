@@ -168,13 +168,6 @@ def two_state_design_paired_state(
         designed_poses = []
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
-
-        # fix the disulfides in a certain scaffold
-        from crispy_shifty.protocols.cleaning import redesign_disulfides_fixed
-        for ppose in redesign_disulfides_fixed(io.to_packed(pose)):
-            pose = io.to_pose(ppose)
-            break
-
         # get the chains
         chA, chB, chC = (ChainSelector(i) for i in range(1, 4))
         # get the bound interface
@@ -182,6 +175,25 @@ def two_state_design_paired_state(
         # get the chB interface
         chB_interface_sel = AndResidueSelector(chB, interface_sel)
         offset = pose.chain_end(2)
+
+        # fix cysteines that are present in one state but not the other by mutating them to alanine
+        difference_cys_indices = []
+        for i in range(1, pose.chain_end(1) + 1):
+            n1 = str(pose.residue(i).name1())
+            n2 = str(pose.residue(i + offset).name1())
+            if n1 == 'C' and n2 != 'C':
+                difference_cys_indices.append(i)
+            elif n1 != 'C' and n2 == 'C':
+                difference_cys_indices.append(i + offset)
+        if difference_cys_indices:
+            diff_cys_sel = ResidueIndexSelector(','.join(str(i) for i in sorted(difference_cys_indices)))
+            mr = pyrosetta.rosetta.protocols.simple_moves.MutateResidue()
+            mr.set_break_disulfide_bonds(True)
+            mr.set_preserve_atom_coords(True)
+            mr.set_res_name("ALA")
+            mr.set_selector(diff_cys_sel)
+            mr.apply(pose)
+
         # get any residues that differ between chA and chC - starts as a list of tuples
         difference_indices = [
             (i, i + offset)
