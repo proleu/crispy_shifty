@@ -899,9 +899,7 @@ def finalize_peptide(
         # set X AF2 scores as X
         for key, value in pose.scores.items():
             if key in af2_metrics:
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                    pose, f"X_{key}", value
-                )
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, f"X_{key}", value)
             else:
                 pass
         scores = dict(pose.scores)
@@ -1100,7 +1098,7 @@ def finalize_peptide(
             pose,
             filter_dict=filter_dict,
             generate_prediction_decoys=True,
-            label_first=True,
+            label_first=False,
             prefix=prefix,
             rank_on=rank_on,
         ):
@@ -1136,15 +1134,19 @@ def finalize_peptide(
                 sorted(
                     passing_decoys,
                     key=lambda x: x.scores["Y_mean_pae_interaction"],
-                    reverse=False, # we want the lowest mean_pae_interaction
+                    reverse=False,  # we want the lowest mean_pae_interaction
                 )
             )
             # get the first decoy
             to_return = passing_decoys[0]
             # get the sequence of the second decoy
-            chBr1_seq = passing_decoys[1].sequence(passing_decoys[1].chain_begin(2), passing_decoys[1].chain_end(2))
+            chBr1_seq = passing_decoys[1].sequence(
+                passing_decoys[1].chain_begin(2), passing_decoys[1].chain_end(2)
+            )
             # set chBr1_seq score as the other passing sequence
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", chBr1_seq)
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                to_return, "chBr1_seq", chBr1_seq
+            )
             # set chBr2_seq score as 'X'
             pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
             # yield the first decoy
@@ -1155,16 +1157,20 @@ def finalize_peptide(
                 sorted(
                     passing_decoys,
                     key=lambda x: x.scores["Y_mean_pae_interaction"],
-                    reverse=False, # we want the lowest mean_pae_interaction
+                    reverse=False,  # we want the lowest mean_pae_interaction
                 )
             )
             # get the first decoy
             to_return = passing_decoys[0]
             putative_seqs = [
-                passing_decoy.sequence(passing_decoy.chain_begin(2), passing_decoy.chain_end(2))
+                passing_decoy.sequence(
+                    passing_decoy.chain_begin(2), passing_decoy.chain_end(2)
+                )
                 for passing_decoy in passing_decoys[1:]
             ]
-            decoy_seq = to_return.sequence(to_return.chain_begin(2), to_return.chain_end(2))
+            decoy_seq = to_return.sequence(
+                to_return.chain_begin(2), to_return.chain_end(2)
+            )
             # rank the sequence list by Levenshtein distance to the first decoy sequence
             ranked_seqs = list(
                 sorted(
