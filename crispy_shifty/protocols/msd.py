@@ -168,6 +168,13 @@ def two_state_design_paired_state(
         designed_poses = []
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
+
+        # fix the disulfides in a certain scaffold
+        from crispy_shifty.protocols.cleaning import redesign_disulfides_fixed
+        for ppose in redesign_disulfides_fixed(io.to_packed(pose)):
+            pose = io.to_pose(ppose)
+            break
+
         # get the chains
         chA, chB, chC = (ChainSelector(i) for i in range(1, 4))
         # get the bound interface

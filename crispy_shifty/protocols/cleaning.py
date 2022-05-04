@@ -355,6 +355,167 @@ def redesign_disulfides(
 
 
 @requires_init
+def redesign_disulfides_fixed(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param packed_pose_in: PackedPose object.
+    :param kwargs: kwargs such as "pdb_path".
+    :return: Iterator of PackedPose objects with disulfides redesigned.
+    fixbb fastdesign with beta_nov16 on all cys residues using layerdesign.
+    Requires the following init flags:
+    `-corrections::beta_nov16 true`
+    `-detect_disulf false`
+    `-holes:dalphaball /software/rosetta/DAlphaBall.gcc`
+    """
+    from pathlib import Path
+    import sys
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.distributed.tasks.rosetta_scripts import (
+        SingleoutputRosettaScriptsTask,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import (
+        path_to_pose_or_ppose,
+        break_all_disulfides,
+    )
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=False, pack_result=False
+        )
+
+    pyrosetta.rosetta.basic.options.set_boolean_option("in:detect_disulf", False)
+
+    xml = """
+    <ROSETTASCRIPTS>
+    <SCOREFXNS>
+        <ScoreFunction name="sfxn" weights="beta_nov16" symmetric="0"/>
+    </SCOREFXNS>
+    <RESIDUE_SELECTORS>
+        <ResidueName name="cys" residue_name3="CYS"/>
+        <Not name="not_cys" selector="cys"/>
+        <Neighborhood name="around_cys" selector="cys"/>
+        <Or name="cys_or_around_cys" selectors="cys,around_cys"/>
+        <Not name="not_cys_or_around_cys" selector="cys_or_around_cys"/>
+        <Index name="fixed" resnums="{fixed_resis_str}" />
+        <Or name="fixed_or_not_cys_or_around_cys" selectors="fixed,not_cys_or_around_cys"/>
+        <Layer name="surface" select_core="false" select_boundary="false" select_surface="true" use_sidechain_neighbors="true"/>
+        <Layer name="boundary" select_core="false" select_boundary="true" select_surface="false" use_sidechain_neighbors="true"/>
+        <Layer name="core" select_core="true" select_boundary="false" select_surface="false" use_sidechain_neighbors="true"/>
+        <SecondaryStructure name="sheet" overlap="0" minH="3" minE="2" include_terminal_loops="false" use_dssp="true" ss="E"/>
+        <SecondaryStructure name="entire_loop" overlap="0" minH="3" minE="2" include_terminal_loops="true" use_dssp="true" ss="L"/>
+        <SecondaryStructure name="entire_helix" overlap="0" minH="3" minE="2" include_terminal_loops="false" use_dssp="true" ss="H"/>
+        <And name="helix_cap" selectors="entire_loop">
+            <PrimarySequenceNeighborhood lower="1" upper="0" selector="entire_helix"/>
+        </And>
+        <And name="helix_start" selectors="entire_helix">
+            <PrimarySequenceNeighborhood lower="0" upper="1" selector="helix_cap"/>
+        </And>
+        <And name="helix" selectors="entire_helix">
+            <Not selector="helix_start"/>
+        </And>
+        <And name="loop" selectors="entire_loop">
+            <Not selector="helix_cap"/>
+        </And>
+        <Chain name="chA" chains="A" />
+    </RESIDUE_SELECTORS>
+    <TASKOPERATIONS>
+        <RestrictAbsentCanonicalAAS name="design" keep_aas="ADEFGHIKLMNPQRSTVWY"/>
+        <OperateOnResidueSubset name="pack" selector="not_cys">
+        <RestrictToRepackingRLT/>
+        </OperateOnResidueSubset>
+        <OperateOnResidueSubset name="lock" selector="fixed_or_not_cys_or_around_cys">
+        <PreventRepackingRLT/>
+        </OperateOnResidueSubset>
+        <DesignRestrictions name="layer_design">
+        <Action selector_logic="surface AND helix_start"  aas="DEHKPQR"/>
+        <Action selector_logic="surface AND helix"        aas="EHKQR"/>
+        <Action selector_logic="surface AND sheet"        aas="EHKNQRST"/>
+        <Action selector_logic="surface AND loop"         aas="DEGHKNPQRST"/>
+        <Action selector_logic="boundary AND helix_start" aas="ADEHIKLNPQRSTVWY"/>
+        <Action selector_logic="boundary AND helix"       aas="ADEHIKLNQRSTVWYM"/>
+        <Action selector_logic="boundary AND sheet"       aas="DEFHIKLNQRSTVWY"/>
+        <Action selector_logic="boundary AND loop"        aas="ADEFGHIKLNPQRSTVWY"/>
+        <Action selector_logic="core AND helix_start"     aas="AFILVW"/>
+        <Action selector_logic="core AND helix"           aas="AFILVW"/>
+        <Action selector_logic="core AND sheet"           aas="FILVWY"/>
+        <Action selector_logic="core AND loop"            aas="AFGILPVW"/>
+        <Action selector_logic="helix_cap"                aas="DNSTP"/>
+        </DesignRestrictions>
+        <LimitAromaChi2 name="arochi" />
+        <ExtraRotamersGeneric name="ex1_ex2" ex1="1" ex2="1" />
+    </TASKOPERATIONS>
+    <FILTERS>
+        <BuriedUnsatHbonds name="buns_parent" use_reporter_behavior="true" report_all_heavy_atom_unsats="true" scorefxn="sfxn" residue_selector="chA" ignore_surface_res="false" print_out_info_to_pdb="false" confidence="0" use_ddG_style="true" burial_cutoff="0.01" dalphaball_sasa="true" probe_radius="1.1" max_hbond_energy="1.5" burial_cutoff_apo="0.2" />
+        <ExposedHydrophobics name="exposed_hydrophobics_parent" />
+        <Geometry name="geometry_parent" confidence="0" />
+        <Holes name="holes_core_parent" threshold="0.0" residue_selector="core" confidence="0"/>
+        <Holes name="holes_all_parent" threshold="0.0" confidence="0"/>
+        <SSPrediction name="mismatch_probability_parent" confidence="0" cmd="/software/psipred4/runpsipred_single" use_probability="1" mismatch_probability="1" use_svm="1" />
+        <PackStat name="packstat_parent" threshold="0" chain="0" repeats="5"/>
+        <SSShapeComplementarity name="sc_all_parent" verbose="1" loops="1" helices="1" />
+        <ScoreType name="total_score_pose" scorefxn="sfxn" score_type="total_score" threshold="0" confidence="0" />
+        <ResidueCount name="count" />
+        <CalculatorFilter name="score_per_res_parent" equation="total_score_full / res" threshold="-2.0" confidence="0">
+            <Var name="total_score_full" filter="total_score_pose"/>
+            <Var name="res" filter="count"/>
+        </CalculatorFilter>
+    </FILTERS>
+    <SIMPLE_METRICS>
+        <SapScoreMetric name="sap_parent" />
+    </SIMPLE_METRICS>
+    <MOVERS>
+        <FastDesign name="fast_design" scorefxn="sfxn" repeats="2" task_operations="design,pack,lock,layer_design,arochi,ex1_ex2">
+            <MoveMap name="mm" chi="true" bb="false" jump="false" />
+        </FastDesign>
+    </MOVERS>
+    <PROTOCOLS>
+        <Add mover="fast_design"/>
+        <Add filter_name="buns_parent" />
+        <Add filter_name="exposed_hydrophobics_parent" />
+        <Add filter_name="geometry_parent" />
+        <Add filter_name="holes_core_parent"/>
+        <Add filter_name="holes_all_parent"/>
+        <Add filter_name="mismatch_probability_parent" />
+        <Add filter_name="packstat_parent"/>
+        <Add filter_name="sc_all_parent" />
+        <Add filter_name="score_per_res_parent" />
+        <Add metrics="sap_parent" labels="sap_parent" />
+    </PROTOCOLS>
+    </ROSETTASCRIPTS>
+    """
+
+    final_pposes = []
+    for pose in poses:
+        scores = dict(pose.scores)
+        fixed_resis_str = scores["fixed_resis"]
+        fixed_resis = [int(x) for x in fixed_resis_str.split(",")]
+        for resi in fixed_resis:
+            fixed_resis.append(resi + pose.chain_end(2))
+        fixed_resis_str = ",".join([str(x) for x in fixed_resis])
+        design_score = SingleoutputRosettaScriptsTask(xml.format(fixed_resis_str=fixed_resis_str))
+        pose = break_all_disulfides(pose)
+        designed_ppose = design_score(pose.clone())
+        pose = io.to_pose(designed_ppose)
+        scores.update(dict(pose.scores))
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                pose, key, str(value)
+            )  # store values as strings for safety
+        designed_ppose = io.to_packed(pose)
+        final_pposes.append(designed_ppose)
+    for ppose in final_pposes:
+        yield ppose
+
+
+@requires_init
 def prep_input_scaffold(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
 ) -> Iterator[PackedPose]:
