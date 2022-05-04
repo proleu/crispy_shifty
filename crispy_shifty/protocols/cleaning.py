@@ -896,6 +896,14 @@ def finalize_peptide(
         )
     for pose in poses:
         pose.update_residue_neighbors()
+        # set X AF2 scores as X
+        for key, value in pose.scores.items():
+            if key in af2_metrics:
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    pose, f"X_{key}", value
+                )
+            else:
+                pass
         scores = dict(pose.scores)
         original_pose = pose.clone()
         # see if kwargs tell us to yeet the pose
@@ -997,7 +1005,7 @@ def finalize_peptide(
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
             design_selector=design_sel,
-            num_sequences=48,
+            num_sequences=96,
             omit_AAs="CX",
             temperature=0.1,
             **kwargs,
@@ -1115,7 +1123,7 @@ def finalize_peptide(
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
             passing_decoys.append(decoy)
         if len(passing_decoys) == 0:
-            continue # TODO I believe this is correct
+            continue
         elif len(passing_decoys) == 1:
             to_return = passing_decoys[0]
             # set chBr[1|2]_seq scores as 'X'
