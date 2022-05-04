@@ -905,7 +905,6 @@ def finalize_peptide(
             else:
                 pass
         scores = dict(pose.scores)
-        original_pose = pose.clone()
         # see if kwargs tell us to yeet the pose
         if "yeet_chain" in kwargs:
             chain_to_yeet = str(kwargs["yeet_chain"])
