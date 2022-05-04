@@ -1002,7 +1002,7 @@ def finalize_peptide(
         # construct the MPNNDesign object
         mpnn_design = MPNNDesign(
             design_selector=design_sel,
-            num_sequences=96,
+            num_sequences=64,
             omit_AAs="CX",
             temperature=0.1,
             **kwargs,
