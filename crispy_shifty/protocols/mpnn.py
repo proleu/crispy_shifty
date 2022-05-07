@@ -783,10 +783,13 @@ def mpnn_paired_state(
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
         ChainSelector,
+        AndResidueSelector,
         OrResidueSelector,
+        NotResidueSelector,
         NeighborhoodResidueSelector,
         ResidueIndexSelector,
         TrueResidueSelector,
+        FalseResidueSelector,
     )
 
     # insert the root of the repo into the sys.path
@@ -829,7 +832,11 @@ def mpnn_paired_state(
     neighborhood_selector = NeighborhoodResidueSelector(
         interface_selector, distance=8.0, include_focus_in_subset=True
     )
-    full_selector = TrueResidueSelector()
+    # full_selector = TrueResidueSelector()
+    full_selector = OrResidueSelector()
+    full_selector.add_residue_selector(chA)
+    full_selector.add_residue_selector(chB)
+    full_selector.add_residue_selector(chC)
     selector_options = {
         "full": full_selector,
         "interface": interface_selector,
@@ -858,6 +865,13 @@ def mpnn_paired_state(
     for pose in poses:
         pose.update_residue_neighbors()
         scores = dict(pose.scores)
+        # don't design any fixed residues
+        fixed_sel = FalseResidueSelector()
+        if "fixed_resis" in scores:
+            fixed_resi_str = scores["fixed_resis"]
+            # handle an empty string
+            if fixed_resi_str:
+                fixed_sel = ResidueIndexSelector(fixed_resi_str)
         original_pose = pose.clone()
         # get the length of state Y
         offset = pose.chain_end(2)
@@ -875,7 +889,10 @@ def mpnn_paired_state(
         print_timestamp(f"Beginning {num_conditions} MPNNDesign runs", start_time)
         for i, (mpnn_temperature, mpnn_design_area) in enumerate(list(mpnn_conditions)):
             pose = original_pose.clone()
-            design_selector = OrResidueSelector(mpnn_design_area, X_selector)
+            design_sel = AndResidueSelector(
+                OrResidueSelector(mpnn_design_area, X_selector),
+                NotResidueSelector(fixed_sel)
+            )
             print_timestamp(
                 f"Beginning MPNNDesign run {i+1}/{num_conditions}", start_time
             )
@@ -883,7 +900,7 @@ def mpnn_paired_state(
             print_timestamp("Multistate design with MPNN", start_time)
             # construct the MPNNMultistateDesign object
             mpnn_design = MPNNMultistateDesign(
-                design_selector=design_selector,
+                design_selector=design_sel,
                 residue_selectors=residue_selectors,
                 omit_AAs="CX",
                 **kwargs,
