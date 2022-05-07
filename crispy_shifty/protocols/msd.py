@@ -159,6 +159,10 @@ def two_state_design_paired_state(
         poses = path_to_pose_or_ppose(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
+    skip_resi_subtype_check = False
+    if "skip_resi_subtype_check" in kwargs:
+        if kwargs["skip_resi_subtype_check"].lower() == "true":
+            skip_resi_subtype_check = True
     # gogogo
     for pose in poses:
         start_time = time()
@@ -195,11 +199,18 @@ def two_state_design_paired_state(
             mr.apply(pose)
 
         # get any residues that differ between chA and chC - starts as a list of tuples
-        difference_indices = [
-            (i, i + offset)
-            for i in range(1, pose.chain_end(1) + 1)
-            if pose.residue(i).name() != pose.residue(i + offset).name()
-        ]
+        if skip_resi_subtype_check:
+            difference_indices = [
+                (i, i + offset)
+                for i in range(1, pose.chain_end(1) + 1)
+                if pose.residue(i).name1() != pose.residue(i + offset).name1()
+            ]
+        else:
+            difference_indices = [
+                (i, i + offset)
+                for i in range(1, pose.chain_end(1) + 1)
+                if pose.residue(i).name() != pose.residue(i + offset).name()
+            ]
         # flatten the list of tuples into a sorted list of indices
         difference_indices = sorted(sum(difference_indices, ()))
         # make a residue selector for the difference indices
