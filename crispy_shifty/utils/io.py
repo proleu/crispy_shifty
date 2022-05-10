@@ -879,8 +879,8 @@ def gen_array_tasks(
 
 def collect_score_file(output_path: str, score_dir_name: str = "scores") -> None:
     """
-    :param output_path: path to the directory where the score dir is in.
-    :param score_dir_name: name of the directory where the score files are in.
+    :param: output_path: path to the directory where the score dir is in.
+    :param: score_dir_name: name of the directory where the score files are in.
     :return: None
     Collects all the score files in the `score_dir_name` subdirectory of the
     `output_path` directory. Concatenates them into a single file in the
@@ -895,6 +895,40 @@ def collect_score_file(output_path: str, score_dir_name: str = "scores") -> None
         for score_file in iglob(os.path.join(score_dir, "*", "*.json")):
             with open(score_file, "r") as f:
                 scores_file.write(f.read() + "\n")
+    return
+
+
+def collect_and_clean_score_file(
+    output_path: str, drop: str, score_dir_name: str = "scores"
+) -> None:
+    """
+    :param: output_path: path to the directory where the score dir is in.
+    :param: drop: keys containing this string will be erased from scorefiles.
+    :param: score_dir_name: name of the directory where the score files are in.
+    :return: None
+    Collects all the score files in the `score_dir_name` subdirectory of the
+    `output_path` directory. Concatenates them into a single file in the
+    `output_path` directory.
+    """
+
+    import json
+    import os
+    from glob import iglob
+    from tqdm.auto import tqdm
+
+    score_dir = os.path.join(output_path, score_dir_name)
+    with open(os.path.join(output_path, "scores.json"), "w") as scores_file:
+        for score_file in tqdm(iglob(os.path.join(score_dir, "*", "*.json"))):
+            with open(score_file, "r") as f:
+                full_score_dict = json.loads(f.read())
+                cleaned_score_dict = {}
+                for index_key, score_dict in full_score_dict.items():
+                    cleaned_score_dict[index_key] = {
+                        k: v for k, v in score_dict.items() if drop not in k
+                    }
+            with open(score_file, "w") as f:
+                print(json.dumps(cleaned_score_dict), file=f)
+            scores_file.write(json.dumps(cleaned_score_dict) + "\n")
     return
 
 
