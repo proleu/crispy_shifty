@@ -320,7 +320,7 @@ def filter_paired_state(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import (  # add_metadata_to_pose,
+    from crispy_shifty.protocols.design import (
         gen_std_layer_design,
         gen_task_factory,
         pack_rotamers,
