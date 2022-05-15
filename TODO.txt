@@ -1,21 +1,21 @@
 dev TODOs:
-    - TAR/delete old stuff
+    - fix old and new final scores csv by bz2 index, saving list of old erroneous cs names
+    - reanalyze SEC of Br2's based on this info
+    - crispy_shifty_junctions
     - pynvim in crispy env
     - crispy crispy stuff
     - check FF63/65, FF74/5/7, FF129, cs_094 states and resample
-    - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
-    - finish miseq analysis
     - ordering utils, domesticator?
         - add 669 and 671 to vectors
     - use Bio SeqIO for fasta wrangling?
     - stapling and repredicting
     - TODOs and docstrings in all modules
     - update mpnn.py to enable new options
-    - project ouroboros
+    - project ouroboros: copy scaffolds for Spellock
 
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - add a new yaml with dnachisel stuff, updated pyrosetta and new pystapler
-    - finalize env.yml by making conda consistent
+    - finalize env.yml by making conda consistent with new JAX cuda build
         - do it when no one is has crispy env active
         - add crispy kernel to ipython kernelspecs on janelia
         - test python interpreter finding with git root on janelia
@@ -23,17 +23,15 @@ dev TODOs:
     - agg clustering of States before and after plot instead of piecharts
 
     - if really bored
-        - run crispy_shifty_junctions
         - rewrite mpnn.py to directly generate some jsons etc? 
             - maybe a bad idea with current pace of mpnn development
         - add documentation to the InsertResMover and PR
         - SafeSwitchChainOrderMover in python, then CPP?
 
-    - DOTFILES - check init.vim is working, then version control
+    - DOTFILES - version control
     - make `almost_inpainting` blueprint builder func 
 
 TODO: 
-    09 detail and filter # run
     10 order and analyze
 
 crispy_crispies:

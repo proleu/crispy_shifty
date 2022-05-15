@@ -1270,6 +1270,7 @@ def one_state_design_bound_state(
             score_per_res(pose, clean_sfxn)
             score_filter = gen_score_filter(clean_sfxn)
             add_metadata_to_pose(pose, "path_in", pdb_path)
+            print("complete.")
             end_time = time()
             total_time = end_time - start_time
             print_timestamp(

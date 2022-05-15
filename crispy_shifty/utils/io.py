@@ -914,6 +914,7 @@ def collect_and_clean_score_file(
     import json
     import os
     from glob import iglob
+
     from tqdm.auto import tqdm
 
     score_dir = os.path.join(output_path, score_dir_name)
