@@ -12,6 +12,27 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 
+def delta_rg(pose_a: Pose, pose_b: Pose) -> float:
+    """
+    :param: pose_a: First pose.
+    :param: pose_b: Second pose.
+    :return: Difference in Rg between poses (b - a).
+    Compute the difference in radius of gyration between two poses.
+    """
+    import pyrosetta
+    
+    # get centers of masses for each pose
+    a_com = pyrosetta.rosetta.core.pose.get_center_of_mass(pose_a)
+    b_com = pyrosetta.rosetta.core.pose.get_center_of_mass(pose_b)
+    # get radius of gyration for each pose
+    all_residues = pyrosetta.rosetta.core.select.residue_selector.TrueResidueSelector()
+    a_residues = all_residues.apply(pose_a)
+    b_residues = all_residues.apply(pose_b)
+    a_rg = pyrosetta.rosetta.core.pose.radius_of_gyration(pose_a, a_com, a_residues)
+    b_rg = pyrosetta.rosetta.core.pose.radius_of_gyration(pose_b, b_com, b_residues)
+    delta_rg = b_rg - a_rg
+    return delta_rg
+    
 
 def yeet_pose_xyz(
     pose: Pose,
