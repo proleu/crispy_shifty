@@ -970,6 +970,14 @@ def fold_paired_state_Y(
                 pyrosetta.rosetta.core.pose.append_pose_to_pose(
                     decoy, other_chain, new_chain=True
                 )
+
+            # clean ostensibly disulfide-bonded cysteins individually because they have unspecified partners
+            seq = decoy.sequence()
+            all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
+            for i in all_cys_resi_indexes:
+                if decoy.conformation().residue(i).type().is_disulfide_bonded():
+                    pyrosetta.rosetta.core.conformation.change_cys_state(i, "", decoy.conformation())
+
             # get the chA sequence
             chA_seq = decoy.chain_sequence(1) #list(decoy.split_by_chain())[0].sequence()
             # setup SimpleThreadingMover
