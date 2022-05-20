@@ -901,16 +901,12 @@ def fold_paired_state_Y(
         tmp_fasta_dict = fasta_to_dict(fasta_path)
         pose_chains = list(pose.split_by_chain())
         # slice out the bound state, aka chains A and B
-        tmp_pose, X_pose = Pose(), Pose()
+        tmp_pose = Pose()
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[0], new_chain=True
         )
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[1], new_chain=True
-        )
-        # slice out the free state, aka chain C
-        pyrosetta.rosetta.core.pose.append_pose_to_pose(
-            X_pose, pose_chains[2], new_chain=True
         )
         # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
         tmp_fasta_dict = {
@@ -946,11 +942,18 @@ def fold_paired_state_Y(
         for key, value in scores.items():
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
+        # Adam's for filtering orthogonal peptide switches
         filter_dict = {
-            "mean_plddt": (gt, 92.0),
-            "rmsd_to_reference": (lt, 1.5),
-            "mean_pae_interaction": (lt, 5),
+            "mean_plddt": (gt, 85),
+            "rmsd_to_reference": (lt, 3),
+            "mean_pae_interaction": (lt, 10),
         }
+        # Phil's for filtering crispy shifties
+        # filter_dict = {
+        #     "mean_plddt": (gt, 92.0),
+        #     "rmsd_to_reference": (lt, 1.5),
+        #     "mean_pae_interaction": (lt, 5),
+        # }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         print_timestamp("Generating decoys", start_time)
@@ -963,11 +966,12 @@ def fold_paired_state_Y(
             rank_on=rank_on,
         ):
             # add the free state back into the decoy
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                decoy, X_pose, new_chain=True
-            )
+            for other_chain in pose_chains[2:]:
+                pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                    decoy, other_chain, new_chain=True
+                )
             # get the chA sequence
-            chA_seq = list(decoy.split_by_chain())[0].sequence()
+            chA_seq = decoy.chain_sequence(1) #list(decoy.split_by_chain())[0].sequence()
             # setup SimpleThreadingMover
             stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
             # thread the sequence from chA onto chA
