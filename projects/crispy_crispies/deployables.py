@@ -221,3 +221,88 @@ def fold_binder(
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
 
+@requires_init
+def fold_unbound(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to fold with the Superfold script.
+    :param: kwargs: keyword arguments to be passed to the Superfold script.
+    :return: an iterator of PackedPose objects.
+    """
+
+    import os
+    import sys
+    from pathlib import Path
+    from time import time
+
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.pose import Pose
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
+    from crispy_shifty.utils.io import cmd, print_timestamp
+
+    start_time = time()
+    # get the pdb_path from the kwargs
+    pdb_path = kwargs.pop("pdb_path")
+    # there are multiple paths in the pdb_path, we need to split them and rejoin them
+    pdb_paths = pdb_path.split("____")
+    pdb_path = " ".join(pdb_paths)
+
+    # this function is special, we don't want a packed_pose_in ever, we maintain it as
+    # a kwarg for backward compatibility with PyRosettaCluster
+    if packed_pose_in is not None:
+        raise ValueError("This function is not intended to have a packed_pose_in")
+    else:
+        pass
+
+    print_timestamp("Setting up for AF2", start_time)
+    runner = SuperfoldMultiPDB(input_file=pdb_path, load_decoys=True, **kwargs)
+    runner.setup_runner(chains_to_keep=[1])
+    print_timestamp("Running AF2", start_time)
+    runner.apply()
+    print_timestamp("AF2 complete, updating pose datacache", start_time)
+    # get the updated poses from the runner
+    tag_pose_dict = runner.get_tag_pose_dict()
+    # filter the decoys
+    filter_dict = {
+        "mean_plddt": (gt, 90.0),
+        "rmsd_to_input": (lt, 2.0),
+    }
+    rank_on = "mean_plddt"
+    print_timestamp("Generating decoys", start_time)
+    for tag, pose in tag_pose_dict.items():
+        for decoy in generate_decoys_from_pose(
+            pose,
+            filter_dict=filter_dict,
+            generate_prediction_decoys=False,
+            label_first=False,
+            prefix=tag,
+            rank_on=rank_on,
+        ):
+            scores = dict(decoy.scores)
+            bound_pose = None
+            for original_path in pdb_paths:
+                if tag in original_path:
+                    bound_pose = next(
+                        path_to_pose_or_ppose(
+                            path=original_path, cluster_scores=True, pack_result=False
+                        )
+                    )
+                    final_pose = Pose()
+                    break
+                else:
+                    continue
+            if bound_pose is None:
+                raise RuntimeError
+            else:
+                pass
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(bound_pose, key, value)
+            final_ppose = io.to_packed(final_pose)
+            yield final_ppose
+
