@@ -1,11 +1,12 @@
 dev TODOs:
     - reanalyze SEC of Br2's based on this info
+    - update mpnn.py to enable new options + ligand + FAMPNN
     - crispy_shifty_junctions
     - crispy crispy stuff
     - ordering utils, domesticator
         - add 669 and 671 to vectors
     - TODOs and docstrings in all modules
-    - update mpnn.py to enable new options + ligand + FAMPNN
+    - plotting and curve fitting functions for FP
 
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - finalize yaml with updated pyrosetta, pynvim and new pystapler
@@ -25,7 +26,7 @@ TODO:
     10 order and analyze
 
 crispy_crispies:
-    - af2 apo, af2 apo of svt hits sap/interface/net charge of svt hits
+    - sap/interface/net charge of svt hits?
     - mpnn redesign of svt hits (with buttressing helixes?)
     - order GLP1 plate?
     - pos/neg design with crossdocking within glucagon family?
