@@ -1,5 +1,8 @@
 dev TODOs:
-    - reanalyze SEC of Br2's based on this info
+    - fix 4/8 and 4/13 orders, add 3/16
+    	- 4/8 has mixed up chains
+    	- 4/13 most chain B names are wrong
+    	
     - update mpnn.py to enable new options + ligand + FAMPNN
     - crispy_shifty_junctions
     - crispy crispy stuff
