@@ -3,9 +3,12 @@ dev TODOs:
     	- 4/8 has mixed up chains
     	- 4/13 most chain B names are wrong
     	
-    - update mpnn.py to enable new options + ligand + FAMPNN
-    - crispy_shifty_junctions
+    - update mpnn.py to enable new options + ligand + FAMPNN (+ DNA/RNA?)
+    - benchmark options
+    - crispy_shifty_junctions 03
+    - save $HOSTNAME in output files
     - crispy crispy stuff
+
     - ordering utils, domesticator
         - add 669 and 671 to vectors
     - TODOs and docstrings in all modules
