@@ -4,6 +4,7 @@ dev TODOs:
     	- 4/13 most chain B names are wrong
     	
     - update mpnn.py to enable new options + ligand + FAMPNN (+ DNA/RNA?)
+    - fix to be compatible with Justas's new CLI
     - benchmark options
     - crispy_shifty_junctions 03
     - save $HOSTNAME in output files
