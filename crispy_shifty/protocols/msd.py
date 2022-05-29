@@ -340,7 +340,7 @@ def filter_paired_state(
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
         ChainSelector,
-        TrueResidueSelector,
+        FalseResidueSelector,
     )
 
     # insert the root of the repo into the sys.path
@@ -375,8 +375,9 @@ def filter_paired_state(
         )
     # make a repack only task factory
     task_factory = gen_task_factory(
-        design_sel=TrueResidueSelector(),
-        pack_nbhd=True,
+        design_sel=FalseResidueSelector(),
+        pack_nbhd=False,
+        pack_nondesignable=True,
         extra_rotamers_level=2,
         limit_arochi=True,
         prune_buns=True,
@@ -386,9 +387,6 @@ def filter_paired_state(
         ifcl=True,
         layer_design=gen_std_layer_design(),
     )
-    # add repack only to the task factory
-    rtrp = pyrosetta.rosetta.core.pack.task.operation.RestrictToRepacking()
-    task_factory.push_back(rtrp)
     # gogogo
     for pose in poses:
         start_time = time()
