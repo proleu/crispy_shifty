@@ -1018,6 +1018,7 @@ def fold_paired_state_X(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
+    from crispy_shifty.protocols.states import range_CA_align
     from crispy_shifty.utils.io import cmd, print_timestamp
 
     start_time = time()
@@ -1043,14 +1044,19 @@ def fold_paired_state_X(
     # get the updated poses from the runner
     tag_pose_dict = runner.get_tag_pose_dict()
     # filter the decoys
+    # Adam's for filtering orthogonal peptide switches
     filter_dict = {
-        "mean_plddt": (gt, 90.0),
-        "rmsd_to_input": (lt, 1.75),
+        "mean_plddt": (gt, 85),
+        "rmsd_to_input": (lt, 2),
     }
+    # Phil's for filtering crispy shifties
+    # filter_dict = {
+    #     "mean_plddt": (gt, 90.0),
+    #     "rmsd_to_input": (lt, 1.75),
+    # }
     rank_on = "mean_plddt"
     print_timestamp("Generating decoys", start_time)
     sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-    sw.chain_order("123")
     for tag, pose in tag_pose_dict.items():
         for decoy in generate_decoys_from_pose(
             pose,
@@ -1071,14 +1077,23 @@ def fold_paired_state_X(
                     )
                     final_pose = Pose()
                     # get the first two chains from the input
-                    for chain in list(bound_pose.split_by_chain())[:2]:
+                    bound_split = list(bound_pose.split_by_chain())
+                    for chain in bound_split[:2]:
                         pyrosetta.rosetta.core.pose.append_pose_to_pose(
                             final_pose, chain, new_chain=True
                         )
-                    # TODO: yeet decoy
+                    # yeet decoy
+                    # aligning rather than yeeting keep state X in the correct orientation relative to other stuff that might be in the pose
+                    range_CA_align(decoy, bound_split[2], 1, decoy.size(), 1, bound_split[2].size())
                     pyrosetta.rosetta.core.pose.append_pose_to_pose(
                         final_pose, decoy, new_chain=True
                     )
+                    if len(bound_split) > 3:
+                        for chain in bound_split[3:]:
+                            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                                final_pose, chain, new_chain=True
+                            )
+                    sw.chain_order("".join(str(i+1) for i in range(bound_pose.num_chains())))
                     sw.apply(final_pose)
                     break
                 else:
