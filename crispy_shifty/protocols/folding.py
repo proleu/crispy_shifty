@@ -884,6 +884,10 @@ def fold_paired_state_Y(
     pdb_path = kwargs.pop("pdb_path")
     pdb_path, fasta_path = tuple(pdb_path.split("____"))
 
+    clean_disulfides = False
+    if kwargs.pop("clean_disulfides").lower() == "true":
+        clean_disulfides = True
+
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
@@ -971,12 +975,13 @@ def fold_paired_state_Y(
                     decoy, other_chain, new_chain=True
                 )
 
-            # clean ostensibly disulfide-bonded cysteins individually because they have unspecified partners
-            seq = decoy.sequence()
-            all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
-            for i in all_cys_resi_indexes:
-                if decoy.conformation().residue(i).type().is_disulfide_bonded():
-                    pyrosetta.rosetta.core.conformation.change_cys_state(i, "", decoy.conformation())
+            # clean ostensibly disulfide-bonded cysteines individually because they have unspecified partners
+            if clean_disulfides:
+                seq = decoy.sequence()
+                all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
+                for i in all_cys_resi_indexes:
+                    if decoy.conformation().residue(i).type().is_disulfide_bonded():
+                        pyrosetta.rosetta.core.conformation.change_cys_state(i, "", decoy.conformation())
 
             # get the chA sequence
             chA_seq = decoy.chain_sequence(1) #list(decoy.split_by_chain())[0].sequence()

@@ -416,15 +416,20 @@ def filter_paired_state(
         }
         scores.update(Y_scores)
 
-        for chain, chain_id in zip(list(pose.split_by_chain()), "ABC"):
+        sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sw.chain_order("1")
+
+        for solo_chain, chain_id in zip(list(pose.split_by_chain()), "ABC"):
             print_timestamp(f"Scoring {chain_id}...", start_time=start_time)
+            # currently commented out because it should be fine to use the pose straight out of split_by_chain, and append_pose_to_pose somehow messes up disulfides
             # make a solo copy of the chain
-            solo_chain = Pose()
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                solo_chain,
-                chain,
-                new_chain=True,
-            )
+            # solo_chain = Pose()
+            # pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            #     solo_chain,
+            #     chain,
+            #     new_chain=True,
+            # )
+            sw.apply(solo_chain)
             # repack the chain
             pack_rotamers(
                 pose=solo_chain, task_factory=task_factory, scorefxn=clean_sfxn
