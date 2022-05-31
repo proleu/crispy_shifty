@@ -144,6 +144,7 @@ class MPNNRunner(ABC):
     def __init__(
         self,
         batch_size: Optional[int] = 8,
+        model_name: Optional[str] = "v_48_010",
         num_sequences: Optional[int] = 64,
         omit_AAs: Optional[str] = "X",
         temperature: Optional[float] = 0.1,
@@ -154,6 +155,8 @@ class MPNNRunner(ABC):
         """
         Initialize the base class for MPNN runners with common attributes.
         :param: batch_size: number of sequences to generate per batch.
+        :param: model_name: name of the model to use. v_48_010 is probably best, v_32* 
+        variants use less memory.
         :param: num_sequences: number of sequences to generate in total.
         :param: omit_AAs: concatenated string of amino acids to omit from the sequence.
         :param: temperature: temperature to use for the MPNN.
@@ -163,12 +166,14 @@ class MPNNRunner(ABC):
         If a `chains_to_mask` is provided, the runner will run on (mask) only that chain.
         If no `design_selector` is provided, all residues on all masked chains will be designed.
         The chain letters in your PDB must be correct.
-        Does not allow the use of --score_only.
+        Does not allow the use of --score_only, --conditional_probs_only, or 
+        --conditional_probs_only_backbone.
         """
 
         from pathlib import Path
 
         self.batch_size = batch_size
+        self.model_name = model_name
         self.num_sequences = num_sequences
         self.omit_AAs = omit_AAs
         self.temperature = temperature
@@ -177,19 +182,14 @@ class MPNNRunner(ABC):
         # setup standard command line flags for MPNN with default values
         self.flags = {
             "--backbone_noise": "0.0",
-            "--checkpoint_path": f"{str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'model_weigths' / 'p17' / 'epoch150_step235456.pt')}",
-            # it's an older path but it checks out
-            # "--checkpoint_path": "/home/justas/projects/lab_github/proteinmpnn/model_weigths/p58/epoch514_step807206.pt",
-            "--hidden_dim": "128",
             "--max_length": "20000",
-            "--num_connections": "64",
-            "--num_layers": "3",
         }
         # add the flags that are required by MPNN and provided by the user
         self.flags.update(
             {
                 "--batch_size": str(self.batch_size),
                 "--num_seq_per_target": str(self.num_sequences),
+                "--model_name": self.model_name,
                 "--omit_AAs": self.omit_AAs,
                 "--sampling_temp": str(self.temperature),
             }
@@ -197,14 +197,11 @@ class MPNNRunner(ABC):
         self.allowed_flags = [
             # flags that have default values that are provided by the runner:
             "--backbone_noise",
-            "--checkpoint_path",
-            "--hidden_dim",
             "--max_length",
-            "--num_connections",
-            "--num_layers",
             # flags that are set by MPNNRunner constructor:
             "--batch_size",
             "--num_seq_per_target",
+            "--model_name",
             "--omit_AAs",
             "--sampling_temp",
             # flags that are required and are set by MPNNRunner or children:
@@ -214,8 +211,10 @@ class MPNNRunner(ABC):
             "--out_folder",
             # flags that are optional and are set by MPNNRunner or children:
             "--bias_AA_jsonl",
+            "--bias_by_res_jsonl",
             "--omit_AA_jsonl",
             "--tied_positions_jsonl",
+            "--path_to_model_weights",
             "--pdb_path",
             "--pdb_path_chains",
             "--pssm_bias_flag",
@@ -343,6 +342,8 @@ class MPNNRunner(ABC):
             python = "/projects/crispy_shifty/envs/crispy/bin/python"
         run_cmd = " ".join(
             [
+                # TODO maybe make this flexible for use with other MPNN versions
+                # TODO could add a flag to specify the MPNN version or something
                 f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'helper_scripts' / 'parse_multiple_chains.py')}",
                 f"--input_path {self.tmpdir}",
                 f"--output_path {biounit_path}",
