@@ -69,6 +69,7 @@ def generate_decoys_from_pose(
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.pose import setPoseExtraScore
+    from copy import deepcopy
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.mpnn import thread_full_sequence
@@ -92,6 +93,8 @@ def generate_decoys_from_pose(
         except json.decoder.JSONDecodeError:
             print(f"Could not load json string for {tag}")
             continue
+        # for k, v in results.items():
+        #     io.to_pose(io.pose_from_pdbstring(v["decoy_pdbstring"])).dump_pdb(k)
         # anything that doesn't have a seq or results is a problem, once loaded
         if "seq" not in results.keys():
             raise ValueError(
@@ -131,7 +134,7 @@ def generate_decoys_from_pose(
                     "This is required for generating decoys."
                 )
             # get the top result
-            top_results = [model_seed_results[0][1]]
+            top_results = [deepcopy(model_seed_results[0][1])]
             if add_alt_model_scores:
                 for model_seed, other_result in model_seed_results:
                     # get the scores for the other results and add to the top result
@@ -505,7 +508,7 @@ class SuperfoldRunner:
         import json, os, sys
         import pyrosetta
         import pyrosetta.distributed.io as io
-        from pyrosetta.rosetta.core.pose import setPoseExtraScore
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore, clearPoseExtraScores
 
         # setup the tmpdir
         self.setup_tmpdir()
@@ -517,7 +520,9 @@ class SuperfoldRunner:
             self.input_file = os.path.join(out_path, "tmp.pdb")
         # write the pose to a clean PDB file of only ATOM coordinates.
         tmp_pdb_path = os.path.join(out_path, "tmp.pdb")
-        pdbstring = io.to_pdbstring(self.pose)
+        new_pose = self.pose.clone()
+        clearPoseExtraScores(new_pose) # highly important, otherwise pdbstrings in the scores get added to the pose lol
+        pdbstring = io.to_pdbstring(new_pose)
         with open(tmp_pdb_path, "w") as f:
             f.write(pdbstring)
         if self.save_original_pose:
@@ -670,7 +675,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
         from pathlib import Path
         import pyrosetta
         import pyrosetta.distributed.io as io
-        from pyrosetta.rosetta.core.pose import setPoseExtraScore
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore, clearPoseExtraScores
 
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -695,7 +700,9 @@ class SuperfoldMultiPDB(SuperfoldRunner):
         # write the poses to clean PDB files of only ATOM coordinates.
         for tag, pose in self.tag_pose_dict.items():
             if self.save_original_pose:
-                setPoseExtraScore(pose, "original_pose", io.to_pdbstring(pose))
+                new_pose = pose.clone()
+                clearPoseExtraScores(new_pose) # highly important, otherwise pdbstrings in the scores get added to the pose lol
+                setPoseExtraScore(pose, "original_pose", io.to_pdbstring(new_pose))
             tmp_pdb_path = os.path.join(self.tmpdir, f"{tag}.pdb")
             if chains_to_keep is not None:
                 # get the chains to keep
@@ -710,7 +717,9 @@ class SuperfoldMultiPDB(SuperfoldRunner):
                         pass
                 pdbstring = io.to_pdbstring(new_pose)
             else:
-                pdbstring = io.to_pdbstring(pose)
+                new_pose = pose.clone()
+                clearPoseExtraScores(new_pose)
+                pdbstring = io.to_pdbstring(new_pose)
             with open(tmp_pdb_path, "w") as f:
                 f.write(pdbstring)
         # get a list of the PDB files in the tmpdir
@@ -1178,7 +1187,8 @@ def fold_paired_state_all(
     tag_pose_dict = runner.get_tag_pose_dict()
     # don't filter the decoys
     filter_dict = {}
-    rank_on = "mean_plddt"
+    # would rank on mean_plddt but this could create a situation where the best plddt model is folded into the incorrect state
+    rank_on = "rmsd_to_input"
     print_timestamp("Generating decoys", start_time)
     sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
     for tag, pose in tag_pose_dict.items():
@@ -1204,7 +1214,7 @@ def fold_paired_state_all(
                 pyrosetta.rosetta.core.pose.append_pose_to_pose(
                     out_pose, chain, new_chain=True
                 )
-            sw.chain_order("".join(str(i+1) for i in range(out_pose.num_chains())))
+            sw.chain_order("".join(str(i+1) for i in range(len(original_split))))
             sw.apply(out_pose)
             for key, value in scores.items():
                 # rename af2 metrics to have Y_ prefix
@@ -1224,10 +1234,7 @@ def fold_paired_state_all(
     # get the updated poses from the runner
     tag_pose_dict = runner.get_tag_pose_dict()
     # don't filter the decoys
-    filter_dict = {}
-    rank_on = "mean_plddt"
     print_timestamp("Generating decoys", start_time)
-    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
     for tag, pose in tag_pose_dict.items():
         for decoy in generate_decoys_from_pose(
             pose,
@@ -1239,7 +1246,7 @@ def fold_paired_state_all(
             add_alt_model_scores=True,
         ):
             scores = dict(decoy.scores)
-            original_pose = io.to_pose(io.pose_from_pdbstring(scores["original_pose"]))
+            original_pose = io.to_pose(io.pose_from_pdbstring(scores.pop("original_pose")))
             out_pose = Pose()
             # get the rest of the chains from the input
             original_split = list(original_pose.split_by_chain())
@@ -1258,7 +1265,7 @@ def fold_paired_state_all(
                     pyrosetta.rosetta.core.pose.append_pose_to_pose(
                         out_pose, chain, new_chain=True
                     )
-            sw.chain_order("".join(str(i+1) for i in range(original_pose.num_chains())))
+            sw.chain_order("".join(str(i+1) for i in range(len(original_split))))
             sw.apply(out_pose)
             Y_sel = ChainSelector("A")
             X_sel = ChainSelector("C")
@@ -1268,13 +1275,15 @@ def fold_paired_state_all(
                     alt_pose = io.to_pose(io.pose_from_pdbstring(value))
                     if "Y_" in key:
                         score_name = key.split("__")[0] + "__rmsd_to_X"
-                        score_rmsd(out_pose, alt_pose, sel=X_sel, name=score_name)
+                        # need refsel because Y alt_poses have two chains; I only want the rmsd of the hinge
+                        score_rmsd(out_pose, alt_pose, sel=X_sel, refsel=Y_sel, name=score_name)
                     else:
-                        score_name = key.split("__")[0] + "__rmsd_to_Y"
+                        score_name = "X_" + key.split("__")[0] + "__rmsd_to_Y"
                         score_rmsd(out_pose, alt_pose, sel=Y_sel, name=score_name)
                 # rename af2 metrics to have X_ prefix
-                # change this to an elif if you don't want to save pdbstrings in the scores
-                if (("model_" in key and "_seed_" in key) or key in af2_metrics) and ("Y_" not in key):
+                # change this to an if if you want to save pdbstrings in the scores
+                # doing so makes it annoying to load the score files and to load the pdbs in pymol and rosetta later
+                elif (("model_" in key and "_seed_" in key) or key in af2_metrics) and ("Y_" not in key):
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(out_pose, f"X_{key}", value)
                 else:
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(out_pose, key, value)
