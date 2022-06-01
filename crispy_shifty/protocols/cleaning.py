@@ -14,6 +14,7 @@ from pyrosetta.rosetta.core.pose import Pose
 def path_to_pose_or_ppose(
     path="",
     cluster_scores: Optional[bool] = False,
+    df_scores: Optional[str] = None,
     pack_result: Optional[bool] = False,
 ) -> Iterator[Union[PackedPose, Pose]]:
     """
@@ -30,6 +31,7 @@ def path_to_pose_or_ppose(
 
     """
     import bz2
+    import pandas as pd
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed import cluster
@@ -49,6 +51,17 @@ def path_to_pose_or_ppose(
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
             ppose = io.to_packed(pose)
+        elif df_scores:  # set scores in pose after unpacking, then repack
+            try:
+                scores_df = pd.read_csv(df_scores, index_col="Unnamed: 0")
+                scores = scores_df.loc[path].to_dict()
+            except KeyError:
+                print("Path not found in score database")
+                scores = {}
+            pose = io.to_pose(ppose)
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
+            ppose = io.to_packed(pose)
         else:
             pass
         pposes = [ppose]
@@ -59,6 +72,17 @@ def path_to_pose_or_ppose(
                 scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
             except IOError:
                 print("Scores may be absent or incorrectly formatted")
+                scores = {}
+            pose = io.to_pose(ppose)
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
+            ppose = io.to_packed(pose)
+        elif df_scores:  # set scores in pose after unpacking, then repack
+            try:
+                scores_df = pd.read_csv(df_scores, index_col="Unnamed: 0")
+                scores = scores_df.loc[path].to_dict()
+            except KeyError:
+                print("Path not found in score database")
                 scores = {}
             pose = io.to_pose(ppose)
             for key, value in scores.items():

@@ -520,7 +520,7 @@ def filter_paired_state_OPS(
     else:
         pdb_path = kwargs["pdb_path"]
         poses = path_to_pose_or_ppose(
-            path=pdb_path, cluster_scores=True, pack_result=False
+            path=pdb_path, df_scores=kwargs["df_scores"], pack_result=False
         )
     # make a repack only task factory
     task_factory = gen_task_factory(
