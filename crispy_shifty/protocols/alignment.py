@@ -25,5 +25,5 @@ def score_rmsd(
     rmsd_metric.set_rmsd_type(rmsd_type)  # Default is rmsd_all_heavy
     rmsd_metric.set_run_superimpose(True)
     rmsd = rmsd_metric.calculate(pose)
-    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, str(rmsd))
+    pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, name, rmsd)
     return rmsd
