@@ -938,8 +938,9 @@ def fold_paired_state_Y(
     pdb_path, fasta_path = tuple(pdb_path.split("____"))
 
     clean_disulfides = False
-    if kwargs.pop("clean_disulfides").lower() == "true":
-        clean_disulfides = True
+    if "clean_disulfides" in kwargs:
+        if kwargs.pop("clean_disulfides").lower() == "true":
+            clean_disulfides = True
 
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
