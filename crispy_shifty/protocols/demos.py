@@ -1,10 +1,11 @@
 # Python standard library
 from typing import Dict, Iterator, List, Optional, Union
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 
 # Custom library imports
@@ -20,9 +21,10 @@ def mpnn_dhr(
     :return: an iterator of PackedPose objects.
     """
 
-    from pathlib import Path
     import sys
+    from pathlib import Path
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
@@ -84,10 +86,11 @@ def fold_dhr(
     :return: an iterator of PackedPose objects.
     """
 
-    from operator import lt, gt
-    from pathlib import Path
     import sys
+    from operator import gt, lt
+    from pathlib import Path
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -95,8 +98,8 @@ def fold_dhr(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.folding import (
-        generate_decoys_from_pose,
         SuperfoldRunner,
+        generate_decoys_from_pose,
     )
     from crispy_shifty.utils.io import cmd, print_timestamp
 
@@ -169,9 +172,10 @@ def mpnn_dhr_with_repeat(
     :return: an iterator of PackedPose objects.
     """
 
-    from pathlib import Path
     import sys
+    from pathlib import Path
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
@@ -261,6 +265,7 @@ def mpnn_dhr_with_repeat(
             ppose = io.to_packed(decoy)
             yield ppose
 
+
 @requires_init
 def batch_fold_dhr(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -271,10 +276,11 @@ def batch_fold_dhr(
     :return: an iterator of PackedPose objects.
     """
 
-    from operator import lt, gt
-    from pathlib import Path
     import sys
+    from operator import gt, lt
+    from pathlib import Path
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
 
@@ -283,8 +289,8 @@ def batch_fold_dhr(
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.design import score_SAP
     from crispy_shifty.protocols.folding import (
-        generate_decoys_from_pose,
         SuperfoldMultiPDB,
+        generate_decoys_from_pose,
     )
     from crispy_shifty.utils.io import cmd, print_timestamp
 
@@ -294,7 +300,7 @@ def batch_fold_dhr(
     # there are multiple paths in the pdb_path, we need to split them and rejoin them
     pdb_paths = pdb_path.split("____")
     pdb_path = " ".join(pdb_paths)
-    
+
     # this function is special, we don't want a packed_pose_in ever, we maintain it as
     # a kwarg for backward compatibility with PyRosettaCluster
     if packed_pose_in is not None:
@@ -321,7 +327,9 @@ def batch_fold_dhr(
             prefix=tag,
             rank_on=rank_on,
         ):
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, "final_seq", decoy.sequence())
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                decoy, "final_seq", decoy.sequence()
+            )
             sap_score = score_SAP(decoy)
             pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, "sap_score", sap_score)
             final_ppose = io.to_packed(decoy)

@@ -1,43 +1,39 @@
 dev TODOs:
-    - TAR/delete old stuff
-    - pynvim in crispy env
+    - fix 4/8 and 4/13 orders, add 3/16
+    	- 4/8 has mixed up chains
+    	- 4/13 most chain B names are wrong
+    	
+    - update mpnn.py to enable new options + ligand + FAMPNN (+ DNA/RNA?)
+    - fix to be compatible with Justas's new CLI
+    - benchmark options
+    - crispy_shifty_junctions 03
+    - save $HOSTNAME in output files
     - crispy crispy stuff
-    - check FF63/65, FF74/5/7, FF129, cs_094 states and resample
-    - AF2 analysis of working stuff: cs94, j7, j9r, ff63 + homodimer, ff74, ff129
-    - finish miseq analysis
-    - ordering utils, domesticator?
+
+    - ordering utils, domesticator
         - add 669 and 671 to vectors
-    - use Bio SeqIO for fasta wrangling?
-    - stapling and repredicting
     - TODOs and docstrings in all modules
-    - update mpnn.py to enable new options
-    - project ouroboros
+    - plotting and curve fitting functions for FP
 
     - remember to maintain the envs and repos on perlmutter and janelia clusters
-    - add a new yaml with dnachisel stuff, updated pyrosetta and new pystapler
-    - finalize env.yml by making conda consistent
+    - finalize yaml with updated pyrosetta, pynvim and new pystapler
+    - making conda consistent with new JAX cuda build?
         - do it when no one is has crispy env active
-        - add crispy kernel to ipython kernelspecs on janelia
-        - test python interpreter finding with git root on janelia
 
     - agg clustering of States before and after plot instead of piecharts
 
     - if really bored
-        - run crispy_shifty_junctions
-        - rewrite mpnn.py to directly generate some jsons etc? 
-            - maybe a bad idea with current pace of mpnn development
         - add documentation to the InsertResMover and PR
         - SafeSwitchChainOrderMover in python, then CPP?
 
-    - DOTFILES - check init.vim is working, then version control
+    - DOTFILES - version control
     - make `almost_inpainting` blueprint builder func 
 
 TODO: 
-    09 detail and filter # run
     10 order and analyze
 
 crispy_crispies:
-    - af2 apo, af2 apo of svt hits sap/interface/net charge of svt hits
+    - sap/interface/net charge of svt hits?
     - mpnn redesign of svt hits (with buttressing helixes?)
     - order GLP1 plate?
     - pos/neg design with crossdocking within glucagon family?
