@@ -1142,7 +1142,8 @@ def pair_bound_state(
         dssp = pyrosetta.rosetta.core.scoring.dssp.Dssp(pose)
         dssp_string = dssp.get_dssp_secstruct()
         # infer the length of the region to be inserted
-        region_length = pose.chain_end(1) - len(x_pose.sequence())
+        # region_length = pose.chain_end(1) - len(x_pose.sequence())
+        region_length = pose.chain_end(1) - x_pose.chain_end(2)
         # get the start and end of the loop
         start = x_pose.chain_end(1) + 1
         end = start + region_length
@@ -1217,7 +1218,11 @@ def pair_bound_state(
                 fixed_sel,
                 False,
             )
+            ic_op = pyrosetta.rosetta.core.pack.task.operation.OperateOnResidueSubset(
+                pyrosetta.rosetta.core.pack.task.operation.IncludeCurrentRLT(), fixed_sel, False
+            )
             task_factory.push_back(lock_op)
+            task_factory.push_back(ic_op)
         print_timestamp("Designing loop...", start_time)
         struct_profile(
             closed_x_pose,
@@ -1231,26 +1236,30 @@ def pair_bound_state(
                 sfxn,
             )
         print_timestamp("Filtering state X", start_time)
+        # rechain before filtering
+        sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sc.chain_order("".join(str(x) for x in range(1, closed_x_pose.num_chains() + 1)))
+        sc.apply(closed_x_pose)
         bb_clash_post = clash_check(closed_x_pose)
         score_per_res(closed_x_pose, sfxn)
-        wnm_all_x = score_wnm_all(closed_x_pose)[0]
+        # wnm_all_x = score_wnm_all(closed_x_pose)[0]
         scores["bb_clash_delta_x"] = bb_clash_post - bb_clash_pre
         scores["score_per_res_x"] = closed_x_pose.scores["score_per_res"]
-        scores["wnm_all_x"] = wnm_all_x
+        # scores["wnm_all_x"] = wnm_all_x
         print_timestamp("Yeeting state X into state Y", start_time)
         # yeet the state 0 pose
         closed_x_pose = yeet_pose_xyz(
             closed_x_pose,
         )
         # then add it to pose
-        pyrosetta.rosetta.core.pose.append_pose_to_pose(
-            pose,
-            closed_x_pose,
-            new_chain=True,
-        )
+        for pose_chain in closed_x_pose.split_by_chain():
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                pose,
+                pose_chain,
+                new_chain=True,
+            )
         # then rechain
-        sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-        sc.chain_order("123")
+        sc.chain_order("".join(str(x) for x in range(1, pose.num_chains() + 1)))
         sc.apply(pose)
         # reset scores
         for key, value in scores.items():

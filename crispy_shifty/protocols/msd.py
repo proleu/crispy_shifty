@@ -162,6 +162,10 @@ def two_state_design_paired_state(
         poses = path_to_pose_or_ppose(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
+    skip_resi_subtype_check = False
+    if "skip_resi_subtype_check" in kwargs:
+        if kwargs["skip_resi_subtype_check"].lower() == "true":
+            skip_resi_subtype_check = True
     # gogogo
     for pose in poses:
         start_time = time()
@@ -178,12 +182,38 @@ def two_state_design_paired_state(
         # get the chB interface
         chB_interface_sel = AndResidueSelector(chB, interface_sel)
         offset = pose.chain_end(2)
+
+        # fix cysteines that are present in one state but not the other by mutating them to alanine
+        difference_cys_indices = []
+        for i in range(1, pose.chain_end(1) + 1):
+            n1 = str(pose.residue(i).name1())
+            n2 = str(pose.residue(i + offset).name1())
+            if n1 == 'C' and n2 != 'C':
+                difference_cys_indices.append(i)
+            elif n1 != 'C' and n2 == 'C':
+                difference_cys_indices.append(i + offset)
+        if difference_cys_indices:
+            diff_cys_sel = ResidueIndexSelector(','.join(str(i) for i in sorted(difference_cys_indices)))
+            mr = pyrosetta.rosetta.protocols.simple_moves.MutateResidue()
+            mr.set_break_disulfide_bonds(True)
+            mr.set_preserve_atom_coords(True)
+            mr.set_res_name("ALA")
+            mr.set_selector(diff_cys_sel)
+            mr.apply(pose)
+
         # get any residues that differ between chA and chC - starts as a list of tuples
-        difference_indices = [
-            (i, i + offset)
-            for i in range(1, pose.chain_end(1) + 1)
-            if pose.residue(i).name() != pose.residue(i + offset).name()
-        ]
+        if skip_resi_subtype_check:
+            difference_indices = [
+                (i, i + offset)
+                for i in range(1, pose.chain_end(1) + 1)
+                if pose.residue(i).name1() != pose.residue(i + offset).name1()
+            ]
+        else:
+            difference_indices = [
+                (i, i + offset)
+                for i in range(1, pose.chain_end(1) + 1)
+                if pose.residue(i).name() != pose.residue(i + offset).name()
+            ]
         # flatten the list of tuples into a sorted list of indices
         difference_indices = sorted(sum(difference_indices, ()))
         # make a residue selector for the difference indices
@@ -314,7 +344,7 @@ def filter_paired_state(
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
         ChainSelector,
-        TrueResidueSelector,
+        FalseResidueSelector,
     )
 
     # insert the root of the repo into the sys.path
@@ -348,8 +378,9 @@ def filter_paired_state(
         )
     # make a repack only task factory
     task_factory = gen_task_factory(
-        design_sel=TrueResidueSelector(),
-        pack_nbhd=True,
+        design_sel=FalseResidueSelector(),
+        pack_nbhd=False,
+        pack_nondesignable=True,
         extra_rotamers_level=2,
         limit_arochi=True,
         prune_buns=True,
@@ -359,9 +390,6 @@ def filter_paired_state(
         ifcl=True,
         layer_design=gen_std_layer_design(),
     )
-    # add repack only to the task factory
-    rtrp = pyrosetta.rosetta.core.pack.task.operation.RestrictToRepacking()
-    task_factory.push_back(rtrp)
     # gogogo
     for pose in poses:
         start_time = time()
@@ -373,6 +401,7 @@ def filter_paired_state(
         # pack the rotamers to get rid of rosetta clashes
         pack_rotamers(pose=pose, task_factory=task_factory, scorefxn=clean_sfxn)
         # get SAP
+        # TODO this is scoring the sap of the entire pose, not just chains A and B
         Y_sap = score_SAP(pose, name="Y_sap")
         # get cms
         chA, chB, chC = (ChainSelector(i) for i in range(1, 4))
@@ -380,6 +409,7 @@ def filter_paired_state(
         # get ddg
         Y_ddg = score_ddg(pose=pose, name="Y_ddg")
         # get total score and score_per_res
+        # TODO this is scoring the sap of the entire pose, not just chains A and B
         Y_total_score, Y_score_per_res = score_per_res(pose=pose, scorefxn=clean_sfxn)
         # update the scores dict with the new scores
         Y_scores = {
@@ -391,15 +421,169 @@ def filter_paired_state(
         }
         scores.update(Y_scores)
 
-        for chain, chain_id in zip(list(pose.split_by_chain()), "ABC"):
+        sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sw.chain_order("1")
+
+        for solo_chain, chain_id in zip(list(pose.split_by_chain()), "ABC"):
             print_timestamp(f"Scoring {chain_id}...", start_time=start_time)
+            # currently commented out because it should be fine to use the pose straight out of split_by_chain, and append_pose_to_pose somehow messes up disulfides
             # make a solo copy of the chain
-            solo_chain = Pose()
+            # solo_chain = Pose()
+            # pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            #     solo_chain,
+            #     chain,
+            #     new_chain=True,
+            # )
+            sw.apply(solo_chain)
+            # repack the chain
+            pack_rotamers(
+                pose=solo_chain, task_factory=task_factory, scorefxn=clean_sfxn
+            )
+            # get SAP
+            sap = score_SAP(pose=solo_chain, name=f"{chain_id}_sap")
+            # get total score and score_per_res
+            chain_total_score, chain_score_per_res = score_per_res(
+                solo_chain, clean_sfxn, name=f"{chain_id}_score"
+            )
+            # get wnm_all
+            wnm_all = score_wnm_all(solo_chain)[0]
+            # get wnm_helix
+            wnm_helix = score_wnm_helix(solo_chain, name=f"{chain_id}_wnm_helix")
+            # update the scores dict with the new scores
+            final_sequence = solo_chain.sequence()
+            chain_scores = {
+                f"{chain_id}_final_seq": final_sequence,
+                f"{chain_id}_sap": sap,
+                f"{chain_id}_total_score": chain_total_score,
+                f"{chain_id}_score_per_res": chain_score_per_res,
+                f"{chain_id}_wnm_all": wnm_all,
+                f"{chain_id}_wnm_helix": wnm_helix,
+            }
+            scores.update(chain_scores)
+
+        end_time = time()
+        total_time = end_time - start_time
+        print_timestamp(f"Total time: {total_time:.2f} seconds", start_time=start_time)
+        # clear the pose scores
+        pyrosetta.rosetta.core.pose.clearPoseExtraScores(pose)
+        for key, value in scores.items():
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
+        ppose = io.to_packed(pose)
+        yield ppose
+
+@requires_init
+def filter_paired_state_OPS(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a packed pose to filter. If None, a pose will be generated 
+    from the input pdb_path.
+    :param: kwargs: keyword arguments for filtering.
+    Needs `-corrections:beta_nov16 true` and 
+    `-indexed_structure_store:fragment_store \
+    /net/databases/VALL_clustered/connect_chains/ss_grouped_vall_helix_shortLoop.h5` in
+    init statement.
+    """
+
+    from pathlib import Path
+    from time import time
+    import sys
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        ChainSelector,
+        FalseResidueSelector,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.design import (
+        #     add_metadata_to_pose,
+        gen_std_layer_design,
+        gen_task_factory,
+        pack_rotamers,
+        score_cms,
+        score_ddg,
+        score_per_res,
+        score_SAP,
+        score_wnm_helix,
+        score_wnm_all,
+    )
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+    # setup scorefxns
+    clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    print_timestamp("Generated score functions", start_time=start_time)
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, df_scores=kwargs["df_scores"], pack_result=False
+        )
+    # make a repack only task factory
+    task_factory = gen_task_factory(
+        design_sel=FalseResidueSelector(),
+        pack_nbhd=False,
+        pack_nondesignable=True,
+        extra_rotamers_level=2,
+        limit_arochi=True,
+        prune_buns=True,
+        upweight_ppi=False,
+        restrict_pro_gly=True,
+        precompute_ig=True,
+        ifcl=True,
+        layer_design=gen_std_layer_design(),
+    )
+    # gogogo
+    for pose in poses:
+        start_time = time()
+        # get the scores from the pose
+        scores = dict(pose.scores)
+        # for the neighborhood residue selector
+        pose.update_residue_neighbors()
+        print_timestamp("Settling Y and scoring...", start_time=start_time)
+        # pack the rotamers to get rid of rosetta clashes
+        pack_rotamers(pose=pose, task_factory=task_factory, scorefxn=clean_sfxn)
+
+        split_pose = list(pose.split_by_chain())
+        sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sw.chain_order("12")
+        for i, state in enumerate("YX"):
+            state_pose = split_pose[2*i].clone()
             pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                solo_chain,
-                chain,
+                state_pose,
+                split_pose[2*i+1],
                 new_chain=True,
             )
+            sw.apply(state_pose)
+            # get SAP
+            state_sap = score_SAP(state_pose, name=f"{state}_sap")
+            # get cms
+            chA, chB = (ChainSelector(i) for i in range(1, 3))
+            state_cms = score_cms(pose=state_pose, sel_1=chA, sel_2=chB, name=f"{state}_cms")
+            # get ddg
+            state_ddg = score_ddg(pose=state_pose, name=f"{state}_ddg")
+            # get total score and score_per_res
+            state_total_score, state_score_per_res = score_per_res(pose=state_pose, scorefxn=clean_sfxn)
+            # update the scores dict with the new scores
+            state_scores = {
+                f"{state}_sap": state_sap,
+                f"{state}_cms": state_cms,
+                f"{state}_ddg": state_ddg,
+                f"{state}_total_score": state_total_score,
+                f"{state}_score_per_res": state_score_per_res,
+            }
+            scores.update(state_scores)
+
+        sw.chain_order("1")
+        for solo_chain, chain_id in zip(split_pose, "ABC"):
+            print_timestamp(f"Scoring {chain_id}...", start_time=start_time)
+            sw.apply(solo_chain)
             # repack the chain
             pack_rotamers(
                 pose=solo_chain, task_factory=task_factory, scorefxn=clean_sfxn
