@@ -155,7 +155,7 @@ class MPNNRunner(ABC):
         """
         Initialize the base class for MPNN runners with common attributes.
         :param: batch_size: number of sequences to generate per batch.
-        :param: model_name: name of the model to use. v_48_010 is probably best, v_32* 
+        :param: model_name: name of the model to use. v_48_010 is probably best, v_32*
         variants use less memory.
         :param: num_sequences: number of sequences to generate in total.
         :param: omit_AAs: concatenated string of amino acids to omit from the sequence.
@@ -166,7 +166,7 @@ class MPNNRunner(ABC):
         If a `chains_to_mask` is provided, the runner will run on (mask) only that chain.
         If no `design_selector` is provided, all residues on all masked chains will be designed.
         The chain letters in your PDB must be correct.
-        Does not allow the use of --score_only, --conditional_probs_only, or 
+        Does not allow the use of --score_only, --conditional_probs_only, or
         --conditional_probs_only_backbone.
         """
 
@@ -294,15 +294,17 @@ class MPNNRunner(ABC):
         self.flags.update(update_dict)
         return
 
-    def setup_runner(self, pose: Pose) -> None:
+    def setup_runner(self, pose: Pose, params: Optional[str] = None) -> None:
         """
         :param: pose: Pose object to run MPNN on.
+        :param: params: optional path ligand parameters file if running LigandMPNN.
         :return: None
         Setup the MPNNRunner. Make a tmpdir and write input files to the tmpdir.
         Output sequences and scores will be written temporarily to the tmpdir as well.
         """
         import json
         import os
+        import shutil
         import subprocess
         import sys
         from pathlib import Path
@@ -340,16 +342,33 @@ class MPNNRunner(ABC):
             pass
         else:  # crispy env must be installed in envs/crispy or must be used on DIGS
             python = "/projects/crispy_shifty/envs/crispy/bin/python"
+        parser_script = str(
+            Path(__file__).resolve().parent.parent.parent
+            / "proteinmpnn"
+            / "helper_scripts"
+            / "parse_multiple_chains.py"
+        )
+        if params is None:
+            # continue if no ligand params file is provided
+            pass
+        else:
+            # need to copy over the ligand params file to the tmpdir
+            tmp_params_path = os.path.join(self.tmpdir, "tmp.params")
+            shutil.copy(params, tmp_params_path)
+            # need to change the helper script as well
+            parser_script = parser_script.replace(
+                "proteinmpnn", "proteinmpnn/ligand_proteinmpnn"
+            )
+
         run_cmd = " ".join(
             [
-                # TODO maybe make this flexible for use with other MPNN versions
-                # TODO could add a flag to specify the MPNN version or something
-                f"{python} {str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'helper_scripts' / 'parse_multiple_chains.py')}",
+                f"{python} {parser_script}",
                 f"--input_path {self.tmpdir}",
                 f"--output_path {biounit_path}",
             ]
         )
-        cmd(run_cmd)
+        out_err = cmd(run_cmd)
+        print(out_err)
         # make a number to letter dictionary that starts at 1
         num_to_letter = {
             i: chr(i - 1 + ord("A")) for i in range(1, pose.num_chains() + 1)
@@ -568,6 +587,113 @@ class MPNNDesign(MPNNRunner):
             for key, val in scores_dict.items():
                 setPoseExtraScore(threaded_pose, key, val)
             yield threaded_pose
+
+
+class MPNNLigandDesign(MPNNDesign):
+    """
+    Class for running MPNN on a ligand containing pose.
+    """
+
+    def __init__(
+        self,
+        *args,
+        checkpoint_path: str = None,
+        params: str = None,
+        **kwargs,
+    ):
+        """
+        :param: args: arguments to pass to MPNNRunner.
+        :param: params: Path to the params file to use.
+        :param: kwargs: keyword arguments to pass to MPNNRunner.
+        Initialize the base class for MPNN runners with common attributes.
+        Update the flags to use the provided params file.
+        """
+        super().__init__(*args, **kwargs)
+        self.params = params
+        # ensure the params file is provided
+        if self.params is None:
+            raise ValueError("Must provide params file.")
+        else:
+            pass
+        # add allowed flags for the older inference script
+        self.allowed_flags.extend(["--use_ligand", "--checkpoint_path"])
+        # take out model_name from the allowed flags
+        self.allowed_flags.remove("--model_name")
+        # change the script to the older script
+        self.script = self.script.replace(
+            "/protein_mpnn_run.py", "/ligand_proteinmpnn/protein_mpnn_run.py"
+        )
+        # set default checkpoint_path if not provided
+        if checkpoint_path is None:
+            self.checkpoint_path = self.script.replace(
+                "/protein_mpnn_run.py",
+                "/model_weights/lnet_plus10_010/epoch2000_step219536.pt",
+            )
+        else:
+            self.checkpoint_path = checkpoint_path
+
+        # update the flags
+        self.update_flags({"--checkpoint_path": self.checkpoint_path})
+        # remove model_name from the flags
+        self.flags.pop("--model_name")
+
+    def apply(self, pose: Pose) -> None:
+        """
+        :param: pose: Pose object to run MPNN on.
+        :return: None
+        Run MPNN on the provided pose.
+        Setup the MPNNRunner using the provided pose.
+        Run MPNN in a subprocess using the provided flags and tmpdir.
+        Read in and parse the output fasta file to get the sequences.
+        Each sequence designed by MPNN is then appended to the pose datacache.
+        Cleanup the tmpdir.
+        """
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        import git
+        import pyrosetta
+        import pyrosetta.distributed.io as io
+        from pyrosetta.rosetta.core.pose import setPoseExtraScore
+
+        # insert the root of the repo into the sys.path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from crispy_shifty.protocols.mpnn import fasta_to_dict, thread_full_sequence
+        from crispy_shifty.utils.io import cmd
+
+        # setup runner
+        self.setup_runner(pose, params=self.params)
+        self.update_flags({"--out_folder": self.tmpdir})
+
+        # run mpnn by calling self.script and providing the flags
+        # use git to find the root of the repo
+        repo = git.Repo(str(Path(__file__).resolve()), search_parent_directories=True)
+        root = repo.git.rev_parse("--show-toplevel")
+        python = str(Path(root) / "envs" / "crispy" / "bin" / "python")
+        if os.path.exists(python):
+            pass
+        else:  # crispy env must be installed in envs/crispy or must be used on DIGS
+            python = "/projects/crispy_shifty/envs/crispy/bin/python"
+        # hacky way to get around confusing MPNN
+        self.flags.pop("--chain_id_jsonl")
+        run_cmd = (
+            f"{python} {self.script}"
+            + " "
+            + " ".join([f"{k} {v}" for k, v in self.flags.items()])
+        )
+        out_err = cmd(run_cmd)
+        print(out_err)
+        alignments_path = os.path.join(self.tmpdir, "seqs/tmp.fa")
+        # parse the alignments fasta into a dictionary
+        alignments = fasta_to_dict(alignments_path, new_tags=True)
+        for i, (tag, seq) in enumerate(alignments.items()):
+            index = str(i).zfill(4)
+            setPoseExtraScore(pose, f"mpnn_seq_{index}", seq)
+        # clean up the temporary files
+        self.teardown_tmpdir()
+        return
 
 
 class MPNNMultistateDesign(MPNNDesign):
