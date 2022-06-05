@@ -3,10 +3,9 @@ dev TODOs:
     	- 4/8 has mixed up chains
     	- 4/13 most chain B names are wrong
     	
-    - update mpnn.py to enable new options + ligand + FAMPNN (+ DNA/RNA?)
-    - fix to be compatible with Justas's new CLI
+    - update mpnn.py to enable FAMPNN (+ DNA/RNA?)
     - benchmark options
-    - crispy_shifty_junctions 03
+    - crispy_shifty_junctions 04
     - save $HOSTNAME in output files
     - crispy crispy stuff
 
@@ -17,7 +16,8 @@ dev TODOs:
 
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - finalize yaml with updated pyrosetta, pynvim and new pystapler
-    - making conda consistent with new JAX cuda build?
+        - now there is a bunch of stupid hallucination bloatware that needs to be there
+        - making conda consistent with new JAX cuda build?
         - do it when no one is has crispy env active
 
     - agg clustering of States before and after plot instead of piecharts
