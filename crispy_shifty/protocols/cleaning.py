@@ -1503,11 +1503,15 @@ def design_after_repeat_propagation(
         print_timestamp("Running AF2", start_time)
         runner.apply(pose)
         print_timestamp("AF2 complete, updating pose datacache", start_time)
-        # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
-        filter_dict = {
-            "mean_plddt": (gt, 92.0),
-            "rmsd_to_reference": (lt, 1.5),
-        }
+        # check kwargs for whether to filter on RMSD
+        if "no_filter_on_rmsd" in kwargs:
+            filter_dict = {"mean_plddt": (gt, 92.0)}
+        else:
+            filter_dict = {
+                "mean_plddt": (gt, 92.0),
+                "rmsd_to_reference": (lt, 1.5),
+            }
+        # setup prefix, rank_on
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         print_timestamp("Adding passing sequences back into pose", start_time)
