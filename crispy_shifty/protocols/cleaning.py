@@ -1457,8 +1457,8 @@ def design_after_repeat_propagation(
         nterm_sel = ResidueIndexSelector(nterm_resis)
         cterm_sel = ResidueIndexSelector(cterm_resis)
         design_sel = OrResidueSelector(
-            NeighborhoodResidueSelector(nterm_sel, 5),
-            NeighborhoodResidueSelector(cterm_sel, 5),
+            NeighborhoodResidueSelector(nterm_sel, 6),
+            NeighborhoodResidueSelector(cterm_sel, 6),
         )
         print_timestamp("Redesigning caps with MPNN", start_time)
         # construct the MPNNDesign object
