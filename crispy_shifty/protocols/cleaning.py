@@ -32,6 +32,7 @@ def path_to_pose_or_ppose(
 
     """
     import bz2
+
     import pandas as pd
     import pyrosetta
     import pyrosetta.distributed.io as io
@@ -395,8 +396,9 @@ def redesign_disulfides_fixed(
     `-detect_disulf false`
     `-holes:dalphaball /software/rosetta/DAlphaBall.gcc`
     """
-    from pathlib import Path
     import sys
+    from pathlib import Path
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.distributed.tasks.rosetta_scripts import (
@@ -406,8 +408,8 @@ def redesign_disulfides_fixed(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import (
-        path_to_pose_or_ppose,
         break_all_disulfides,
+        path_to_pose_or_ppose,
     )
 
     # generate poses or convert input packed pose into pose
@@ -527,7 +529,9 @@ def redesign_disulfides_fixed(
         for resi in fixed_resis:
             fixed_resis.append(resi + pose.chain_end(2))
         fixed_resis_str = ",".join([str(x) for x in fixed_resis])
-        design_score = SingleoutputRosettaScriptsTask(xml.format(fixed_resis_str=fixed_resis_str))
+        design_score = SingleoutputRosettaScriptsTask(
+            xml.format(fixed_resis_str=fixed_resis_str)
+        )
         pose = break_all_disulfides(pose)
         designed_ppose = design_score(pose.clone())
         pose = io.to_pose(designed_ppose)
@@ -1243,7 +1247,6 @@ def finalize_peptide(
         runner = SuperfoldRunner(
             pose=pose, fasta_path="dummy", load_decoys=True, **kwargs
         )
-        # runner.setup_runner(file=fasta_path)
         runner.setup_runner()
         # initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
@@ -1374,4 +1377,147 @@ def finalize_peptide(
             )
             # yield the first decoy
             packed_decoy = io.to_packed(to_return)
+            yield packed_decoy
+
+
+@requires_init
+def design_after_repeat_propagation(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param packed_pose_in: PackedPose object.
+    :param kwargs: kwargs such as "pdb_path".
+    :return: Iterator of PackedPose objects with terminal repeats designed with MPNN.
+    """
+
+    import sys
+    from operator import gt, lt
+    from pathlib import Path
+    from time import time
+
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        NeighborhoodResidueSelector,
+        OrResidueSelector,
+        ResidueIndexSelector,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.folding import (
+        SuperfoldRunner,
+        generate_decoys_from_pose,
+    )
+    from crispy_shifty.protocols.mpnn import MPNNDesign, dict_to_fasta, fasta_to_dict
+    from crispy_shifty.protocols.states import StateMaker, yeet_pose_xyz
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
+        )
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        # fix chain and residue labels and PDBInfo
+        sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sc.chain_order("".join(str(x) for x in range(1, pose.num_chains() + 1)))
+        sc.apply(pose)
+        # get number of repeats that were extended by
+        try:
+            num_repeats_extended = int(kwargs["num_repeats_extended"])
+        except KeyError:
+            raise KeyError("num_repeats_extended must be specified.")
+        # get n and c-terminal endpoints of helices
+        n_endpoints = StateMaker.get_helix_endpoints(pose, n_terminal=True)
+        c_endpoints = StateMaker.get_helix_endpoints(pose, n_terminal=False)
+        # get total number of helices
+        num_helices = len(n_endpoints)
+        # every repeat is 2 n-terminal helices and 2 c-terminal helices
+        # we want to design all helices that were part of the extension
+        start_nterm_chunk = pose.chain_begin(1)
+        end_nterm_chunk = c_endpoints[int(2 * num_repeats_extended)]
+        start_cterm_chunk = n_endpoints[
+            num_helices - int(1 + (2 * num_repeats_extended - 1))
+        ]
+        end_cterm_chunk = pose.chain_end(1)
+        nterm_resis = ",".join(
+            str(x) for x in range(start_nterm_chunk, end_nterm_chunk)
+        )
+        cterm_resis = ",".join(
+            str(x) for x in range(start_cterm_chunk, end_cterm_chunk)
+        )
+        nterm_sel = ResidueIndexSelector(nterm_resis)
+        cterm_sel = ResidueIndexSelector(cterm_resis)
+        design_sel = OrResidueSelector(
+            NeighborhoodResidueSelector(nterm_sel, 5),
+            NeighborhoodResidueSelector(cterm_sel, 5),
+        )
+        print_timestamp("Redesigning caps with MPNN", start_time)
+        # construct the MPNNDesign object
+        mpnn_design = MPNNDesign(
+            design_selector=design_sel,
+            omit_AAs="CX",
+            temperature=0.1,
+            **kwargs,
+        )
+        # design the pose
+        mpnn_design.apply(pose)
+        print_timestamp("MPNN design complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        print_timestamp("Filtering sequences with AF2", start_time)
+        # make a temporary fasta dict from the remaining mpnn_seq scores
+        tmp_fasta_dict = {k: v for k, v in pose.scores.items() if "mpnn_seq" in k}
+        # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
+        tmp_fasta_dict = {
+            tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
+        }
+        print_timestamp("Setting up for AF2", start_time)
+        # setup with dummy fasta path
+        runner = SuperfoldRunner(
+            pose=pose, fasta_path="dummy", load_decoys=True, **kwargs
+        )
+        runner.setup_runner()
+        # initial_guess, reference_pdb both are the tmp.pdb
+        initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
+        reference_pdb = initial_guess
+        flag_update = {
+            "--initial_guess": initial_guess,
+            "--reference_pdb": reference_pdb,
+        }
+        # now we have to point to the right fasta file
+        new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
+        dict_to_fasta(tmp_fasta_dict, new_fasta_path)
+        runner.set_fasta_path(new_fasta_path)
+        runner.override_input_file(new_fasta_path)
+        runner.update_flags(flag_update)
+        runner.update_command()
+        print_timestamp("Running AF2", start_time)
+        runner.apply(pose)
+        print_timestamp("AF2 complete, updating pose datacache", start_time)
+        # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
+        filter_dict = {
+            "mean_plddt": (gt, 92.0),
+            "rmsd_to_reference": (lt, 1.5),
+        }
+        rank_on = "mean_plddt"
+        prefix = "mpnn_seq"
+        print_timestamp("Adding passing sequences back into pose", start_time)
+        for decoy in generate_decoys_from_pose(
+            pose,
+            filter_dict=filter_dict,
+            generate_prediction_decoys=True,
+            label_first=False,
+            prefix=prefix,
+            rank_on=rank_on,
+        ):
+            packed_decoy = io.to_packed(decoy)
             yield packed_decoy
