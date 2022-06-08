@@ -12,6 +12,7 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 
+
 def delta_rg(pose_a: Pose, pose_b: Pose) -> float:
     """
     :param: pose_a: First pose.
@@ -20,7 +21,7 @@ def delta_rg(pose_a: Pose, pose_b: Pose) -> float:
     Compute the difference in radius of gyration between two poses.
     """
     import pyrosetta
-    
+
     # get centers of masses for each pose
     a_com = pyrosetta.rosetta.core.pose.get_center_of_mass(pose_a)
     b_com = pyrosetta.rosetta.core.pose.get_center_of_mass(pose_b)
@@ -32,7 +33,76 @@ def delta_rg(pose_a: Pose, pose_b: Pose) -> float:
     b_rg = pyrosetta.rosetta.core.pose.radius_of_gyration(pose_b, b_com, b_residues)
     delta_rg = b_rg - a_rg
     return delta_rg
-    
+
+
+import numpy as np  # TODO
+
+
+def angle(a: np.array, b: np.array, c: np.array) -> float:
+    """
+    :param: a: Cartesian coordinates of first point.
+    :param: b: Cartesian coordinates of second point.
+    :param: c: Cartesian coordinates of third point.
+    :return: angle between the three points.
+    Calculate the angle between three points.
+    https://stackoverflow.com/questions/35176451
+    """
+    ba = a - b
+    bc = c - b
+
+    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+    angle = np.arccos(cosine_angle)
+    return angle
+
+
+def angle_processing(path_to_paired_pdb, midpoint):
+    with open(path, "rb") as f:  # read bz2 bytestream, decompress and decode
+        ppose = pyrosetta.distributed.io.pose_from_pdbstring(
+            bz2.decompress(f.read()).decode()
+        )
+        pose = pyrosetta.distributed.io.to_pose(ppose)
+        A = pose.split_by_chain(1)
+        B = pose.split_by_chain(2)
+        C = pose.split_by_chain(3)
+        starty = 1
+        stopy = len(A.sequence())
+        startx = len(A.sequence()) + len(B.sequence()) + 1
+        stopx = len(A.sequence()) + len(B.sequence()) + len(C.sequence())
+        midx = startx + midpoint
+        midy = starty + midpoint
+        range_CA_align(C, A, 1, midy, 1, midy)
+        A.append_pose_by_jump(B, 1)
+        A.append_pose_by_jump(C, 1)
+        print(C.sequence())
+
+        CA_x1 = np.array(A.residue(startx).xyz("CA"))
+        CA_x2 = np.array(A.residue(midx).xyz("CA"))
+        CA_x3 = np.array(A.residue(stopx).xyz("CA"))
+
+        CA_y1 = np.array(A.residue(starty).xyz("CA"))
+        CA_y2 = np.array(A.residue(midy).xyz("CA"))
+        CA_y3 = np.array(A.residue(stopy).xyz("CA"))
+        angle_between = angle(CA_x3, CA_y2, CA_y3)
+        print(angle(CA_x3, CA_y2, CA_y3))
+        angle_X = angle(CA_x1, CA_x2, CA_x3)
+        angle_Y = angle(CA_y1, CA_y2, CA_y3)
+        if (angle_X + angle_between) > (360 - angle_Y - 1) and (
+            angle_X + angle_between
+        ) < (360 - angle_Y + 1):
+            angle_Y = angle_X + angle_between
+        if angle_Y < angle_X:
+            angle_between = -angle_between
+        #   print (np.array(CA_xyz))
+        return angle_between
+
+
+def hinge_angles(pose: Pose, midpoint: int) -> Tuple[float, float, float]:
+    """
+    :param: x: Pose of states X and Y.
+    :midpoint: int: approximate midpoint of the first protomer.
+    :return: tuple of three angles: X, Y and delta Y-X.
+    """
+
 
 def yeet_pose_xyz(
     pose: Pose,
@@ -1219,7 +1289,9 @@ def pair_bound_state(
                 False,
             )
             ic_op = pyrosetta.rosetta.core.pack.task.operation.OperateOnResidueSubset(
-                pyrosetta.rosetta.core.pack.task.operation.IncludeCurrentRLT(), fixed_sel, False
+                pyrosetta.rosetta.core.pack.task.operation.IncludeCurrentRLT(),
+                fixed_sel,
+                False,
             )
             task_factory.push_back(lock_op)
             task_factory.push_back(ic_op)
@@ -1238,7 +1310,9 @@ def pair_bound_state(
         print_timestamp("Filtering state X", start_time)
         # rechain before filtering
         sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-        sc.chain_order("".join(str(x) for x in range(1, closed_x_pose.num_chains() + 1)))
+        sc.chain_order(
+            "".join(str(x) for x in range(1, closed_x_pose.num_chains() + 1))
+        )
         sc.apply(closed_x_pose)
         bb_clash_post = clash_check(closed_x_pose)
         score_per_res(closed_x_pose, sfxn)

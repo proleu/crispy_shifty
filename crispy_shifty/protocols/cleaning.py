@@ -1512,7 +1512,7 @@ def design_after_repeat_propagation(
                 "rmsd_to_reference": (lt, 1.5),
             }
         # setup prefix, rank_on
-        rank_on = "mean_plddt"
+        rank_on = "rmsd_to_reference"
         prefix = "mpnn_seq"
         print_timestamp("Adding passing sequences back into pose", start_time)
         for decoy in generate_decoys_from_pose(
