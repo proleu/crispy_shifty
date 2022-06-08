@@ -290,7 +290,7 @@ def two_state_design_paired_state(
             layer_design=layer_design,
         )
         print_timestamp(
-            "Generated interface design task factory with upweighted interface",
+            "Generated interface design task factory with non-upweighted interface",
             start_time=start_time,
         )
         almost_linkres(
