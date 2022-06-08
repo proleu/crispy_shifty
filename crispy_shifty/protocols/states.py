@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterator, List, Optional, Tuple, Union
 
+import numpy as np
 from pyrosetta.distributed import requires_init
 
 # 3rd party library imports
@@ -34,10 +35,6 @@ def delta_rg(pose_a: Pose, pose_b: Pose) -> float:
     delta_rg = b_rg - a_rg
     return delta_rg
 
-
-import numpy as np  # TODO
-
-
 def angle(a: np.array, b: np.array, c: np.array) -> float:
     """
     :param: a: Cartesian coordinates of first point.
@@ -47,61 +44,49 @@ def angle(a: np.array, b: np.array, c: np.array) -> float:
     Calculate the angle between three points.
     https://stackoverflow.com/questions/35176451
     """
+    import numpy as np
+
     ba = a - b
     bc = c - b
-
     cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-    angle = np.arccos(cosine_angle)
+    angle = np.degrees(np.arccos(cosine_angle))
     return angle
-
-
-def angle_processing(path_to_paired_pdb, midpoint):
-    with open(path, "rb") as f:  # read bz2 bytestream, decompress and decode
-        ppose = pyrosetta.distributed.io.pose_from_pdbstring(
-            bz2.decompress(f.read()).decode()
-        )
-        pose = pyrosetta.distributed.io.to_pose(ppose)
-        A = pose.split_by_chain(1)
-        B = pose.split_by_chain(2)
-        C = pose.split_by_chain(3)
-        starty = 1
-        stopy = len(A.sequence())
-        startx = len(A.sequence()) + len(B.sequence()) + 1
-        stopx = len(A.sequence()) + len(B.sequence()) + len(C.sequence())
-        midx = startx + midpoint
-        midy = starty + midpoint
-        range_CA_align(C, A, 1, midy, 1, midy)
-        A.append_pose_by_jump(B, 1)
-        A.append_pose_by_jump(C, 1)
-        print(C.sequence())
-
-        CA_x1 = np.array(A.residue(startx).xyz("CA"))
-        CA_x2 = np.array(A.residue(midx).xyz("CA"))
-        CA_x3 = np.array(A.residue(stopx).xyz("CA"))
-
-        CA_y1 = np.array(A.residue(starty).xyz("CA"))
-        CA_y2 = np.array(A.residue(midy).xyz("CA"))
-        CA_y3 = np.array(A.residue(stopy).xyz("CA"))
-        angle_between = angle(CA_x3, CA_y2, CA_y3)
-        print(angle(CA_x3, CA_y2, CA_y3))
-        angle_X = angle(CA_x1, CA_x2, CA_x3)
-        angle_Y = angle(CA_y1, CA_y2, CA_y3)
-        if (angle_X + angle_between) > (360 - angle_Y - 1) and (
-            angle_X + angle_between
-        ) < (360 - angle_Y + 1):
-            angle_Y = angle_X + angle_between
-        if angle_Y < angle_X:
-            angle_between = -angle_between
-        #   print (np.array(CA_xyz))
-        return angle_between
-
 
 def hinge_angles(pose: Pose, midpoint: int) -> Tuple[float, float, float]:
     """
+    @apillai1 @pleung
     :param: x: Pose of states X and Y.
     :midpoint: int: approximate midpoint of the first protomer.
     :return: tuple of three angles: X, Y and delta Y-X.
     """
+    A = pose.split_by_chain(1)
+    B = pose.split_by_chain(2)
+    C = pose.split_by_chain(3)
+    starty = 1
+    stopy = len(A.sequence())
+    startx = len(A.sequence()) + len(B.sequence()) + 1
+    stopx = len(A.sequence()) + len(B.sequence()) + len(C.sequence())
+    midx = startx + midpoint
+    midy = starty + midpoint
+    range_CA_align(C, A, 1, midy, 1, midy)
+    A.append_pose_by_jump(B, 1)
+    A.append_pose_by_jump(C, 1)
+
+    CA_x1 = np.array(A.residue(startx).xyz("CA"))
+    CA_x2 = np.array(A.residue(midx).xyz("CA"))
+    CA_x3 = np.array(A.residue(stopx).xyz("CA"))
+
+    CA_y1 = np.array(A.residue(starty).xyz("CA"))
+    CA_y2 = np.array(A.residue(midy).xyz("CA"))
+    CA_y3 = np.array(A.residue(stopy).xyz("CA"))
+    angle_between = angle(CA_x3, CA_y2, CA_y3)
+    angle_X = angle(CA_x1, CA_x2, CA_x3)
+    angle_Y = angle(CA_y1, CA_y2, CA_y3)
+    if (angle_X+angle_between)>(360-angle_Y-1) and (angle_X+angle_between)<(360-angle_Y+1):
+        angle_Y = angle_X+angle_between
+    if angle_Y<angle_X:
+        angle_between = -angle_between  
+    return angle_X, angle_Y, angle_between
 
 
 def yeet_pose_xyz(
