@@ -545,6 +545,49 @@ def fast_design(
     return
 
 
+def fast_relax(
+    pose: Pose,
+    task_factory: TaskFactory,
+    scorefxn: ScoreFunction,
+    movemap: MoveMap,
+    relax_script: str = "InterfaceDesign2019",
+    repeats: int = 5,
+    cartesian: bool = False,
+) -> None:
+    """
+    :param: pose: Pose, the pose to design.
+    :param: task_factory: TaskFactory, the task factory to use.
+    :param: scorefxn: ScoreFunction, the score function to use.
+    :param: movemap: MoveMap, the movemap to use.
+    :param: repeats: int, the number of times to repeat the design.
+    :return: None.
+    Runs FastDesign with the given task factory and score function.
+    """
+
+    import pyrosetta
+
+    # use an xml to create the fastdesign mover since it's easier to load a relax script
+    # and to specify the minimization algorithm
+    # chose lbfgs_armigo_nonmonotone for the minimization algorithm based on
+    # https://new.rosettacommons.org/docs/wiki/rosetta_basics/structural_concepts/minimization-overview
+    objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
+        f"""
+        <MOVERS>
+            <FastRelax name="fastrelax" repeats="{repeats}" ramp_down_constraints="false" 
+                batch="false" cartesian="{str(cartesian).lower()}" bondangle="false" bondlength="false" 
+                min_type="lbfgs_armijo_nonmonotone" relaxscript="{relax_script}">
+            </FastRelax>
+        </MOVERS>
+        """
+    )
+    frelax_mover = objs.get_mover("fastrelax")
+    frelax_mover.set_task_factory(task_factory)
+    frelax_mover.set_scorefxn(scorefxn)
+    frelax_mover.set_movemap(movemap)
+    frelax_mover.apply(pose)
+    return
+
+
 def pack_rotamers(
     pose: Pose, task_factory: TaskFactory, scorefxn: ScoreFunction
 ) -> None:
