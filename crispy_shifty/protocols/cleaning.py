@@ -1141,13 +1141,11 @@ def finalize_peptide(
                 # make a residue selector that includes all residues in sub_window
                 indices = ",".join(sub_window)
                 sub_window_sel = ResidueIndexSelector(indices)
-                chA_sel, chB_sel, chC_sel = (
+                chA_sel, chB_sel = (
                     ChainSelector(1),
                     ChainSelector(2),
-                    ChainSelector(3),
                 )
-                chA_chC_sel = OrResidueSelector(chA_sel, chC_sel)
-                to_keep_sel = OrResidueSelector(sub_window_sel, chA_chC_sel)
+                to_keep_sel = OrResidueSelector(sub_window_sel, NotResidueSelector(chB_sel))
                 to_delete_sel = NotResidueSelector(to_keep_sel)
                 # setup the delete region mover
                 trimmed_pose = pose.clone()
@@ -1157,7 +1155,7 @@ def finalize_peptide(
                 trimmer.set_residue_selector(to_delete_sel)
                 trimmer.apply(trimmed_pose)
                 # fix the pdb_info
-                rechain.chain_order("123")
+                rechain.chain_order(''.join(str(i+1) for i in range(trimmed_pose.num_chains())))
                 rechain.apply(trimmed_pose)
                 # score the pose
                 cms = score_cms(
@@ -1219,16 +1217,12 @@ def finalize_peptide(
         # fold only the bound state
         pose_chains = list(pose.split_by_chain())
         # slice out the bound state, aka chains A and B
-        tmp_pose, X_pose = Pose(), Pose()
+        tmp_pose = Pose()
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[0], new_chain=True
         )
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[1], new_chain=True
-        )
-        # slice out the free state, aka chain C
-        pyrosetta.rosetta.core.pose.append_pose_to_pose(
-            X_pose, pose_chains[2], new_chain=True
         )
         # make a temporary fasta dict from the remaining mpnn_seq scores
         tmp_fasta_dict = {k: v for k, v in pose.scores.items() if "mpnn_seq" in k}
@@ -1269,7 +1263,8 @@ def finalize_peptide(
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
-            "mean_plddt": (gt, 92.0),
+            # "mean_plddt": (gt, 92.0),
+            "mean_plddt": (gt, min(scores["Y_mean_plddt"]-1, 90)),
             "rmsd_to_reference": (lt, 1.5),
         }
         rank_on = "mean_plddt"
@@ -1287,9 +1282,10 @@ def finalize_peptide(
             rank_on=rank_on,
         ):
             # add the free state back into the decoy
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                decoy, X_pose, new_chain=True
-            )
+            for other_chain in pose_chains[2:]:
+                pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                    decoy, other_chain, new_chain=True
+                )
             # rename af2 metrics to have Y_ prefix
             decoy_scores = dict(decoy.scores)
             for key, value in decoy_scores.items():
@@ -1322,10 +1318,10 @@ def finalize_peptide(
                 )
             )
             # get the first decoy
-            to_return = passing_decoys[0]
+            to_return = decoys[0]
             # get the sequence of the second decoy
-            chBr1_seq = passing_decoys[1].sequence(
-                passing_decoys[1].chain_begin(2), passing_decoys[1].chain_end(2)
+            chBr1_seq = decoys[1].sequence(
+                decoys[1].chain_begin(2), decoys[1].chain_end(2)
             )
             # set chBr1_seq score as the other passing sequence
             pyrosetta.rosetta.core.pose.setPoseExtraScore(
@@ -1345,12 +1341,12 @@ def finalize_peptide(
                 )
             )
             # get the first decoy
-            to_return = passing_decoys[0]
+            to_return = decoys[0]
             putative_seqs = [
                 passing_decoy.sequence(
                     passing_decoy.chain_begin(2), passing_decoy.chain_end(2)
                 )
-                for passing_decoy in passing_decoys[1:]
+                for passing_decoy in decoys[1:]
             ]
             decoy_seq = to_return.sequence(
                 to_return.chain_begin(2), to_return.chain_end(2)
