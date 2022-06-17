@@ -1316,6 +1316,10 @@ def finalize_peptide(
                 design_sel = OrResidueSelector(Y_design_sel, X_design_sel)
             else:
                 raise ValueError(f"redesign_hinge option {kwargs['redesign_hinge']} is not valid")
+            # save what kind of redesign was done
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                pose, "redesign_hinge", kwargs["redesign_hinge"]
+            )
         else:
             # make a designable residue selector of only the chB residues
             design_sel = chB_sel
