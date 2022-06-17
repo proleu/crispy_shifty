@@ -1,4 +1,5 @@
 # Python standard library
+from tkinter.messagebox import NO
 from typing import Iterator, Optional, Union
 
 from pyrosetta.distributed import requires_init
@@ -1044,6 +1045,7 @@ def finalize_peptide(
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
+        LayerSelector,
         NeighborhoodResidueSelector,
         NotResidueSelector,
         OrResidueSelector,
@@ -1054,14 +1056,14 @@ def finalize_peptide(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import score_cms
+    from crispy_shifty.protocols.design import score_cms, interface_between_selectors
     from crispy_shifty.protocols.folding import (
         SuperfoldRunner,
         af2_metrics,
         generate_decoys_from_pose,
     )
     from crispy_shifty.protocols.mpnn import (
-        MPNNDesign,
+        MPNNMultistateDesign,
         dict_to_fasta,
         fasta_to_dict,
         levenshtein_distance,
@@ -1078,6 +1080,19 @@ def finalize_peptide(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
+
+    chA_sel, chB_sel, chC_sel = (
+        ChainSelector(1),
+        ChainSelector(2),
+        ChainSelector(3),
+    )
+
+    if "redesign_hinge" in kwargs:
+        # make a list of linked residue selectors, we want to link chA and chC
+        residue_selectors = [[chA_sel, chC_sel]]
+    else:
+        residue_selectors = []
+
     for pose in poses:
         pose.update_residue_neighbors()
         # set X AF2 scores as X
@@ -1141,10 +1156,6 @@ def finalize_peptide(
                 # make a residue selector that includes all residues in sub_window
                 indices = ",".join(sub_window)
                 sub_window_sel = ResidueIndexSelector(indices)
-                chA_sel, chB_sel = (
-                    ChainSelector(1),
-                    ChainSelector(2),
-                )
                 to_keep_sel = OrResidueSelector(sub_window_sel, NotResidueSelector(chB_sel))
                 to_delete_sel = NotResidueSelector(to_keep_sel)
                 # setup the delete region mover
@@ -1178,12 +1189,45 @@ def finalize_peptide(
             pose = highest_cms_pose.clone()
         else:  # don't need to trim if already 28 or less
             pass
-        # make a designable residue selector of only the chB residues
-        design_sel = ChainSelector(2)
+        if "redesign_hinge" in kwargs:
+            if kwargs["redesign_hinge"] == "int_surf":
+                # The purpose of this step is to ensure the peptide is negatively charged, which improves its behavior.
+                # The purpose of the previous alphafolding steps was partly to filter on whether the hinging region on the
+                # hinge could support both states X and Y. Since we have already filtered on this, let's not change the
+                # hydrophobic packing of the hinge in this region. Instead, let's only allow the surface of the hinge near
+                # the binding site to change so it can better support a resurfaced, negatively charged peptide.
+                interface_sel = interface_between_selectors(chA_sel, chB_sel)
+                neighborhood_sel = NeighborhoodResidueSelector(
+                    interface_sel, distance=8.0, include_focus_in_subset=True
+                )
+                surf_sel = LayerSelector()
+                surf_sel.set_layers(False, False, True)
+                surf_sel.set_use_sc_neighbors(True)
+                surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface"
+                int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
+                chA_int_surf_sel = AndResidueSelector(chA_sel, int_surf_sel)
+                # get the length of state Y
+                offset = pose.chain_end(2)
+                # get a boolean mask of the residues in chA
+                chA_int_surf_filter = list(chA_int_surf_sel.apply(pose))
+                # make a list of the corresponding residues in state X that are interface in Y
+                X_residues = [
+                    i + offset for i, designable in enumerate(chA_int_surf_filter, start=1) if designable
+                ]
+                X_residues_str = ",".join(str(i) for i in X_residues)
+                X_design_sel = ResidueIndexSelector(X_residues_str)
+                Y_design_sel = OrResidueSelector(chA_int_surf_sel, chB_sel)
+                design_sel = OrResidueSelector(Y_design_sel, X_design_sel)
+            else:
+                raise NotImplementedError("Only redesign_hinge int_surf is implemented")
+        else:
+            # make a designable residue selector of only the chB residues
+            design_sel = chB_sel
         print_timestamp("Resurfacing chB with MPNN", start_time)
         # construct the MPNNDesign object
-        mpnn_design = MPNNDesign(
+        mpnn_design = MPNNMultistateDesign(
             design_selector=design_sel,
+            residue_selectors=residue_selectors,
             num_sequences=64,
             omit_AAs="CX",
             temperature=0.1,
@@ -1264,7 +1308,7 @@ def finalize_peptide(
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
             # "mean_plddt": (gt, 92.0),
-            "mean_plddt": (gt, min(scores["Y_mean_plddt"]-1, 90)),
+            "mean_plddt": (gt, min(float(scores["Y_mean_plddt"])-1, 90)),
             "rmsd_to_reference": (lt, 1.5),
         }
         rank_on = "mean_plddt"
@@ -1313,7 +1357,7 @@ def finalize_peptide(
             decoys = list(
                 sorted(
                     passing_decoys,
-                    key=lambda x: x.scores["Y_mean_pae_interaction"],
+                    key=lambda x: float(x.scores["Y_mean_pae_interaction"]),
                     reverse=False,  # we want the lowest mean_pae_interaction
                 )
             )
@@ -1336,7 +1380,7 @@ def finalize_peptide(
             decoys = list(
                 sorted(
                     passing_decoys,
-                    key=lambda x: x.scores["Y_mean_pae_interaction"],
+                    key=lambda x: float(x.scores["Y_mean_pae_interaction"]),
                     reverse=False,  # we want the lowest mean_pae_interaction
                 )
             )
