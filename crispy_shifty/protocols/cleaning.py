@@ -1189,6 +1189,13 @@ def finalize_peptide(
             pose = highest_cms_pose.clone()
         else:  # don't need to trim if already 28 or less
             pass
+        # don't design any fixed residues
+        fixed_sel = FalseResidueSelector()
+        if "fixed_resis" in scores:
+            fixed_resi_str = scores["fixed_resis"]
+            # handle an empty string
+            if fixed_resi_str:
+                fixed_sel = ResidueIndexSelector(fixed_resi_str)
         if "redesign_hinge" in kwargs:
             if kwargs["redesign_hinge"] == "int_surf":
                 # The purpose of this step is to ensure the peptide is negatively charged, which improves its behavior.
@@ -1206,17 +1213,21 @@ def finalize_peptide(
                 surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface"
                 int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
                 chA_int_surf_sel = AndResidueSelector(chA_sel, int_surf_sel)
+                chA_design_sel = AndResidueSelector(
+                    chA_int_surf_sel,
+                    NotResidueSelector(fixed_sel)
+                )
                 # get the length of state Y
                 offset = pose.chain_end(2)
                 # get a boolean mask of the residues in chA
-                chA_int_surf_filter = list(chA_int_surf_sel.apply(pose))
+                chA_design_filter = list(chA_design_sel.apply(pose))
                 # make a list of the corresponding residues in state X that are interface in Y
                 X_residues = [
-                    i + offset for i, designable in enumerate(chA_int_surf_filter, start=1) if designable
+                    i + offset for i, designable in enumerate(chA_design_filter, start=1) if designable
                 ]
                 X_residues_str = ",".join(str(i) for i in X_residues)
                 X_design_sel = ResidueIndexSelector(X_residues_str)
-                Y_design_sel = OrResidueSelector(chA_int_surf_sel, chB_sel)
+                Y_design_sel = OrResidueSelector(chA_design_sel, chB_sel)
                 design_sel = OrResidueSelector(Y_design_sel, X_design_sel)
             else:
                 raise NotImplementedError("Only redesign_hinge int_surf is implemented")
