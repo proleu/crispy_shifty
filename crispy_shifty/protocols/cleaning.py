@@ -1354,6 +1354,14 @@ def finalize_peptide(
                 for i in all_cys_resi_indexes:
                     if decoy.conformation().residue(i).type().is_disulfide_bonded():
                         pyrosetta.rosetta.core.conformation.change_cys_state(i, "", decoy.conformation())
+            if "redesign_hinge" in kwargs:
+                # get the chA sequence
+                chA_seq = decoy.chain_sequence(1)
+                # setup SimpleThreadingMover
+                stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
+                # thread the sequence from chA onto chA
+                stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
+                stm.apply(decoy)
             # rename af2 metrics to have Y_ prefix
             decoy_scores = dict(decoy.scores)
             for key, value in decoy_scores.items():
