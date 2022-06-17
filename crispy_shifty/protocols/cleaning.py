@@ -1045,6 +1045,7 @@ def finalize_peptide(
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
+        FalseResidueSelector,
         LayerSelector,
         NeighborhoodResidueSelector,
         NotResidueSelector,
