@@ -1087,6 +1087,11 @@ def finalize_peptide(
         ChainSelector(3),
     )
 
+    clean_disulfides = False
+    if "clean_disulfides" in kwargs:
+        if kwargs.pop("clean_disulfides").lower() == "true":
+            clean_disulfides = True
+
     if "redesign_hinge" in kwargs:
         # make a list of linked residue selectors, we want to link chA and chC
         residue_selectors = [[chA_sel, chC_sel]]
@@ -1341,6 +1346,13 @@ def finalize_peptide(
                 pyrosetta.rosetta.core.pose.append_pose_to_pose(
                     decoy, other_chain, new_chain=True
                 )
+            # clean ostensibly disulfide-bonded cysteines individually because they have unspecified partners
+            if clean_disulfides:
+                seq = decoy.sequence()
+                all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
+                for i in all_cys_resi_indexes:
+                    if decoy.conformation().residue(i).type().is_disulfide_bonded():
+                        pyrosetta.rosetta.core.conformation.change_cys_state(i, "", decoy.conformation())
             # rename af2 metrics to have Y_ prefix
             decoy_scores = dict(decoy.scores)
             for key, value in decoy_scores.items():
@@ -1348,11 +1360,13 @@ def finalize_peptide(
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
                         decoy, f"Y_{key}", value
                     )
-            scores.update(decoy.scores)
-            # fix decoy scores
-            pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
-            for key, value in scores.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
+            # don't need to do this- it's already taken care of by generate_decoys_from_pose, and this puts 
+            # the mpnn sequences back into the scores
+            # scores.update(decoy.scores)
+            # # fix decoy scores
+            # pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
+            # for key, value in scores.items():
+            #     pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
             passing_decoys.append(decoy)
         if len(passing_decoys) == 0:
             continue
