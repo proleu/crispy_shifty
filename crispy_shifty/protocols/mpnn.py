@@ -145,6 +145,7 @@ class MPNNRunner(ABC):
         self,
         batch_size: Optional[int] = 8,
         model_name: Optional[str] = "v_48_010",
+        path_to_model_weights: Optional[str] = "/databases/mpnn/vanilla_model_weights/",
         num_sequences: Optional[int] = 64,
         omit_AAs: Optional[str] = "X",
         temperature: Optional[float] = 0.1,
@@ -174,6 +175,7 @@ class MPNNRunner(ABC):
 
         self.batch_size = batch_size
         self.model_name = model_name
+        self.path_to_model_weights = path_to_model_weights
         self.num_sequences = num_sequences
         self.omit_AAs = omit_AAs
         self.temperature = temperature
@@ -190,6 +192,7 @@ class MPNNRunner(ABC):
                 "--batch_size": str(self.batch_size),
                 "--num_seq_per_target": str(self.num_sequences),
                 "--model_name": self.model_name,
+                "--path_to_model_weights": self.path_to_model_weights,
                 "--omit_AAs": self.omit_AAs,
                 "--sampling_temp": str(self.temperature),
             }
@@ -214,7 +217,7 @@ class MPNNRunner(ABC):
             "--bias_by_res_jsonl",
             "--omit_AA_jsonl",
             "--tied_positions_jsonl",
-            "--path_to_model_weights",
+            # "--path_to_model_weights",
             "--pdb_path",
             "--pdb_path_chains",
             "--pssm_bias_flag",

@@ -501,7 +501,10 @@ def filter_paired_state_OPS(
     from crispy_shifty.protocols.design import (
         #     add_metadata_to_pose,
         gen_std_layer_design,
+        gen_scorefxn,
         gen_task_factory,
+        gen_movemap,
+        fast_relax,
         pack_rotamers,
         score_cms,
         score_ddg,
@@ -510,11 +513,13 @@ def filter_paired_state_OPS(
         score_wnm_helix,
         score_wnm_all,
     )
+    from crispy_shifty.protocols.alignment import score_rmsd
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()
     # setup scorefxns
-    clean_sfxn = pyrosetta.create_score_function("beta_nov16.wts")
+    clean_sfxn = gen_scorefxn()
+    clean_cart_sfxn = gen_scorefxn(cartesian=True)
     print_timestamp("Generated score functions", start_time=start_time)
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
@@ -539,6 +544,7 @@ def filter_paired_state_OPS(
         ifcl=True,
         layer_design=gen_std_layer_design(),
     )
+    movemap = gen_movemap(jump=True)
     # gogogo
     for pose in poses:
         start_time = time()
@@ -546,10 +552,9 @@ def filter_paired_state_OPS(
         scores = dict(pose.scores)
         # for the neighborhood residue selector
         pose.update_residue_neighbors()
-        print_timestamp("Settling Y and scoring...", start_time=start_time)
-        # pack the rotamers to get rid of rosetta clashes
-        pack_rotamers(pose=pose, task_factory=task_factory, scorefxn=clean_sfxn)
+        print_timestamp("Scoring states...", start_time=start_time)
 
+        state_poses = []
         split_pose = list(pose.split_by_chain())
         sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
         sw.chain_order("12")
@@ -561,6 +566,16 @@ def filter_paired_state_OPS(
                 new_chain=True,
             )
             sw.apply(state_pose)
+
+            if state == "Y":
+                # pack the rotamers of chain A and chain B to get rid of rosetta clashes
+                pack_rotamers(pose=state_pose, task_factory=task_factory, scorefxn=clean_sfxn)
+            else:
+                # fastrelax chain C and chain D, only allow backbone movement of the peptide and movement around the jump
+                movemap.set_bb_true_range(state_pose.chain_begin(2), state_pose.chain_end(2))
+                fast_relax(pose=state_pose, task_factory=task_factory, scorefxn=clean_cart_sfxn, movemap=movemap, cartesian=True)
+
+            state_poses.append(state_pose)
             # get SAP
             state_sap = score_SAP(state_pose, name=f"{state}_sap")
             # get cms
@@ -579,6 +594,21 @@ def filter_paired_state_OPS(
                 f"{state}_score_per_res": state_score_per_res,
             }
             scores.update(state_scores)
+
+        # load the parent and align state_poses[1] chain A to it
+
+        scores["linear_peptide_rmsd"] = score_rmsd(pose=state_poses[1], refpose=pose, sel=ChainSelector(2), refsel=ChainSelector(4), name="linear_peptide_rmsd")
+        
+        pose = state_poses[0]
+        for chain in state_poses[1].split_by_chain():
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                pose,
+                chain,
+                new_chain=True,
+            )
+        sw.chain_order("1234")
+        sw.apply(pose)
+        split_pose = list(pose.split_by_chain())
 
         sw.chain_order("1")
         for solo_chain, chain_id in zip(split_pose, "ABC"):

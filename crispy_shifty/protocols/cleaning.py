@@ -1,4 +1,5 @@
 # Python standard library
+from tkinter.messagebox import NO
 from typing import Iterator, Optional, Union
 
 from pyrosetta.distributed import requires_init
@@ -1048,6 +1049,8 @@ def finalize_peptide(
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
+        FalseResidueSelector,
+        LayerSelector,
         NeighborhoodResidueSelector,
         NotResidueSelector,
         OrResidueSelector,
@@ -1058,14 +1061,14 @@ def finalize_peptide(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import score_cms
+    from crispy_shifty.protocols.design import score_cms, interface_between_selectors
     from crispy_shifty.protocols.folding import (
         SuperfoldRunner,
         af2_metrics,
         generate_decoys_from_pose,
     )
     from crispy_shifty.protocols.mpnn import (
-        MPNNDesign,
+        MPNNMultistateDesign,
         dict_to_fasta,
         fasta_to_dict,
         levenshtein_distance,
@@ -1082,6 +1085,24 @@ def finalize_peptide(
         poses = path_to_pose_or_ppose(
             path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
         )
+
+    chA_sel, chB_sel, chC_sel = (
+        ChainSelector(1),
+        ChainSelector(2),
+        ChainSelector(3),
+    )
+
+    clean_disulfides = False
+    if "clean_disulfides" in kwargs:
+        if kwargs.pop("clean_disulfides").lower() == "true":
+            clean_disulfides = True
+
+    if "redesign_hinge" in kwargs:
+        # make a list of linked residue selectors, we want to link chA and chC
+        residue_selectors = [[chA_sel, chC_sel]]
+    else:
+        residue_selectors = []
+
     for pose in poses:
         pose.update_residue_neighbors()
         # set X AF2 scores as X
@@ -1145,13 +1166,7 @@ def finalize_peptide(
                 # make a residue selector that includes all residues in sub_window
                 indices = ",".join(sub_window)
                 sub_window_sel = ResidueIndexSelector(indices)
-                chA_sel, chB_sel, chC_sel = (
-                    ChainSelector(1),
-                    ChainSelector(2),
-                    ChainSelector(3),
-                )
-                chA_chC_sel = OrResidueSelector(chA_sel, chC_sel)
-                to_keep_sel = OrResidueSelector(sub_window_sel, chA_chC_sel)
+                to_keep_sel = OrResidueSelector(sub_window_sel, NotResidueSelector(chB_sel))
                 to_delete_sel = NotResidueSelector(to_keep_sel)
                 # setup the delete region mover
                 trimmed_pose = pose.clone()
@@ -1161,7 +1176,7 @@ def finalize_peptide(
                 trimmer.set_residue_selector(to_delete_sel)
                 trimmer.apply(trimmed_pose)
                 # fix the pdb_info
-                rechain.chain_order("123")
+                rechain.chain_order(''.join(str(i+1) for i in range(trimmed_pose.num_chains())))
                 rechain.apply(trimmed_pose)
                 # score the pose
                 cms = score_cms(
@@ -1184,12 +1199,139 @@ def finalize_peptide(
             pose = highest_cms_pose.clone()
         else:  # don't need to trim if already 28 or less
             pass
-        # make a designable residue selector of only the chB residues
-        design_sel = ChainSelector(2)
-        print_timestamp("Resurfacing chB with MPNN", start_time)
+        # don't design any fixed residues
+        fixed_sel = FalseResidueSelector()
+        if "fixed_resis" in scores:
+            fixed_resi_str = scores["fixed_resis"]
+            # handle an empty string
+            if fixed_resi_str:
+                fixed_sel = ResidueIndexSelector(fixed_resi_str)
+        if "redesign_hinge" in kwargs:
+            if kwargs["redesign_hinge"] == "int_surf":
+                # The purpose of this step is to ensure the peptide is negatively charged, which improves its behavior.
+                # The purpose of the previous alphafolding steps was partly to filter on whether the hinging region on the
+                # hinge could support both states X and Y. Since we have already filtered on this, let's not change the
+                # hydrophobic packing of the hinge in this region. Instead, let's only allow the surface of the hinge near
+                # the binding site to change so it can better support a resurfaced, negatively charged peptide.
+                interface_sel = interface_between_selectors(chA_sel, chB_sel)
+                neighborhood_sel = NeighborhoodResidueSelector(
+                    interface_sel, distance=8.0, include_focus_in_subset=True
+                )
+                surf_sel = LayerSelector()
+                surf_sel.set_layers(False, False, True)
+                surf_sel.set_use_sc_neighbors(True)
+                surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface"
+                int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
+                chA_int_surf_sel = AndResidueSelector(chA_sel, int_surf_sel)
+                chA_design_sel = AndResidueSelector(
+                    chA_int_surf_sel,
+                    NotResidueSelector(fixed_sel)
+                )
+                # get the length of state Y
+                offset = pose.chain_end(2)
+                # get a boolean mask of the residues in chA
+                chA_design_filter = list(chA_design_sel.apply(pose))
+                # make a list of the corresponding residues in state X that are interface in Y
+                X_residues = [
+                    i + offset for i, designable in enumerate(chA_design_filter, start=1) if designable
+                ]
+                X_residues_str = ",".join(str(i) for i in X_residues)
+                X_design_sel = ResidueIndexSelector(X_residues_str)
+                Y_design_sel = OrResidueSelector(chA_design_sel, chB_sel)
+                design_sel = OrResidueSelector(Y_design_sel, X_design_sel)
+            elif kwargs["redesign_hinge"] == "expanded_int_surf":
+                # The purpose of this step is to ensure the peptide is negatively charged, which improves its behavior.
+                # The purpose of the previous alphafolding steps was partly to filter on whether the hinging region on the
+                # hinge could support both states X and Y. Since we have already filtered on this, let's not change the
+                # hydrophobic packing of the hinge in this region. Instead, let's only allow the surface of the hinge near
+                # the binding site to change so it can better support a resurfaced, negatively charged peptide.
+                interface_sel = interface_between_selectors(chA_sel, chB_sel)
+                neighborhood_sel = NeighborhoodResidueSelector(
+                    interface_sel, distance=8.0, include_focus_in_subset=True
+                )
+                surf_sel = LayerSelector()
+                surf_sel.set_layers(False, False, True)
+                surf_sel.set_use_sc_neighbors(True)
+                surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface"
+                int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
+                # using a second neighborhood selector rather than just expanding the radius of the first to only tend to
+                # select residues on the same side of the DHR
+                exp_nbhd_sel = NeighborhoodResidueSelector(
+                    int_surf_sel, distance=8.0, include_focus_in_subset=True
+                )
+                exp_surf_sel = LayerSelector()
+                exp_surf_sel.set_layers(False, False, True)
+                exp_surf_sel.set_use_sc_neighbors(True)
+                exp_surf_sel.set_cutoffs(5.2, 2.0) # normal definition for what is "surface"
+                exp_int_surf_sel = AndResidueSelector(exp_nbhd_sel, exp_surf_sel)
+                chA_int_surf_sel = AndResidueSelector(chA_sel, exp_int_surf_sel)
+                chA_design_sel = AndResidueSelector(
+                    chA_int_surf_sel,
+                    NotResidueSelector(fixed_sel)
+                )
+                # get the length of state Y
+                offset = pose.chain_end(2)
+                # get a boolean mask of the residues in chA
+                chA_design_filter = list(chA_design_sel.apply(pose))
+                # make a list of the corresponding residues in state X that are interface in Y
+                X_residues = [
+                    i + offset for i, designable in enumerate(chA_design_filter, start=1) if designable
+                ]
+                X_residues_str = ",".join(str(i) for i in X_residues)
+                X_design_sel = ResidueIndexSelector(X_residues_str)
+                Y_design_sel = OrResidueSelector(chA_design_sel, chB_sel)
+                design_sel = OrResidueSelector(Y_design_sel, X_design_sel)
+            elif kwargs["redesign_hinge"] == "full_surf":
+                # The purpose of this step is to ensure the peptide is negatively charged, which improves its behavior.
+                # The purpose of the previous alphafolding steps was partly to filter on whether the hinging region on the
+                # hinge could support both states X and Y. Since we have already filtered on this, let's not change the
+                # hydrophobic packing of the hinge in this region. Instead, let's only allow the surface of the hinge near
+                # the binding site to change so it can better support a resurfaced, negatively charged peptide.
+                interface_sel = interface_between_selectors(chA_sel, chB_sel)
+                neighborhood_sel = NeighborhoodResidueSelector(
+                    interface_sel, distance=8.0, include_focus_in_subset=True
+                )
+                surf_sel = LayerSelector()
+                surf_sel.set_layers(False, False, True)
+                surf_sel.set_use_sc_neighbors(True)
+                surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface" near the peptide
+                int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
+                exp_surf_sel = LayerSelector()
+                exp_surf_sel.set_layers(False, False, True)
+                exp_surf_sel.set_use_sc_neighbors(True)
+                exp_surf_sel.set_cutoffs(5.2, 2.0) # normal definition for what is "surface"
+                exp_int_surf_sel = OrResidueSelector(int_surf_sel, exp_surf_sel)
+                chA_int_surf_sel = AndResidueSelector(chA_sel, exp_int_surf_sel)
+                chA_design_sel = AndResidueSelector(
+                    chA_int_surf_sel,
+                    NotResidueSelector(fixed_sel)
+                )
+                # get the length of state Y
+                offset = pose.chain_end(2)
+                # get a boolean mask of the residues in chA
+                chA_design_filter = list(chA_design_sel.apply(pose))
+                # make a list of the corresponding residues in state X that are interface in Y
+                X_residues = [
+                    i + offset for i, designable in enumerate(chA_design_filter, start=1) if designable
+                ]
+                X_residues_str = ",".join(str(i) for i in X_residues)
+                X_design_sel = ResidueIndexSelector(X_residues_str)
+                Y_design_sel = OrResidueSelector(chA_design_sel, chB_sel)
+                design_sel = OrResidueSelector(Y_design_sel, X_design_sel)
+            else:
+                raise ValueError(f"redesign_hinge option {kwargs['redesign_hinge']} is not valid")
+            # save what kind of redesign was done
+            pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                pose, "redesign_hinge", kwargs["redesign_hinge"]
+            )
+        else:
+            # make a designable residue selector of only the chB residues
+            design_sel = chB_sel
+        print_timestamp("Resurfacing with MPNN", start_time)
         # construct the MPNNDesign object
-        mpnn_design = MPNNDesign(
+        mpnn_design = MPNNMultistateDesign(
             design_selector=design_sel,
+            residue_selectors=residue_selectors,
             num_sequences=64,
             omit_AAs="CX",
             temperature=0.1,
@@ -1223,16 +1365,12 @@ def finalize_peptide(
         # fold only the bound state
         pose_chains = list(pose.split_by_chain())
         # slice out the bound state, aka chains A and B
-        tmp_pose, X_pose = Pose(), Pose()
+        tmp_pose = Pose()
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[0], new_chain=True
         )
         pyrosetta.rosetta.core.pose.append_pose_to_pose(
             tmp_pose, pose_chains[1], new_chain=True
-        )
-        # slice out the free state, aka chain C
-        pyrosetta.rosetta.core.pose.append_pose_to_pose(
-            X_pose, pose_chains[2], new_chain=True
         )
         # make a temporary fasta dict from the remaining mpnn_seq scores
         tmp_fasta_dict = {k: v for k, v in pose.scores.items() if "mpnn_seq" in k}
@@ -1272,7 +1410,8 @@ def finalize_peptide(
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
-            "mean_plddt": (gt, 92.0),
+            # "mean_plddt": (gt, 92.0),
+            "mean_plddt": (gt, min(float(scores["Y_mean_plddt"])-1, 90)),
             "rmsd_to_reference": (lt, 1.5),
         }
         rank_on = "mean_plddt"
@@ -1290,9 +1429,25 @@ def finalize_peptide(
             rank_on=rank_on,
         ):
             # add the free state back into the decoy
-            pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                decoy, X_pose, new_chain=True
-            )
+            for other_chain in pose_chains[2:]:
+                pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                    decoy, other_chain, new_chain=True
+                )
+            # clean ostensibly disulfide-bonded cysteines individually because they have unspecified partners
+            if clean_disulfides:
+                seq = decoy.sequence()
+                all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
+                for i in all_cys_resi_indexes:
+                    if decoy.conformation().residue(i).type().is_disulfide_bonded():
+                        pyrosetta.rosetta.core.conformation.change_cys_state(i, "", decoy.conformation())
+            if "redesign_hinge" in kwargs:
+                # get the chA sequence
+                chA_seq = decoy.chain_sequence(1)
+                # setup SimpleThreadingMover
+                stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
+                # thread the sequence from chA onto chA
+                stm.set_sequence(chA_seq, start_position=decoy.chain_begin(3))
+                stm.apply(decoy)
             # rename af2 metrics to have Y_ prefix
             decoy_scores = dict(decoy.scores)
             for key, value in decoy_scores.items():
@@ -1300,84 +1455,92 @@ def finalize_peptide(
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
                         decoy, f"Y_{key}", value
                     )
-            scores.update(decoy.scores)
-            # fix decoy scores
-            pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
-            for key, value in scores.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
+            # don't need to do this- it's already taken care of by generate_decoys_from_pose, and this puts 
+            # the mpnn sequences back into the scores
+            # scores.update(decoy.scores)
+            # # fix decoy scores
+            # pyrosetta.rosetta.core.pose.clearPoseExtraScores(decoy)
+            # for key, value in scores.items():
+            #     pyrosetta.rosetta.core.pose.setPoseExtraScore(decoy, key, value)
             passing_decoys.append(decoy)
-        if len(passing_decoys) == 0:
-            continue
-        elif len(passing_decoys) == 1:
-            to_return = passing_decoys[0]
-            # set chBr[1|2]_seq scores as 'X'
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", "X")
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
-            # just yield the one decoy
-            packed_decoy = io.to_packed(to_return)
-            yield packed_decoy
-        elif len(passing_decoys) == 2:
-            decoys = list(
-                sorted(
-                    passing_decoys,
-                    key=lambda x: x.scores["Y_mean_pae_interaction"],
-                    reverse=False,  # we want the lowest mean_pae_interaction
-                )
-            )
-            # get the first decoy
-            to_return = passing_decoys[0]
-            # get the sequence of the second decoy
-            chBr1_seq = passing_decoys[1].sequence(
-                passing_decoys[1].chain_begin(2), passing_decoys[1].chain_end(2)
-            )
-            # set chBr1_seq score as the other passing sequence
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                to_return, "chBr1_seq", chBr1_seq
-            )
-            # set chBr2_seq score as 'X'
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
-            # yield the first decoy
-            packed_decoy = io.to_packed(to_return)
-            yield packed_decoy
+        if "redesign_hinge" in kwargs:
+            # need to yield all the passing decoys since the hinge sequences will be different
+            for decoy in passing_decoys:
+                packed_decoy = io.to_packed(decoy)
+                yield packed_decoy
         else:
-            decoys = list(
-                sorted(
-                    passing_decoys,
-                    key=lambda x: x.scores["Y_mean_pae_interaction"],
-                    reverse=False,  # we want the lowest mean_pae_interaction
+            if len(passing_decoys) == 0:
+                continue
+            elif len(passing_decoys) == 1:
+                to_return = passing_decoys[0]
+                # set chBr[1|2]_seq scores as 'X'
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", "X")
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
+                # just yield the one decoy
+                packed_decoy = io.to_packed(to_return)
+                yield packed_decoy
+            elif len(passing_decoys) == 2:
+                decoys = list(
+                    sorted(
+                        passing_decoys,
+                        key=lambda x: float(x.scores["Y_mean_pae_interaction"]),
+                        reverse=False,  # we want the lowest mean_pae_interaction
+                    )
                 )
-            )
-            # get the first decoy
-            to_return = passing_decoys[0]
-            putative_seqs = [
-                passing_decoy.sequence(
-                    passing_decoy.chain_begin(2), passing_decoy.chain_end(2)
+                # get the first decoy
+                to_return = decoys[0]
+                # get the sequence of the second decoy
+                chBr1_seq = decoys[1].sequence(
+                    decoys[1].chain_begin(2), decoys[1].chain_end(2)
                 )
-                for passing_decoy in passing_decoys[1:]
-            ]
-            decoy_seq = to_return.sequence(
-                to_return.chain_begin(2), to_return.chain_end(2)
-            )
-            # rank the sequence list by Levenshtein distance to the first decoy sequence
-            ranked_seqs = list(
-                sorted(
-                    putative_seqs,
-                    key=lambda x: levenshtein_distance(decoy_seq, x),
-                    reverse=True,  # we want the largest distance from the first decoy
+                # set chBr1_seq score as the other passing sequence
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    to_return, "chBr1_seq", chBr1_seq
                 )
-            )
-            # get the first two sequences
-            first_seq, second_seq = ranked_seqs[0], ranked_seqs[1]
-            # add these sequences back into the pose scores
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                to_return, "chBr1_seq", first_seq
-            )
-            pyrosetta.rosetta.core.pose.setPoseExtraScore(
-                to_return, "chBr2_seq", second_seq
-            )
-            # yield the first decoy
-            packed_decoy = io.to_packed(to_return)
-            yield packed_decoy
+                # set chBr2_seq score as 'X'
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
+                # yield the first decoy
+                packed_decoy = io.to_packed(to_return)
+                yield packed_decoy
+            else:
+                decoys = list(
+                    sorted(
+                        passing_decoys,
+                        key=lambda x: float(x.scores["Y_mean_pae_interaction"]),
+                        reverse=False,  # we want the lowest mean_pae_interaction
+                    )
+                )
+                # get the first decoy
+                to_return = decoys[0]
+                putative_seqs = [
+                    passing_decoy.sequence(
+                        passing_decoy.chain_begin(2), passing_decoy.chain_end(2)
+                    )
+                    for passing_decoy in decoys[1:]
+                ]
+                decoy_seq = to_return.sequence(
+                    to_return.chain_begin(2), to_return.chain_end(2)
+                )
+                # rank the sequence list by Levenshtein distance to the first decoy sequence
+                ranked_seqs = list(
+                    sorted(
+                        putative_seqs,
+                        key=lambda x: levenshtein_distance(decoy_seq, x),
+                        reverse=True,  # we want the largest distance from the first decoy
+                    )
+                )
+                # get the first two sequences
+                first_seq, second_seq = ranked_seqs[0], ranked_seqs[1]
+                # add these sequences back into the pose scores
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    to_return, "chBr1_seq", first_seq
+                )
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    to_return, "chBr2_seq", second_seq
+                )
+                # yield the first decoy
+                packed_decoy = io.to_packed(to_return)
+                yield packed_decoy
 
 
 @requires_init
