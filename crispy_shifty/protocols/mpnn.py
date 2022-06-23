@@ -158,6 +158,8 @@ class MPNNRunner(ABC):
         :param: batch_size: number of sequences to generate per batch.
         :param: model_name: name of the model to use. v_48_010 is probably best, v_32*
         variants use less memory.
+        :param: path_to_model_weights: absolute path to model weights. Change if running
+        somewhere besides the digs.
         :param: num_sequences: number of sequences to generate in total.
         :param: omit_AAs: concatenated string of amino acids to omit from the sequence.
         :param: temperature: temperature to use for the MPNN.
@@ -213,11 +215,12 @@ class MPNNRunner(ABC):
             "--fixed_positions_jsonl",
             "--out_folder",
             # flags that are optional and are set by MPNNRunner or children:
+            "--assume_symmetry",
             "--bias_AA_jsonl",
             "--bias_by_res_jsonl",
+            "--compute_input_sequence_score",
             "--omit_AA_jsonl",
             "--tied_positions_jsonl",
-            # "--path_to_model_weights",
             "--pdb_path",
             "--pdb_path_chains",
             "--pssm_bias_flag",
@@ -227,6 +230,8 @@ class MPNNRunner(ABC):
             "--pssm_threshold",
             "--save_probs",
             "--save_score",
+            "--seed",
+            "--use_seed",
         ]
         self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'protein_mpnn_run.py')}"
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
