@@ -43,9 +43,9 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 # rmsd_filter - None to not calculate rmsd.  {"sele":StrOfIndices, "super_sele":StrOfIndices, "type":str(pyrosetta.rosetta.core.scoring.rmsd_atoms member), "save":bool, "cutoff":float}
 @requires_init
 def add_azo(
-    pose_in,
     selection,
     residue_name: str,
+    pose_in=None,
     add_constraints: bool = False,
     filter_by_sidechain_distance: float = -1,
     fbsd_ub: float = -1,
@@ -66,7 +66,9 @@ def add_azo(
     invert_fbsd: bool = False,
     pass_rmsd: bool = False,
     ramp_cart_bonded: bool = True,
+    pdb_path: str = None,
 ):
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     import pyrosetta
 
     # Force correct typing
@@ -83,8 +85,8 @@ def add_azo(
     tors_fast_relax_rounds = int(tors_fast_relax_rounds)
     cart_fast_relax_rounds = int(cart_fast_relax_rounds)
     rmsd_filter = float(rmsd_filter)
-    rmsd_sele = str(rmsd_sele)
-    super_sele = str(super_sele)
+    #rmsd_sele = str(rmsd_sele)
+    #super_sele = str(super_sele)
     rmsd_type = str(rmsd_type)
     save_rmsd = bool(save_rmsd)
     invert_rmsd = bool(invert_rmsd)
@@ -118,8 +120,8 @@ def add_azo(
             return lb ** 2 < d1 < ub ** 2
 
     def add_linker_bonds_asymmetric(pose, res_indices, linker_index):
-        bond1 = pyrosetta.rosetta.protocols.cyclic_peptide.DeclareBond()
-        bond2 = pyrosetta.rosetta.protocols.cyclic_peptide.DeclareBond()
+        bond1 = pyrosetta.rosetta.protocols.simple_moves.DeclareBond()
+        bond2 = pyrosetta.rosetta.protocols.simple_moves.DeclareBond()
         bond1.set(linker_index, "C13", res_indices[0], "SG", False)
         bond2.set(linker_index, "C17", res_indices[1], "SG", False)
         bond1.apply(pose)
@@ -290,10 +292,13 @@ def add_azo(
                 if movemap is not None:
                     frlx.set_movemap(movemap)
                 frlx.cartesian(True)
+                print("applied cart", flush=True)
                 frlx.apply(pose)
+                print("relaxed", flush=True)
                 helper.post_relax_round_update_steps(
                     pose, selection.apply(pose), whole_structure, False, True
                 )
+                print("cart done", flush=True)
 
         # Set up for any relax
         frlx = pyrosetta.rosetta.protocols.relax.FastRelax(sfxn, 1)
@@ -380,7 +385,7 @@ def add_azo(
         from pyrosetta.rosetta.core.select.residue_selector import (
             TrueResidueSelector as TrueResidueSelector,
         )
-
+        print(type(rmsd_sele))
         if rmsd_sele is None:
             rmsd_sele = AndResidueSelector(
                 TrueResidueSelector(), NotResidueSelector(selection)
@@ -396,18 +401,33 @@ def add_azo(
                 ResidueIndexSelector(super_sele),
                 NotResidueSelector(selection),
             )
+        rmsd_resis=",".join([str(i+1) for i,b in enumerate(rmsd_sele.apply(pose_in)) if b])
+        super_resis=",".join([str(i+1) for i,b in enumerate(super_sele.apply(pose_in)) if b])
+        print(rmsd_resis,flush=True)
+        print(super_resis,flush=True)
+        rmsd_sele=ResidueIndexSelector(rmsd_resis)
+        super_sele=ResidueIndexSelector(super_resis)
+        #rmsd_sele=AndResidueSelector(rmsd_sele,NotResidueSelector(ResidueIndexSelector(azo_index)))
+        print(super_sele.apply(pose), flush=True)
+        print(rmsd_sele.apply(pose), flush=True)
+        print(super_sele, flush=True)
+        print(rmsd_sele, flush=True)
+        print("making rmsd metric", flush=True)
         rmsd_metric = pyrosetta.rosetta.core.simple_metrics.metrics.RMSDMetric()
         rmsd_metric.set_residue_selector(rmsd_sele)
         rmsd_metric.set_residue_selector_reference(rmsd_sele)
         rmsd_metric.set_residue_selector_super(super_sele)
         rmsd_metric.set_residue_selector_super_reference(super_sele)
+        print(f"setting rmsd_type: pyrosetta.rosetta.core.scoring.rmsd_atoms.{rmsd_type}", flush=True)
         rmsd_metric.set_rmsd_type(
             eval(f"pyrosetta.rosetta.core.scoring.rmsd_atoms.{rmsd_type}")
         )
         rmsd_metric.set_run_superimpose(True)
         rmsd_metric.set_comparison_pose(pose_in)
+        print("calculating", flush=True)
         rmsd = rmsd_metric.calculate(pose)
         if save_rmsd:
+            print("saving rmsd",flush=True)
             pyrosetta.rosetta.core.pose.setPoseExtraScore(
                 pose, "crosslinking_rmsd", rmsd
             )
@@ -416,8 +436,14 @@ def add_azo(
 
     if isinstance(pose_in, pyrosetta.distributed.packed_pose.core.PackedPose):
         pose_in = pyrosetta.distributed.packed_pose.core.to_pose(pose_in)
+    elif pose_in is None:
+        for pose_in in path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        ):
+            break
     pose = pose_in.clone()
     if type(selection) == str:
+        selection_str=selection
         selection = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
             selection
         )
@@ -529,18 +555,22 @@ def add_azo(
 
     # Filter by constraint energy
     if filter_by_cst_energy > 0:
+        print("Filtering by constraint energy", flush=True)
         assert not cst_energy_filter(
             pose, selection, filter_by_cst_energy
         ), "Failed constraint energy filter after final fast relax"
 
     # Filter by total score
     if filter_by_total_score is not None:
+        print("Filtering by total score", flush=True)
         assert not total_score_filter(pose, filter_by_total_score)
 
     # Filter by rmsd
     if rmsd_filter > 0:
-        rmsd_passed = (
-            filter_by_rmsd(
+        res_indices = [i + 1 for i, b in enumerate(selection.apply(pose)) if b]
+        azo_index = get_linker_index(pose, res_indices)
+        print("Calculating RMSD", flush=True)
+        rmsd_passed = filter_by_rmsd(
                 pose,
                 pose_in,
                 selection,
@@ -549,14 +579,18 @@ def add_azo(
                 super_sele,
                 rmsd_type,
                 save_rmsd,
-            ),
-            "Failed RMSD filter",
-        )
+            )
         if not pass_rmsd:
             if invert_rmsd:
                 assert rmsd_passed, "Failed RMSD filter"
             else:
                 assert not rmsd_passed, "Failed RMSD filter"
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+            pose, "crosslinked_residues", selection_str
+        )
+        pyrosetta.rosetta.core.pose.setPoseExtraScore(
+            pose, "crosslinker_name", residue_name
+        )
     return pose
 
 
