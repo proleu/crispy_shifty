@@ -1,12 +1,12 @@
 dev TODOs:
     	
-    - genscript peptides
-    - orthogonal order
-    - staples for 230, 242-44, 269
+    - TAR/archive stuff
+    - orthogonal order?
+    - staples for 230, 242-44, 269, 287
     - mutants for 242-244
         - order the above 2
     - 94, JHB07, JHB09m B's
-    - crispy_shifty_junctions 06
+    - crispy_shifty_junctions 07
     - save $HOSTNAME in output files
     - crispy crispy stuff
     - graduation_requirements
