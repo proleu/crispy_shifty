@@ -1503,7 +1503,7 @@ def fold_dimer_X(
     else:
         # skip the kwargs check
         poses = path_to_pose_or_ppose(
-            path=pdb_path, cluster_scores=True, pack_result=False
+            path=pdb_path, df_scores=kwargs["df_scores"], pack_result=False
         )
 
     for pose in poses:
