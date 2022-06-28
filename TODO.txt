@@ -41,6 +41,10 @@ data analysis TODOs:
     - DOTFILES - version control
 
 crispy_crispies:
-    - sap/interface/net charge of svt hits?
-    - mpnn redesign of svt hits (with buttressing helixes?)
-    - pos/neg design with crossdocking within glucagon family?
+    - NPY order + peptides
+    - mpnn redesign hits? +/-?
+        - pos/neg design with crossdocking within glucagon family?
+    - filter inputs -> threading script (which targets?)
+    - mpnn
+    - fold complex
+    - order or fold apo?

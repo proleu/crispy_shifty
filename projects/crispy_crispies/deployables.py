@@ -10,6 +10,20 @@ from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
 # Custom library imports
 
+target_dict = {
+    "APOE": "QARLGADMEDVCGRLVQ",
+    "GIP": "YAEGTFISDYSIAMDKIHQQDFVNWLLAQKGKKNDWLHNITQ",
+    "Glicentin": "RSLQDTEELSRSFSASQADPLSD",  # commercial starts w PDQMNED
+    "GLP1": "HAGTFTSDVSSYLEGQAAKEFIAWLVKGRG",  # core version missing first and last 2 residues
+    "GLP2": "HADGSFSDEMNTILDNLAARDFINWLIQTKITD",
+    "Glucagon": "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT",
+    "NPY_9-35": "GEDAPAEDMARYYSALRHYINLITRQR",  # commercial starts w SKPDNP
+    # "Oxyntomodulin": "HSQGTFTSAYSKYLDSRRAQDFVQWLMNTKRNRNNIA", # nearly identical to Glucagon except for D->A mutation
+    "PTH": "SVSEIQLMHNLGKHLNSMERVEWLRKKLQDVHNF",  # commercial ends with VALG
+    "Secretin": "HSDGTFTSELSRLREGARLQRLLQGLV",
+}
+
+
 @requires_init
 def mpnn_binder(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -159,7 +173,10 @@ def fold_binder(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.folding import generate_decoys_from_pose, SuperfoldRunner
+    from crispy_shifty.protocols.folding import (
+        generate_decoys_from_pose,
+        SuperfoldRunner,
+    )
     from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
     from crispy_shifty.utils.io import cmd, print_timestamp
 
@@ -220,6 +237,7 @@ def fold_binder(
         ):
             packed_decoy = io.to_packed(decoy)
             yield packed_decoy
+
 
 @requires_init
 def fold_unbound(
@@ -306,3 +324,161 @@ def fold_unbound(
             final_ppose = io.to_packed(final_pose)
             yield final_ppose
 
+
+@requires_init
+def thread_target(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to thread a target peptide onto.
+    :param: kwargs: keyword arguments to be passed to the threading protocol.
+    :return: an iterator of PackedPose objects.
+    """
+    from itertools import combinations
+    from pathlib import Path
+    import sys
+    from time import time
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+
+    # TODO: this is a hack, we need to fix this
+    # from pyrosetta.rosetta.core.pose import Pose
+    # from pyrosetta.distributed.tasks.rosetta_scripts import (
+    #     SingleoutputRosettaScriptsTask,
+    # )
+    # from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        AndResidueSelector,
+        ChainSelector,
+        NeighborhoodResidueSelector,
+        ResidueNameSelector,
+        TrueResidueSelector,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.design import interface_between_selectors
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        pdb_path = kwargs["pdb_path"]
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=True, pack_result=False
+        )
+    # loop over inputs
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        original_pose = pose.clone()
+        chB_length = pose.chain_end(2) - pose.chain_end(1)
+        # loop over targets to thread onto inputs
+        for target_name, target_seq in target_dict.items():
+            if len(target_seq) > chB_length:
+                # thread varius frames of the target onto the entire input
+                to_thread = [
+                    target_seq[x:y]
+                    for x, y in combinations(range(len(target_seq) + 1), r=2)
+                    if len(target_seq[x:y]) == chB_length
+                ]
+                thread_starts = [pose.chain_begin(2)]
+                thread_ends = [pose.chain_end(2)]
+            # thread the entire target onto various frames of the input
+            else:
+                to_thread = [target_seq]
+                thread_starts = [
+                    i
+                    for i in range(
+                        int(pose.chain_begin(2)),
+                        int(pose.chain_end(2)) - len(target_seq) + 2,
+                    )
+                ]
+                thread_ends = [i + len(target_seq) - 1 for i in thread_starts]
+
+            # make movers for the threading protocol
+            sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+            sc.chain_order("12")
+            chA_only = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+            chA_only.chain_order("1")
+            stm = pyrosetta.rosetta.protocols.simple_moves.SimpleThreadingMover()
+            trim = pyrosetta.rosetta.protocols.grafting.simple_movers.KeepRegionMover()
+            trim_cterm = (
+                pyrosetta.rosetta.protocols.grafting.simple_movers.DeleteRegionMover()
+            )
+            # make residue selectors
+            apolar = ResidueNameSelector()
+            apolar.set_residue_name3("ALA,PHE,ILE,LEU,MET,VAL,TRP,TYR")
+            chA_selector = ChainSelector(1)
+            chB_selector = ChainSelector(2)
+            interface_selector = interface_between_selectors(chA_selector, chB_selector)
+            interface_chB = AndResidueSelector(chB_selector, interface_selector)
+            interface_chB_apolar = AndResidueSelector(interface_chB, apolar)
+            best_poses = []
+            best_int_count = 0
+            # loop over frames to thread x thread starts
+            for seq_to_thread in to_thread:
+                for i, start in enumerate(thread_starts):
+                    end = thread_ends[i]
+                    # create a threading mover
+                    stm.set_sequence(seq_to_thread, start)
+                    threaded_pose = pose.clone()
+                    stm.apply(threaded_pose)
+                    # clean off trailing ends
+                    chA, chB = threaded_pose.clone(), threaded_pose.clone()
+                    chA_only.apply(chA)
+                    if i < len(thread_starts) - 1:
+                        trim.region(str(start), str(end))
+                        trim.apply(chB)
+                    else:
+                        # keepregionmover has a bug with c terminal regions
+                        trim_cterm.region(str(chB.chain_begin(1)), str(start - 1))
+                        trim_cterm.apply(chB)
+                    chA.append_pose_by_jump(chB, chA.num_jump() + 1)
+                    sc.apply(chA)
+                    # find all residues in the interface that are apolar and on chB
+                    list_of_apolar_in_int = list(interface_chB_apolar.apply(chA))
+                    # convert to a count by summing the True values
+                    count_of_apolar_in_int = sum(list_of_apolar_in_int)
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        chA, "kept_start", start
+                    )
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(chA, "kept_end", end)
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        chA, "threaded_seq", seq_to_thread
+                    )
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        chA, "target_seq", target_seq
+                    )
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        chA, "target_name", target_name
+                    )
+                    prefix, suffix = (
+                        target_seq.split(seq_to_thread)[0],
+                        target_seq.split(seq_to_thread)[-1],
+                    )
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(chA, "prefix", prefix)
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(chA, "suffix", suffix)
+                    # if the count is better than the best count, start a new list
+                    if count_of_apolar_in_int > best_int_count:
+                        best_int_count = count_of_apolar_in_int
+                        best_poses = [chA]
+                    # if the count is the same as the best count, add to the list
+                    elif count_of_apolar_in_int == best_int_count:
+                        best_poses.append(chA)
+                    # otherwise, continue
+                    else:
+                        continue
+            # yield all the best poses after updating the scores
+            for best_pose in best_poses:
+                final_scores = {**scores, **dict(best_pose.scores)}
+                for key, value in final_scores.items():
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        best_pose, key, str(value)
+                    )
+                yield best_pose

@@ -35,6 +35,7 @@ def delta_rg(pose_a: Pose, pose_b: Pose) -> float:
     delta_rg = b_rg - a_rg
     return delta_rg
 
+
 def angle(a: np.array, b: np.array, c: np.array) -> float:
     """
     :param: a: Cartesian coordinates of first point.
@@ -51,6 +52,7 @@ def angle(a: np.array, b: np.array, c: np.array) -> float:
     cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
     angle = np.degrees(np.arccos(cosine_angle))
     return angle
+
 
 def hinge_angles(pose: Pose, midpoint: int) -> Tuple[float, float, float]:
     """
@@ -82,10 +84,12 @@ def hinge_angles(pose: Pose, midpoint: int) -> Tuple[float, float, float]:
     angle_between = angle(CA_x3, CA_y2, CA_y3)
     angle_X = angle(CA_x1, CA_x2, CA_x3)
     angle_Y = angle(CA_y1, CA_y2, CA_y3)
-    if (angle_X+angle_between)>(360-angle_Y-1) and (angle_X+angle_between)<(360-angle_Y+1):
-        angle_Y = angle_X+angle_between
-    if angle_Y<angle_X:
-        angle_between = -angle_between  
+    if (angle_X + angle_between) > (360 - angle_Y - 1) and (angle_X + angle_between) < (
+        360 - angle_Y + 1
+    ):
+        angle_Y = angle_X + angle_between
+    if angle_Y < angle_X:
+        angle_between = -angle_between
     return angle_X, angle_Y, angle_between
 
 

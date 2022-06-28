@@ -1221,15 +1221,22 @@ def mpnn_paired_state_fixed(
             pose = original_pose.clone()
             # get a boolean mask of the designable residues in state Y
             Y_design_sel = AndResidueSelector(
-                mpnn_design_area,
-                NotResidueSelector(fixed_sel)
+                mpnn_design_area, NotResidueSelector(fixed_sel)
             )
             Y_designable_filter = list(Y_design_sel.apply(pose))
-            Y_designable_residues = [i for i, designable in enumerate(Y_designable_filter, start=1) if designable]
+            Y_designable_residues = [
+                i
+                for i, designable in enumerate(Y_designable_filter, start=1)
+                if designable
+            ]
             # make a list of the corresponding residues in state X that are designable in Y
-            X_designable_residues = [i + offset for i in Y_designable_residues if i + offset < peptide_start]
+            X_designable_residues = [
+                i + offset for i in Y_designable_residues if i + offset < peptide_start
+            ]
             designable_residues = Y_designable_residues + X_designable_residues
-            design_sel = ResidueIndexSelector(",".join(str(i) for i in designable_residues))
+            design_sel = ResidueIndexSelector(
+                ",".join(str(i) for i in designable_residues)
+            )
             print_timestamp(
                 f"Beginning MPNNDesign run {i+1}/{num_conditions}", start_time
             )

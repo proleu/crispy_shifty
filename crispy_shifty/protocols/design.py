@@ -641,9 +641,9 @@ def struct_profile(pose: Pose, design_sel: ResidueSelector) -> None:
 
 
 def seq_profile(
-    pose: Pose, 
+    pose: Pose,
     design_sel: Optional[ResidueSelector] = None,
-    matrix: Optional[str] = "IDENTITY", 
+    matrix: Optional[str] = "IDENTITY",
     weight: Optional[float] = 1.0,
     scaling: Optional[str] = "prob",
     seq_profile_source: Optional[str] = "current",
@@ -682,11 +682,26 @@ def seq_profile(
     elif seq_profile_source == "pdb":
         src_str = f'pdbname="{seq_profile_fname}"'
     else:
-        raise ValueError(f"seq_profile_source must be one of 'current', 'starting', 'native', 'fasta', 'pssm', 'pdb', not {seq_profile_source}")
-    
+        raise ValueError(
+            f"seq_profile_source must be one of 'current', 'starting', 'native', 'fasta', 'pssm', 'pdb', not {seq_profile_source}"
+        )
+
     if design_sel is not None:
-        nondesignable_sel = pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(design_sel)
-        exclude_resnums_str = ' exclude_resnums="' + ','.join(str(i) for i in pyrosetta.rosetta.core.select.get_residues_from_subset(nondesignable_sel.apply(pose))) + '"'
+        nondesignable_sel = (
+            pyrosetta.rosetta.core.select.residue_selector.NotResidueSelector(
+                design_sel
+            )
+        )
+        exclude_resnums_str = (
+            ' exclude_resnums="'
+            + ",".join(
+                str(i)
+                for i in pyrosetta.rosetta.core.select.get_residues_from_subset(
+                    nondesignable_sel.apply(pose)
+                )
+            )
+            + '"'
+        )
     # can only set the string_exclude_resnums_ internal variable by parsing an xml tag... annoying
     objs = pyrosetta.rosetta.protocols.rosetta_scripts.XmlObjects.create_from_string(
         f"""
