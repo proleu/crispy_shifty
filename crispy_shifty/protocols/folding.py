@@ -1106,15 +1106,15 @@ def fold_paired_state_X(
     tag_pose_dict = runner.get_tag_pose_dict()
     # filter the decoys
     # Adam's for filtering orthogonal peptide switches
-    filter_dict = {
-        "mean_plddt": (gt, 85),
-        "rmsd_to_input": (lt, 2),
-    }
-    # Phil's for filtering crispy shifties
     # filter_dict = {
-    #     "mean_plddt": (gt, 90.0),
-    #     "rmsd_to_input": (lt, 1.75),
+    #     "mean_plddt": (gt, 85),
+    #     "rmsd_to_input": (lt, 2),
     # }
+    # Phil's for filtering crispy shifties
+    filter_dict = {
+        "mean_plddt": (gt, 93.0),
+        "rmsd_to_input": (lt, 1.5),
+    }
     rank_on = "mean_plddt"
     print_timestamp("Generating decoys", start_time)
     sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
