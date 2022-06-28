@@ -341,18 +341,10 @@ def thread_target(
     import pyrosetta
     import pyrosetta.distributed.io as io
 
-    # TODO: this is a hack, we need to fix this
-    # from pyrosetta.rosetta.core.pose import Pose
-    # from pyrosetta.distributed.tasks.rosetta_scripts import (
-    #     SingleoutputRosettaScriptsTask,
-    # )
-    # from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
-        NeighborhoodResidueSelector,
         ResidueNameSelector,
-        TrueResidueSelector,
     )
 
     # insert the root of the repo into the sys.path
@@ -372,6 +364,14 @@ def thread_target(
         poses = path_to_pose_or_ppose(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
+    # see if there are contact filters in kwargs, would all end in "_contacts"
+    contact_filters = [
+        key for key in kwargs.keys() if key.endswith("_contacts")
+    ]
+    # obtain the contact filters, make a dict of target_name: int(contacts)
+    contact_filters_dict = {
+        key[:-9]: int(kwargs[key]) for key in contact_filters
+    }
     # loop over inputs
     for pose in poses:
         pose.update_residue_neighbors()
@@ -446,6 +446,9 @@ def thread_target(
                     # convert to a count by summing the True values
                     count_of_apolar_in_int = sum(list_of_apolar_in_int)
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                        chA, "count_apolar", count_of_apolar_in_int
+                    )
+                    pyrosetta.rosetta.core.pose.setPoseExtraScore(
                         chA, "kept_start", start
                     )
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(chA, "kept_end", end)
@@ -476,6 +479,17 @@ def thread_target(
                         continue
             # yield all the best poses after updating the scores
             for best_pose in best_poses:
+                # check if there is a contact filter for the pose target_name
+                if best_pose.scores["target_name"] in contact_filters_dict.keys():
+                    # check if the pose passes the contact filter
+                    if best_pose.scores["count_apolar"] > contact_filters_dict[
+                        best_pose.scores["target_name"]
+                    ]:
+                        pass
+                    else:
+                        continue
+                else:
+                    pass
                 final_scores = {**scores, **dict(best_pose.scores)}
                 for key, value in final_scores.items():
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
