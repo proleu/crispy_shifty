@@ -700,6 +700,9 @@ def filter_paired_state_CSD(
     clean_sfxn = gen_scorefxn()
     print_timestamp("Generated score functions", start_time=start_time)
 
+    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    sw.chain_order("34")
+
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         raise KeyError("This function is special and does not take a packed_pose_in")
@@ -707,35 +710,31 @@ def filter_paired_state_CSD(
         pdb_paths = kwargs["pdb_path"].split("____")
         poses = {}
         for pdb_path in pdb_paths:
-            pose = path_to_pose_or_ppose(
+            for pose in path_to_pose_or_ppose( # use this for loop because this function is a generator
                 path=pdb_path, cluster_scores=True, pack_result=False
-            )
-            scores = dict(pose.scores)
-            if "X_model" in pose.scores:
-                poses[f"{scores['X_protomer']}_X_model_{scores['X_model']}"] = pose
-            else:
-                poses[f"Y_model_{scores['Y_model']}"] = pose
+            ):
+                scores = dict(pose.scores)
+                if "X_model" in scores:
+                    poses[f"{scores['X_protomer']}_X_model_{scores['X_model']}"] = pose
+                else:
+                    sw.apply(pose)
+                    poses[f"Y_model_{scores['Y_model']}"] = pose
     # the best Y model by plddt has already been chosen when filtering 05_fold_Y. Now choose the best X models by plddt.
     A_X_pose = max([x for i, x in poses.items() if i.startswith("A_X")], key=lambda x: x.scores["X_mean_plddt"])
     B_X_pose = max([x for i, x in poses.items() if i.startswith("B_X")], key=lambda x: x.scores["X_mean_plddt"])
     # get the scores from the poses
-    A_X_scores = dict(A_X_pose.scores)
-    B_X_scores = dict(B_X_pose.scores)
     x_af2_cols = ["X_mean_pae", "X_mean_pae_interaction", "X_mean_pae_intra_chain", "X_mean_pae_intra_chain_A", "X_mean_plddt", "X_model", "X_pTMscore", "X_recycles", "X_rmsd_to_input", "X_seed", "X_tol", "X_type"]
     scores = {}
-    for key, value in A_X_scores.items():
+    for key, value in dict(A_X_pose.scores).items():
         if key in x_af2_cols:
             scores[f"A_{key}"] = value
         elif key != "X_protomer":
             scores[key] = value
-    for key, value in B_X_scores.items():
+    for key, value in dict(B_X_pose.scores).items():
         if key in x_af2_cols:
             scores[f"B_{key}"] = value
     # get the Y pose
-    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
-    sw.chain_order("34")
     Y_pose = poses[f"Y_model_{scores['Y_model']}"]
-    sw.apply(Y_pose)
     A_Y_pose, B_Y_pose = list(Y_pose.split_by_chain())
     id_to_pose = {
         "A_X": A_X_pose,
@@ -752,7 +751,6 @@ def filter_paired_state_CSD(
             scores[f"{protomer}_X_Y_{model}_rmsd"] = score_rmsd(pose=pose, refpose=id_to_pose[f"{protomer}_Y"])
         else:
             _, _, model = pose_id.split("_")
-            sw.apply(pose)
             scores[f"Y_Y_{model}_rmsd"] = score_rmsd(pose=pose, refpose=Y_pose)
             for protomer, pose_chain in zip("AB", list(pose.split_by_chain())):
                 scores[f"{protomer}_Y_Y_{model}_rmsd"] = score_rmsd(pose=pose_chain, refpose=id_to_pose[f"{protomer}_Y"])
