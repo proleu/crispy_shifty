@@ -2,15 +2,15 @@ dev TODOs:
     	
     - TAR/archive stuff
     - orthogonal order?
+    - FF74/cs_094 redesign?
     - staples for 230, 242-44, 269, 287
     - mutants for 242-244
         - order the above 2
     - 94, JHB07, JHB09m B's
-    - crispy_shifty_junctions 07
+    - crispy_shifty_junctions 09
     - save $HOSTNAME in output files
-    - crispy crispy stuff
     - graduation_requirements
-    - try af2 chBs as oligomers
+    - try af2 chBs as oligomers?
     - update mpnn.py to enable FAMPNN (+ DNA/RNA?)
     - benchmark options
 
