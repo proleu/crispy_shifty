@@ -644,6 +644,8 @@ class MPNNLigandDesign(MPNNDesign):
         self.update_flags({"--checkpoint_path": self.checkpoint_path})
         # remove model_name from the flags
         self.flags.pop("--model_name")
+        # remove path_to_model_weights from the flags
+        self.flags.pop("--path_to_model_weights")
 
     def apply(self, pose: Pose) -> None:
         """
