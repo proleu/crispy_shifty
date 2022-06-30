@@ -1626,19 +1626,35 @@ def design_after_repeat_propagation(
         try:
             num_repeats_extended = int(kwargs["num_repeats_extended"])
         except KeyError:
-            raise KeyError("num_repeats_extended must be specified.")
+            num_repeats_extended = None
+            try:
+                n_extended = int(kwargs["n_extended"])
+                c_extended = int(kwargs["c_extended"])
+            except KeyError:
+                raise KeyError("num_repeats_extended or c_ and n_extended must be specified.")
+        # see if a neighborhood distance is in kwargs
+        try:
+            neighborhood_distance = int(kwargs["neighborhood_distance"])
+        except KeyError:
+            neighborhood_distance = 6
         # get n and c-terminal endpoints of helices
         n_endpoints = StateMaker.get_helix_endpoints(pose, n_terminal=True)
         c_endpoints = StateMaker.get_helix_endpoints(pose, n_terminal=False)
         # get total number of helices
         num_helices = len(n_endpoints)
-        # every repeat is 2 n-terminal helices and 2 c-terminal helices
-        # we want to design all helices that were part of the extension
+        # every repeat is 2 helices
+        # we want to design all helices that were part of the extensions
         start_nterm_chunk = pose.chain_begin(1)
-        end_nterm_chunk = c_endpoints[int(2 * num_repeats_extended)]
-        start_cterm_chunk = n_endpoints[
-            num_helices - int(1 + (2 * num_repeats_extended - 1))
-        ]
+        if num_repeats_extended is not None:
+            end_nterm_chunk = c_endpoints[int(2 * num_repeats_extended)]
+            start_cterm_chunk = n_endpoints[
+                num_helices - int(1 + (2 * num_repeats_extended - 1))
+            ]
+        else:
+            end_nterm_chunk = c_endpoints[int(2 * n_extended)]
+            start_cterm_chunk = n_endpoints[
+                num_helices - int(1 + (2 * c_extended - 1))
+            ]
         end_cterm_chunk = pose.chain_end(1)
         nterm_resis = ",".join(
             str(x) for x in range(start_nterm_chunk, end_nterm_chunk)
@@ -1649,8 +1665,8 @@ def design_after_repeat_propagation(
         nterm_sel = ResidueIndexSelector(nterm_resis)
         cterm_sel = ResidueIndexSelector(cterm_resis)
         design_sel = OrResidueSelector(
-            NeighborhoodResidueSelector(nterm_sel, 6),
-            NeighborhoodResidueSelector(cterm_sel, 6),
+            NeighborhoodResidueSelector(nterm_sel, neighborhood_distance),
+            NeighborhoodResidueSelector(cterm_sel, neighborhood_distance),
         )
         print_timestamp("Redesigning caps with MPNN", start_time)
         # construct the MPNNDesign object
