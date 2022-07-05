@@ -1,39 +1,50 @@
 dev TODOs:
-    - fix 4/8 and 4/13 orders, add 3/16
-    	- 4/8 has mixed up chains
-    	- 4/13 most chain B names are wrong
     	
+    - TAR/archive stuff
+    - orthogonal order?
+    - FF74/cs_094 redesign?
+    - staples for 230, 242-44, 269, 287
+    - mutants for 242-244
+        - order the above 2
+    - 94, JHB07, JHB09m B's
+    - crispy_shifty_junctions 09
+    - save $HOSTNAME in output files
+    - graduation_requirements
+    - try af2 chBs as oligomers?
     - update mpnn.py to enable FAMPNN (+ DNA/RNA?)
     - benchmark options
-    - crispy_shifty_junctions 04
-    - save $HOSTNAME in output files
-    - crispy crispy stuff
 
     - ordering utils, domesticator
-        - add 669 and 671 to vectors
+        - add 673 to vectors
     - TODOs and docstrings in all modules
     - plotting and curve fitting functions for FP
 
+env TODOs:
     - remember to maintain the envs and repos on perlmutter and janelia clusters
     - finalize yaml with updated pyrosetta, pynvim and new pystapler
         - now there is a bunch of stupid hallucination bloatware that needs to be there
+        - could take away the bloatware since anna doesn't need it anymore
         - making conda consistent with new JAX cuda build?
         - do it when no one is has crispy env active
 
+data analysis TODOs:
+    - SEC and yields using code blocks from Basile/Lukas
     - agg clustering of States before and after plot instead of piecharts
+    - fix 4/8 and 4/13 orders, add 3/16
+    	- 4/8 has mixed up chains
+    	- 4/13 most chain B names are wrong
 
     - if really bored
         - add documentation to the InsertResMover and PR
         - SafeSwitchChainOrderMover in python, then CPP?
 
     - DOTFILES - version control
-    - make `almost_inpainting` blueprint builder func 
-
-TODO: 
-    10 order and analyze
 
 crispy_crispies:
-    - sap/interface/net charge of svt hits?
-    - mpnn redesign of svt hits (with buttressing helixes?)
-    - order GLP1 plate?
-    - pos/neg design with crossdocking within glucagon family?
+    - NPY order + peptides
+    - mpnn redesign hits? +/-?
+        - pos/neg design with crossdocking within glucagon family?
+    - filter inputs -> threading script (which targets?)
+    - mpnn
+    - fold complex
+    - order or fold apo?

@@ -188,12 +188,14 @@ def two_state_design_paired_state(
         for i in range(1, pose.chain_end(1) + 1):
             n1 = str(pose.residue(i).name1())
             n2 = str(pose.residue(i + offset).name1())
-            if n1 == 'C' and n2 != 'C':
+            if n1 == "C" and n2 != "C":
                 difference_cys_indices.append(i)
-            elif n1 != 'C' and n2 == 'C':
+            elif n1 != "C" and n2 == "C":
                 difference_cys_indices.append(i + offset)
         if difference_cys_indices:
-            diff_cys_sel = ResidueIndexSelector(','.join(str(i) for i in sorted(difference_cys_indices)))
+            diff_cys_sel = ResidueIndexSelector(
+                ",".join(str(i) for i in sorted(difference_cys_indices))
+            )
             mr = pyrosetta.rosetta.protocols.simple_moves.MutateResidue()
             mr.set_break_disulfide_bonds(True)
             mr.set_preserve_atom_coords(True)
@@ -471,6 +473,7 @@ def filter_paired_state(
         ppose = io.to_packed(pose)
         yield ppose
 
+
 @requires_init
 def filter_paired_state_OPS(
     packed_pose_in: Optional[PackedPose] = None, **kwargs
@@ -559,32 +562,46 @@ def filter_paired_state_OPS(
         sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
         sw.chain_order("12")
         for i, state in enumerate("YX"):
-            state_pose = split_pose[2*i].clone()
+            state_pose = split_pose[2 * i].clone()
             pyrosetta.rosetta.core.pose.append_pose_to_pose(
                 state_pose,
-                split_pose[2*i+1],
+                split_pose[2 * i + 1],
                 new_chain=True,
             )
             sw.apply(state_pose)
 
             if state == "Y":
                 # pack the rotamers of chain A and chain B to get rid of rosetta clashes
-                pack_rotamers(pose=state_pose, task_factory=task_factory, scorefxn=clean_sfxn)
+                pack_rotamers(
+                    pose=state_pose, task_factory=task_factory, scorefxn=clean_sfxn
+                )
             else:
                 # fastrelax chain C and chain D, only allow backbone movement of the peptide and movement around the jump
-                movemap.set_bb_true_range(state_pose.chain_begin(2), state_pose.chain_end(2))
-                fast_relax(pose=state_pose, task_factory=task_factory, scorefxn=clean_cart_sfxn, movemap=movemap, cartesian=True)
+                movemap.set_bb_true_range(
+                    state_pose.chain_begin(2), state_pose.chain_end(2)
+                )
+                fast_relax(
+                    pose=state_pose,
+                    task_factory=task_factory,
+                    scorefxn=clean_cart_sfxn,
+                    movemap=movemap,
+                    cartesian=True,
+                )
 
             state_poses.append(state_pose)
             # get SAP
             state_sap = score_SAP(state_pose, name=f"{state}_sap")
             # get cms
             chA, chB = (ChainSelector(i) for i in range(1, 3))
-            state_cms = score_cms(pose=state_pose, sel_1=chA, sel_2=chB, name=f"{state}_cms")
+            state_cms = score_cms(
+                pose=state_pose, sel_1=chA, sel_2=chB, name=f"{state}_cms"
+            )
             # get ddg
             state_ddg = score_ddg(pose=state_pose, name=f"{state}_ddg")
             # get total score and score_per_res
-            state_total_score, state_score_per_res = score_per_res(pose=state_pose, scorefxn=clean_sfxn)
+            state_total_score, state_score_per_res = score_per_res(
+                pose=state_pose, scorefxn=clean_sfxn
+            )
             # update the scores dict with the new scores
             state_scores = {
                 f"{state}_sap": state_sap,
@@ -597,8 +614,14 @@ def filter_paired_state_OPS(
 
         # load the parent and align state_poses[1] chain A to it
 
-        scores["linear_peptide_rmsd"] = score_rmsd(pose=state_poses[1], refpose=pose, sel=ChainSelector(2), refsel=ChainSelector(4), name="linear_peptide_rmsd")
-        
+        scores["linear_peptide_rmsd"] = score_rmsd(
+            pose=state_poses[1],
+            refpose=pose,
+            sel=ChainSelector(2),
+            refsel=ChainSelector(4),
+            name="linear_peptide_rmsd",
+        )
+
         pose = state_poses[0]
         for chain in state_poses[1].split_by_chain():
             pyrosetta.rosetta.core.pose.append_pose_to_pose(

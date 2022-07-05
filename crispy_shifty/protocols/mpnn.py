@@ -158,6 +158,8 @@ class MPNNRunner(ABC):
         :param: batch_size: number of sequences to generate per batch.
         :param: model_name: name of the model to use. v_48_010 is probably best, v_32*
         variants use less memory.
+        :param: path_to_model_weights: absolute path to model weights. Change if running
+        somewhere besides the digs.
         :param: num_sequences: number of sequences to generate in total.
         :param: omit_AAs: concatenated string of amino acids to omit from the sequence.
         :param: temperature: temperature to use for the MPNN.
@@ -213,11 +215,12 @@ class MPNNRunner(ABC):
             "--fixed_positions_jsonl",
             "--out_folder",
             # flags that are optional and are set by MPNNRunner or children:
+            "--assume_symmetry",
             "--bias_AA_jsonl",
             "--bias_by_res_jsonl",
+            "--compute_input_sequence_score",
             "--omit_AA_jsonl",
             "--tied_positions_jsonl",
-            # "--path_to_model_weights",
             "--pdb_path",
             "--pdb_path_chains",
             "--pssm_bias_flag",
@@ -227,6 +230,8 @@ class MPNNRunner(ABC):
             "--pssm_threshold",
             "--save_probs",
             "--save_score",
+            "--seed",
+            "--use_seed",
         ]
         self.script = f"{str(Path(__file__).resolve().parent.parent.parent / 'proteinmpnn' / 'protein_mpnn_run.py')}"
         self.tmpdir = None  # this will be updated by the setup_tmpdir method.
@@ -639,6 +644,8 @@ class MPNNLigandDesign(MPNNDesign):
         self.update_flags({"--checkpoint_path": self.checkpoint_path})
         # remove model_name from the flags
         self.flags.pop("--model_name")
+        # remove path_to_model_weights from the flags
+        self.flags.pop("--path_to_model_weights")
 
     def apply(self, pose: Pose) -> None:
         """
@@ -1216,15 +1223,22 @@ def mpnn_paired_state_fixed(
             pose = original_pose.clone()
             # get a boolean mask of the designable residues in state Y
             Y_design_sel = AndResidueSelector(
-                mpnn_design_area,
-                NotResidueSelector(fixed_sel)
+                mpnn_design_area, NotResidueSelector(fixed_sel)
             )
             Y_designable_filter = list(Y_design_sel.apply(pose))
-            Y_designable_residues = [i for i, designable in enumerate(Y_designable_filter, start=1) if designable]
+            Y_designable_residues = [
+                i
+                for i, designable in enumerate(Y_designable_filter, start=1)
+                if designable
+            ]
             # make a list of the corresponding residues in state X that are designable in Y
-            X_designable_residues = [i + offset for i in Y_designable_residues if i + offset < peptide_start]
+            X_designable_residues = [
+                i + offset for i in Y_designable_residues if i + offset < peptide_start
+            ]
             designable_residues = Y_designable_residues + X_designable_residues
-            design_sel = ResidueIndexSelector(",".join(str(i) for i in designable_residues))
+            design_sel = ResidueIndexSelector(
+                ",".join(str(i) for i in designable_residues)
+            )
             print_timestamp(
                 f"Beginning MPNNDesign run {i+1}/{num_conditions}", start_time
             )

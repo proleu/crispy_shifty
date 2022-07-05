@@ -1166,7 +1166,9 @@ def finalize_peptide(
                 # make a residue selector that includes all residues in sub_window
                 indices = ",".join(sub_window)
                 sub_window_sel = ResidueIndexSelector(indices)
-                to_keep_sel = OrResidueSelector(sub_window_sel, NotResidueSelector(chB_sel))
+                to_keep_sel = OrResidueSelector(
+                    sub_window_sel, NotResidueSelector(chB_sel)
+                )
                 to_delete_sel = NotResidueSelector(to_keep_sel)
                 # setup the delete region mover
                 trimmed_pose = pose.clone()
@@ -1176,7 +1178,9 @@ def finalize_peptide(
                 trimmer.set_residue_selector(to_delete_sel)
                 trimmer.apply(trimmed_pose)
                 # fix the pdb_info
-                rechain.chain_order(''.join(str(i+1) for i in range(trimmed_pose.num_chains())))
+                rechain.chain_order(
+                    "".join(str(i + 1) for i in range(trimmed_pose.num_chains()))
+                )
                 rechain.apply(trimmed_pose)
                 # score the pose
                 cms = score_cms(
@@ -1220,12 +1224,13 @@ def finalize_peptide(
                 surf_sel = LayerSelector()
                 surf_sel.set_layers(False, False, True)
                 surf_sel.set_use_sc_neighbors(True)
-                surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface"
+                surf_sel.set_cutoffs(
+                    5.2, 3.0
+                )  # lenient definition for what is "surface"
                 int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
                 chA_int_surf_sel = AndResidueSelector(chA_sel, int_surf_sel)
                 chA_design_sel = AndResidueSelector(
-                    chA_int_surf_sel,
-                    NotResidueSelector(fixed_sel)
+                    chA_int_surf_sel, NotResidueSelector(fixed_sel)
                 )
                 # get the length of state Y
                 offset = pose.chain_end(2)
@@ -1233,7 +1238,9 @@ def finalize_peptide(
                 chA_design_filter = list(chA_design_sel.apply(pose))
                 # make a list of the corresponding residues in state X that are interface in Y
                 X_residues = [
-                    i + offset for i, designable in enumerate(chA_design_filter, start=1) if designable
+                    i + offset
+                    for i, designable in enumerate(chA_design_filter, start=1)
+                    if designable
                 ]
                 X_residues_str = ",".join(str(i) for i in X_residues)
                 X_design_sel = ResidueIndexSelector(X_residues_str)
@@ -1252,7 +1259,9 @@ def finalize_peptide(
                 surf_sel = LayerSelector()
                 surf_sel.set_layers(False, False, True)
                 surf_sel.set_use_sc_neighbors(True)
-                surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface"
+                surf_sel.set_cutoffs(
+                    5.2, 3.0
+                )  # lenient definition for what is "surface"
                 int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
                 # using a second neighborhood selector rather than just expanding the radius of the first to only tend to
                 # select residues on the same side of the DHR
@@ -1262,12 +1271,13 @@ def finalize_peptide(
                 exp_surf_sel = LayerSelector()
                 exp_surf_sel.set_layers(False, False, True)
                 exp_surf_sel.set_use_sc_neighbors(True)
-                exp_surf_sel.set_cutoffs(5.2, 2.0) # normal definition for what is "surface"
+                exp_surf_sel.set_cutoffs(
+                    5.2, 2.0
+                )  # normal definition for what is "surface"
                 exp_int_surf_sel = AndResidueSelector(exp_nbhd_sel, exp_surf_sel)
                 chA_int_surf_sel = AndResidueSelector(chA_sel, exp_int_surf_sel)
                 chA_design_sel = AndResidueSelector(
-                    chA_int_surf_sel,
-                    NotResidueSelector(fixed_sel)
+                    chA_int_surf_sel, NotResidueSelector(fixed_sel)
                 )
                 # get the length of state Y
                 offset = pose.chain_end(2)
@@ -1275,7 +1285,9 @@ def finalize_peptide(
                 chA_design_filter = list(chA_design_sel.apply(pose))
                 # make a list of the corresponding residues in state X that are interface in Y
                 X_residues = [
-                    i + offset for i, designable in enumerate(chA_design_filter, start=1) if designable
+                    i + offset
+                    for i, designable in enumerate(chA_design_filter, start=1)
+                    if designable
                 ]
                 X_residues_str = ",".join(str(i) for i in X_residues)
                 X_design_sel = ResidueIndexSelector(X_residues_str)
@@ -1294,17 +1306,20 @@ def finalize_peptide(
                 surf_sel = LayerSelector()
                 surf_sel.set_layers(False, False, True)
                 surf_sel.set_use_sc_neighbors(True)
-                surf_sel.set_cutoffs(5.2, 3.0) # lenient definition for what is "surface" near the peptide
+                surf_sel.set_cutoffs(
+                    5.2, 3.0
+                )  # lenient definition for what is "surface" near the peptide
                 int_surf_sel = AndResidueSelector(neighborhood_sel, surf_sel)
                 exp_surf_sel = LayerSelector()
                 exp_surf_sel.set_layers(False, False, True)
                 exp_surf_sel.set_use_sc_neighbors(True)
-                exp_surf_sel.set_cutoffs(5.2, 2.0) # normal definition for what is "surface"
+                exp_surf_sel.set_cutoffs(
+                    5.2, 2.0
+                )  # normal definition for what is "surface"
                 exp_int_surf_sel = OrResidueSelector(int_surf_sel, exp_surf_sel)
                 chA_int_surf_sel = AndResidueSelector(chA_sel, exp_int_surf_sel)
                 chA_design_sel = AndResidueSelector(
-                    chA_int_surf_sel,
-                    NotResidueSelector(fixed_sel)
+                    chA_int_surf_sel, NotResidueSelector(fixed_sel)
                 )
                 # get the length of state Y
                 offset = pose.chain_end(2)
@@ -1312,14 +1327,18 @@ def finalize_peptide(
                 chA_design_filter = list(chA_design_sel.apply(pose))
                 # make a list of the corresponding residues in state X that are interface in Y
                 X_residues = [
-                    i + offset for i, designable in enumerate(chA_design_filter, start=1) if designable
+                    i + offset
+                    for i, designable in enumerate(chA_design_filter, start=1)
+                    if designable
                 ]
                 X_residues_str = ",".join(str(i) for i in X_residues)
                 X_design_sel = ResidueIndexSelector(X_residues_str)
                 Y_design_sel = OrResidueSelector(chA_design_sel, chB_sel)
                 design_sel = OrResidueSelector(Y_design_sel, X_design_sel)
             else:
-                raise ValueError(f"redesign_hinge option {kwargs['redesign_hinge']} is not valid")
+                raise ValueError(
+                    f"redesign_hinge option {kwargs['redesign_hinge']} is not valid"
+                )
             # save what kind of redesign was done
             pyrosetta.rosetta.core.pose.setPoseExtraScore(
                 pose, "redesign_hinge", kwargs["redesign_hinge"]
@@ -1411,7 +1430,7 @@ def finalize_peptide(
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
             # "mean_plddt": (gt, 92.0),
-            "mean_plddt": (gt, min(float(scores["Y_mean_plddt"])-1, 90)),
+            "mean_plddt": (gt, min(float(scores["Y_mean_plddt"]) - 1, 90)),
             "rmsd_to_reference": (lt, 1.5),
         }
         rank_on = "mean_plddt"
@@ -1436,10 +1455,14 @@ def finalize_peptide(
             # clean ostensibly disulfide-bonded cysteines individually because they have unspecified partners
             if clean_disulfides:
                 seq = decoy.sequence()
-                all_cys_resi_indexes = [i for i, r in enumerate(seq, start=1) if r == "C"]
+                all_cys_resi_indexes = [
+                    i for i, r in enumerate(seq, start=1) if r == "C"
+                ]
                 for i in all_cys_resi_indexes:
                     if decoy.conformation().residue(i).type().is_disulfide_bonded():
-                        pyrosetta.rosetta.core.conformation.change_cys_state(i, "", decoy.conformation())
+                        pyrosetta.rosetta.core.conformation.change_cys_state(
+                            i, "", decoy.conformation()
+                        )
             if "redesign_hinge" in kwargs:
                 # get the chA sequence
                 chA_seq = decoy.chain_sequence(1)
@@ -1455,7 +1478,7 @@ def finalize_peptide(
                     pyrosetta.rosetta.core.pose.setPoseExtraScore(
                         decoy, f"Y_{key}", value
                     )
-            # don't need to do this- it's already taken care of by generate_decoys_from_pose, and this puts 
+            # don't need to do this- it's already taken care of by generate_decoys_from_pose, and this puts
             # the mpnn sequences back into the scores
             # scores.update(decoy.scores)
             # # fix decoy scores
@@ -1474,8 +1497,12 @@ def finalize_peptide(
             elif len(passing_decoys) == 1:
                 to_return = passing_decoys[0]
                 # set chBr[1|2]_seq scores as 'X'
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr1_seq", "X")
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    to_return, "chBr1_seq", "X"
+                )
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    to_return, "chBr2_seq", "X"
+                )
                 # just yield the one decoy
                 packed_decoy = io.to_packed(to_return)
                 yield packed_decoy
@@ -1498,7 +1525,9 @@ def finalize_peptide(
                     to_return, "chBr1_seq", chBr1_seq
                 )
                 # set chBr2_seq score as 'X'
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(to_return, "chBr2_seq", "X")
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(
+                    to_return, "chBr2_seq", "X"
+                )
                 # yield the first decoy
                 packed_decoy = io.to_packed(to_return)
                 yield packed_decoy
@@ -1597,19 +1626,35 @@ def design_after_repeat_propagation(
         try:
             num_repeats_extended = int(kwargs["num_repeats_extended"])
         except KeyError:
-            raise KeyError("num_repeats_extended must be specified.")
+            num_repeats_extended = None
+            try:
+                n_extended = int(kwargs["n_extended"])
+                c_extended = int(kwargs["c_extended"])
+            except KeyError:
+                raise KeyError("num_repeats_extended or c_ and n_extended must be specified.")
+        # see if a neighborhood distance is in kwargs
+        try:
+            neighborhood_distance = int(kwargs["neighborhood_distance"])
+        except KeyError:
+            neighborhood_distance = 6
         # get n and c-terminal endpoints of helices
         n_endpoints = StateMaker.get_helix_endpoints(pose, n_terminal=True)
         c_endpoints = StateMaker.get_helix_endpoints(pose, n_terminal=False)
         # get total number of helices
         num_helices = len(n_endpoints)
-        # every repeat is 2 n-terminal helices and 2 c-terminal helices
-        # we want to design all helices that were part of the extension
+        # every repeat is 2 helices
+        # we want to design all helices that were part of the extensions
         start_nterm_chunk = pose.chain_begin(1)
-        end_nterm_chunk = c_endpoints[int(2 * num_repeats_extended)]
-        start_cterm_chunk = n_endpoints[
-            num_helices - int(1 + (2 * num_repeats_extended - 1))
-        ]
+        if num_repeats_extended is not None:
+            end_nterm_chunk = c_endpoints[int(2 * num_repeats_extended)]
+            start_cterm_chunk = n_endpoints[
+                num_helices - int(1 + (2 * num_repeats_extended - 1))
+            ]
+        else:
+            end_nterm_chunk = c_endpoints[int(2 * n_extended)]
+            start_cterm_chunk = n_endpoints[
+                num_helices - int(1 + (2 * c_extended - 1))
+            ]
         end_cterm_chunk = pose.chain_end(1)
         nterm_resis = ",".join(
             str(x) for x in range(start_nterm_chunk, end_nterm_chunk)
@@ -1620,8 +1665,8 @@ def design_after_repeat_propagation(
         nterm_sel = ResidueIndexSelector(nterm_resis)
         cterm_sel = ResidueIndexSelector(cterm_resis)
         design_sel = OrResidueSelector(
-            NeighborhoodResidueSelector(nterm_sel, 6),
-            NeighborhoodResidueSelector(cterm_sel, 6),
+            NeighborhoodResidueSelector(nterm_sel, neighborhood_distance),
+            NeighborhoodResidueSelector(cterm_sel, neighborhood_distance),
         )
         print_timestamp("Redesigning caps with MPNN", start_time)
         # construct the MPNNDesign object
