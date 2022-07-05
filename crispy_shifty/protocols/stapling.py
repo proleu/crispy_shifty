@@ -661,42 +661,42 @@ def add_azo_chainB(
             pass_rmsd = bool(kwargs["pass_rmsd"])
             print(f"Updating pass_rmsd from kwargs: {pass_rmsd}")
         else:
-            pass_rmsd = False
-        if not pass_rmsd:
-            if "rmsd_filter" not in kwargs.keys():
-                kwargs["rmsd_filter"] = 10
-            if "rmsd_sele" not in kwargs.keys():
-                kwargs["rmsd_sele"] = ",".join(
-                    [
-                        str(i + 1)
-                        for i, b in enumerate(
-                            pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
-                                2
-                            ).apply(
-                                pose
-                            )
+            pass_rmsd = False    
+        if "rmsd_filter" not in kwargs.keys():
+            kwargs["rmsd_filter"] = 10
+
+        if "rmsd_sele" not in kwargs.keys():
+            kwargs["rmsd_sele"] = ",".join(
+                [
+                    str(i + 1)
+                    for i, b in enumerate(
+                        pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
+                            2
+                        ).apply(
+                            pose
                         )
-                        if b
-                    ]
-                )
-            if "super_sele" not in kwargs.keys():
-                kwargs["super_sele"] = ",".join(
-                    [
-                        str(i + 1)
-                        for i, b in enumerate(
-                            pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
-                                1
-                            ).apply(
-                                pose
-                            )
+                    )
+                    if b
+                ]
+            )
+        if "super_sele" not in kwargs.keys():
+            kwargs["super_sele"] = ",".join(
+                [
+                    str(i + 1)
+                    for i, b in enumerate(
+                        pyrosetta.rosetta.core.select.residue_selector.ChainSelector(
+                            1
+                        ).apply(
+                            pose
                         )
-                        if b
-                    ]
-                )
-            if "rmsd_type" not in kwargs.keys():
-                kwargs["rmsd_type"] = "rmsd_protein_bb_heavy"
-            if "save_rmsd" not in kwargs.keys():
-                kwargs["save_rmsd"] = True
+                    )
+                    if b
+                ]
+            )
+        if "rmsd_type" not in kwargs.keys():
+            kwargs["rmsd_type"] = "rmsd_protein_bb_heavy"
+        if "save_rmsd" not in kwargs.keys():
+            kwargs["save_rmsd"] = True
         pyrosetta.rosetta.core.pose.setPoseExtraScore(
             pose, "crosslinked_residues", kwargs["selection"]
         )
