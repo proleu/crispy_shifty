@@ -222,7 +222,10 @@ def fold_binder(
             pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, value)
         # setup prefix, rank_on, filter_dict (in this case we can't get from kwargs)
         filter_dict = {
-            "mean_plddt": (gt, 90.0),
+            "mean_pae_interaction": (lt, 5),
+            "mean_plddt": (gt, 93.0),
+            "pTMscore": (gt, 0.85),
+            "rmsd_to_reference": (lt, 1.5),
         }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
