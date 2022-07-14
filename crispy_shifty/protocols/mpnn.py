@@ -1214,7 +1214,7 @@ def mpnn_paired_state_fixed(
         # get the length of state Y
         offset = pose.chain_end(2)
         # get the start of the peptide
-        peptide_start = pose.chain_begin(4)
+        peptide_start = pose.chain_end(3)+1
         # iterate over the mpnn parameter combinations
         mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
         num_conditions = len(list(mpnn_conditions))
