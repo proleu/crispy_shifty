@@ -225,7 +225,7 @@ def fold_binder(
             "mean_pae_interaction": (lt, 10),
             "mean_plddt": (gt, 92.0),
             "pTMscore": (gt, 0.8),
-            "rmsd_to_reference": (lt, 1.5),
+            "rmsd_to_reference": (lt, 1.75),
         }
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"

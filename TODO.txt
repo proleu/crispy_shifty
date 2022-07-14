@@ -1,7 +1,7 @@
 dev TODOs:
     	
     - TAR/archive stuff
-    - orthogonal order?
+    - parallel scorefile read in
     - FF74/cs_094 redesign?
     - staples for 230, 242-44, 269, 287
     - mutants for 242-244
@@ -41,10 +41,9 @@ data analysis TODOs:
     - DOTFILES - version control
 
 crispy_crispies:
-    - NPY order + peptides
     - mpnn redesign hits? +/-?
         - pos/neg design with crossdocking within glucagon family?
-    - filter inputs -> threading script (which targets?)
     - mpnn
     - fold complex
+    - degrease
     - order or fold apo?
