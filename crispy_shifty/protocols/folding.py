@@ -896,6 +896,9 @@ def fold_bound_state(
             "rmsd_to_reference": (lt, 1.5),
             "mean_pae_interaction": (lt, 5),
         }
+        if "use_filter" in kwargs:
+            if kwargs["use_filter"].lower() == "false":
+                filter_dict = {}
         rank_on = "mean_plddt"
         prefix = "mpnn_seq"
         for decoy in generate_decoys_from_pose(
