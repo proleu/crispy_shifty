@@ -874,10 +874,12 @@ def fold_bound_state(
         # initial_guess, reference_pdb both are the tmp.pdb
         initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
         reference_pdb = initial_guess
-        flag_update = {
-            "--initial_guess": initial_guess,
-            "--reference_pdb": reference_pdb,
-        }
+        flag_update = {"--reference_pdb": reference_pdb}
+        if "use_initial_guess" in kwargs:
+            if not kwargs["use_initial_guess"].lower() == "false":
+                flag_update["--initial_guess"] = initial_guess
+        else:
+            flag_update["--initial_guess"] = initial_guess
         runner.update_flags(flag_update)
         runner.update_command()
         print_timestamp("Running AF2", start_time)
