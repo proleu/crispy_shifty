@@ -550,7 +550,7 @@ def fast_relax(
     task_factory: TaskFactory,
     scorefxn: ScoreFunction,
     movemap: MoveMap,
-    relax_script: str = "InterfaceDesign2019",
+    relax_script: str = "MonomerRelax2019",
     repeats: int = 5,
     cartesian: bool = False,
 ) -> None:
@@ -561,7 +561,7 @@ def fast_relax(
     :param: movemap: MoveMap, the movemap to use.
     :param: repeats: int, the number of times to repeat the design.
     :return: None.
-    Runs FastDesign with the given task factory and score function.
+    Runs FastRelax with the given task factory and score function.
     """
 
     import pyrosetta
