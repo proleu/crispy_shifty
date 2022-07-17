@@ -15,8 +15,7 @@ from pyrosetta.rosetta.core.pose import Pose
 @requires_init
 def path_to_pose_or_ppose(
     path="",
-    cluster_scores: Optional[bool] = False,
-    df_scores: Optional[str] = None,
+    cluster_scores: Optional[Union[bool, str]] = False,
     pack_result: Optional[bool] = False,
 ) -> Iterator[Union[PackedPose, Pose]]:
     """
@@ -45,22 +44,19 @@ def path_to_pose_or_ppose(
         with open(path, "rb") as f:  # read bz2 bytestream, decompress and decode
             ppose = io.pose_from_pdbstring(bz2.decompress(f.read()).decode())
         if cluster_scores:  # set scores in pose after unpacking, then repack
-            try:
-                scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
-            except IOError:
-                print("Scores may be absent or incorrectly formatted")
-                scores = {}
-            pose = io.to_pose(ppose)
-            for key, value in scores.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
-            ppose = io.to_packed(pose)
-        elif df_scores:  # set scores in pose after unpacking, then repack
-            try:
-                scores_df = pd.read_csv(df_scores, index_col="Unnamed: 0")
-                scores = scores_df.loc[path].to_dict()
-            except KeyError:
-                print("Path not found in score database")
-                scores = {}
+            if isinstance(cluster_scores, str):
+                try:
+                    scores_df = pd.read_csv(cluster_scores, index_col="Unnamed: 0")
+                    scores = scores_df.loc[path].to_dict()
+                except KeyError:
+                    print("Path not found in score database")
+                    scores = {}
+            else:
+                try:
+                    scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
+                except IOError:
+                    print("Scores may be absent or incorrectly formatted")
+                    scores = {}
             pose = io.to_pose(ppose)
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
@@ -71,22 +67,19 @@ def path_to_pose_or_ppose(
     elif ".pdb" in path:  # should handle pdb.gz as well
         ppose = io.pose_from_file(path)
         if cluster_scores:  # set scores in pose after unpacking, then repack
-            try:
-                scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
-            except IOError:
-                print("Scores may be absent or incorrectly formatted")
-                scores = {}
-            pose = io.to_pose(ppose)
-            for key, value in scores.items():
-                pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))
-            ppose = io.to_packed(pose)
-        elif df_scores:  # set scores in pose after unpacking, then repack
-            try:
-                scores_df = pd.read_csv(df_scores, index_col="Unnamed: 0")
-                scores = scores_df.loc[path].to_dict()
-            except KeyError:
-                print("Path not found in score database")
-                scores = {}
+            if isinstance(cluster_scores, str):
+                try:
+                    scores_df = pd.read_csv(cluster_scores, index_col="Unnamed: 0")
+                    scores = scores_df.loc[path].to_dict()
+                except KeyError:
+                    print("Path not found in score database")
+                    scores = {}
+            else:
+                try:
+                    scores = pyrosetta.distributed.cluster.get_scores_dict(path)["scores"]
+                except IOError:
+                    print("Scores may be absent or incorrectly formatted")
+                    scores = {}
             pose = io.to_pose(ppose)
             for key, value in scores.items():
                 pyrosetta.rosetta.core.pose.setPoseExtraScore(pose, key, str(value))

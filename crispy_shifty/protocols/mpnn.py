@@ -1466,6 +1466,10 @@ def mpnn_selection(
 
     start_time = time()
 
+    cluster_scores = True
+    if "df_scores" in kwargs:
+        cluster_scores = kwargs["df_scores"]
+
     # generate poses or convert input packed pose into pose
     if packed_pose_in is not None:
         poses = [io.to_pose(packed_pose_in)]
@@ -1473,7 +1477,7 @@ def mpnn_selection(
     else:
         pdb_path = kwargs["pdb_path"]
         poses = path_to_pose_or_ppose(
-            path=pdb_path, df_scores=kwargs["df_scores"], pack_result=False
+            path=pdb_path, cluster_scores=cluster_scores, pack_result=False
         )
 
     if "mpnn_temperature" in kwargs:
