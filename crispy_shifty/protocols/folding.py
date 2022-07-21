@@ -1568,3 +1568,133 @@ def fold_dimer_X(
 
                 packed_decoy = io.to_packed(decoy)
                 yield packed_decoy
+
+
+@requires_init
+def fold_all_states_SAS(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param: packed_pose_in: a PackedPose object to fold with the superfold script.
+    :param: kwargs: keyword arguments to be passed to the superfold script.
+    :return: an iterator of PackedPose objects.
+    Fold all models with initial guesses of each possible state of the SAS: unbound, helix bound, LHD bound, and both bound.
+    Save all model pdbs so you can visually inspect the ones you select.
+    """
+
+    import sys
+    import pandas as pd
+    from pathlib import Path
+    from time import time
+
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.pose import setPoseExtraScore
+    from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.alignment import score_rmsd, model_hinge_alt_state, add_interaction_partner
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.states import clash_check
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+    fusion_db_path = kwargs.pop("fusion_db_path")
+    fusion_db_df = pd.read_csv(fusion_db_path, index_col="Unnamed: 0")
+    pdb_path = kwargs.pop("pdb_path")
+    cluster_scores = kwargs.pop("df_scores", True)
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+        pdb_path = "none"
+    else:
+        # skip the kwargs check
+        poses = path_to_pose_or_ppose(
+            path=pdb_path, cluster_scores=cluster_scores, pack_result=False
+        )
+
+    sw = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+    # apply a state change function to a component of the pose
+    def model_alt_state(state_pose, bb_pose, bb_info):
+        if bb_info["type"] == "hinge":
+            bounds = [int(x) for x in bb_info["bounds"].split(",")]
+            if bb_info["chain"] == 3:
+                sw.chain_order("12")
+            else:
+                sw.chain_order("3")
+            alt_state = bb_pose.clone()
+            sw.apply(alt_state)
+            alt_pose = model_hinge_alt_state(state_pose, alt_state, bounds[0], bounds[1])
+        elif bb_info["type"] == "heterodimer":
+            alt_pose = add_interaction_partner(state_pose, bb_pose, bb_info["chain"])
+        return alt_pose
+
+    fusion_sel = ChainSelector(1)
+
+    for pose in poses:
+        scores = dict(pose.scores)
+        print_timestamp("Modeling alternate states", start_time)
+
+        # get the alt states of LHDs and hinges from the fusion_geometry score
+        # fusion_geometry is ordered N-term to C-term
+        fusion_geometry = []
+        for fusion_bb_str in scores["fusion_geometry"].split(","):
+            bb_name, bb_chain = fusion_bb_str.split(":")
+            bb_info = fusion_db_df.loc[bb_name, :].to_dict()
+            bb_info["chain"] = int(bb_chain)
+            with open(bb_info["path"], "r") as f:
+                bb_pose = io.to_pose(io.pose_from_pdbstring(f.read()))
+            fusion_geometry.append([bb_pose, bb_info])
+
+        # model alternate states
+        # Each fusion component has two states: unbound and bound. These could be tied to different conformations, as 
+        # in a hinge, but don't have to be, as in an LHD. Model every combination of these states.
+        fusion_states = {}
+        # for each possible combination of component states
+        for state_idx in range(2 ** len(fusion_geometry)):
+            state_pose = pose.clone()
+            # for each component in the fusion
+            for i, (bb_pose, bb_info) in enumerate(fusion_geometry):
+                # if the bit is set, model the alternate state of this component
+                if state_idx & (1 << i):
+                    state_pose = model_alt_state(state_pose, bb_pose, bb_info)
+            # update scores
+            for key, value in scores.items():
+                pyrosetta.rosetta.core.pose.setPoseExtraScore(state_pose, key, value)
+            setPoseExtraScore(state_pose, "state_idx", f"{state_idx:0{len(fusion_geometry)}b}")
+            setPoseExtraScore(state_pose, "state_bb_clash", clash_check(state_pose))
+            fusion_states[state_idx] = state_pose
+
+        for state_idx, state_pose in fusion_states.items():
+            print_timestamp("Setting up for AF2", start_time)
+            runner = SuperfoldRunner(
+                pose=state_pose,
+                load_decoys=True,
+                simple_rmsd=True,
+                initial_guess=True,
+                **kwargs,
+            )
+            runner.setup_runner()
+            runner.update_command()
+            print_timestamp("Running AF2", start_time)
+            runner.apply(state_pose)
+            print_timestamp("AF2 complete, generating decoys", start_time)
+            for decoy in generate_decoys_from_pose(
+                state_pose,
+                filter_dict={},
+                generate_prediction_decoys=True,
+                label_first=False,
+                prefix="tmp",
+                rank_on=False,
+            ):
+                # measure RMSD of the fusion to other modeled states
+                for alt_idx in range(state_idx):
+                    # only measure rmsd to states closer to the original fusion state
+                    n = state_idx | ~alt_idx
+                    if ((n+1) & n == 0) and (n!=0):
+                        score_rmsd(decoy, fusion_states[alt_idx], sel=fusion_sel, refsel=fusion_sel, name=f"rmsd_{state_idx:0{len(fusion_geometry)}b}_{alt_idx:0{len(fusion_geometry)}b}")
+
+                packed_decoy = io.to_packed(decoy)
+                yield packed_decoy

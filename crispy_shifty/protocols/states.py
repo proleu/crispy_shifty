@@ -421,6 +421,8 @@ def combine_two_poses(
     pose_b: Pose,
     end_a: int,
     start_b: int,
+    start_a: Optional[int] = 1, 
+    end_b: Optional[int] = None
 ) -> Pose:
     """
     Make a new pose, containing pose_a up to end_a, then pose_b starting from start_b
@@ -431,18 +433,47 @@ def combine_two_poses(
     :param pose_b: Pose 2
     :param end_a: end index of Pose 1
     :param start_b: start index of Pose 2
+    :param start_a: start index of Pose 1
+    :param end_b: end index of Pose 2
     :return: new Pose
     """
     import pyrosetta
     from pyrosetta.rosetta.core.pose import Pose
 
     newpose = Pose()
-    for i in range(1, end_a + 1):
+    for i in range(start_a, end_a + 1):
         newpose.append_residue_by_bond(pose_a.residue(i))
     newpose.append_residue_by_jump(
         pose_b.residue(start_b), newpose.chain_end(1), "CA", "CA", 1
     )
-    for i in range(start_b + 1, pose_b.total_residue() + 1):
+    if not end_b:
+        end_b = pose_b.total_residue()
+    for i in range(start_b + 1, end_b + 1):
+        newpose.append_residue_by_bond(pose_b.residue(i))
+    return newpose
+
+def fuse_two_poses(
+    pose_a: Pose,
+    pose_b: Pose,
+    end_a: int,
+    start_b: int,
+    start_a: Optional[int] = 1, 
+    end_b: Optional[int] = None
+) -> Pose:
+    """
+    Make a new single-chain pose, containing pose_a up to end_a, then pose_b starting from start_b
+    Does not respect chain breaks.
+    TODO mutate terminal residues to non-terminal variants to enable appending to by bonds
+    """
+    import pyrosetta
+    from pyrosetta.rosetta.core.pose import Pose
+
+    newpose = Pose()
+    for i in range(start_a, end_a + 1):
+        newpose.append_residue_by_bond(pose_a.residue(i))
+    if not end_b:
+        end_b = pose_b.total_residue()
+    for i in range(start_b, end_b + 1):
         newpose.append_residue_by_bond(pose_b.residue(i))
     return newpose
 
