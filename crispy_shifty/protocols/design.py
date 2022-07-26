@@ -550,18 +550,28 @@ def fast_relax(
     task_factory: TaskFactory,
     scorefxn: ScoreFunction,
     movemap: MoveMap,
-    relax_script: str = "InterfaceDesign2019",
+    relax_script: str = "MonomerRelax2019",
     repeats: int = 5,
     cartesian: bool = False,
+    coord_constrain_sidechains: bool = False,
+    constrain_relax_to_start_coords: bool = False,
 ) -> None:
     """
     :param: pose: Pose, the pose to design.
     :param: task_factory: TaskFactory, the task factory to use.
     :param: scorefxn: ScoreFunction, the score function to use.
     :param: movemap: MoveMap, the movemap to use.
+    :param: relax_script: str, the relax script to use.
     :param: repeats: int, the number of times to repeat the design.
+    :param: cartesian: bool, whether to use cartesian minimization.
+    :param: coord_constrain_sidechains: bool, whether to constrain sidechains to their 
+    starting coordinates. (Need sfxn that ends with `_cst` to use this, and needs to be
+    in cartesian mode I think.)
+    :param: constrain_relax_to_start_coords: bool, whether to constrain the relax to
+    starting coordinates. (Need sfxn that ends with `_cst` to use this, and needs to be 
+    in cartesian mode I think.)
     :return: None.
-    Runs FastDesign with the given task factory and score function.
+    Runs FastRelax with the given task factory and score function.
     """
 
     import pyrosetta
@@ -584,6 +594,14 @@ def fast_relax(
     frelax_mover.set_task_factory(task_factory)
     frelax_mover.set_scorefxn(scorefxn)
     frelax_mover.set_movemap(movemap)
+    if coord_constrain_sidechains:
+        frelax_mover.coord_constrain_sidechains(True)
+    else:
+        pass
+    if constrain_relax_to_start_coords:
+        frelax_mover.constrain_relax_to_start_coords(True)
+    else:
+        pass
     frelax_mover.apply(pose)
     return
 

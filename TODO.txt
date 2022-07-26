@@ -1,31 +1,24 @@
 dev TODOs:
     	
+    - fix pdbs folder in CS 09_filter_and_order (r2's are wrong)
     - TAR/archive stuff
-    - parallel scorefile read in
+    - parallel scorefile read in?
     - FF74/cs_094 redesign?
-    - staples for 230, 242-44, 269, 287
-    - mutants for 242-244
-        - order the above 2
-    - 94, JHB07, JHB09m B's
+    - analyze big MS chB expt and ...
     - crispy_shifty_junctions 09
     - save $HOSTNAME in output files
     - graduation_requirements
+        - Cartrelax -> GALigandDock
     - try af2 chBs as oligomers?
     - update mpnn.py to enable FAMPNN (+ DNA/RNA?)
-    - benchmark options
 
     - ordering utils, domesticator
-        - add 673 to vectors
+        - add 673 to vectors, PL sol tag to vectors, BW/AB nanobit stuff to vectors?
     - TODOs and docstrings in all modules
     - plotting and curve fitting functions for FP
 
 env TODOs:
-    - remember to maintain the envs and repos on perlmutter and janelia clusters
-    - finalize yaml with updated pyrosetta, pynvim and new pystapler
-        - now there is a bunch of stupid hallucination bloatware that needs to be there
-        - could take away the bloatware since anna doesn't need it anymore
-        - making conda consistent with new JAX cuda build?
-        - do it when no one is has crispy env active
+    - remember to maintain the envs and repos on digs and perlmutter 
 
 data analysis TODOs:
     - SEC and yields using code blocks from Basile/Lukas
@@ -43,7 +36,5 @@ data analysis TODOs:
 crispy_crispies:
     - mpnn redesign hits? +/-?
         - pos/neg design with crossdocking within glucagon family?
-    - mpnn
-    - fold complex
-    - degrease
+    - degrease/filter on grease
     - order or fold apo?
