@@ -1,10 +1,11 @@
 # Python standard library
 from typing import Iterator, Optional
 
+from pyrosetta.distributed import requires_init
+
 # 3rd party library imports
 # Rosetta library imports
 from pyrosetta.distributed.packed_pose.core import PackedPose
-from pyrosetta.distributed import requires_init
 from pyrosetta.rosetta.core.pose import Pose
 from pyrosetta.rosetta.core.select.residue_selector import ResidueSelector
 
@@ -34,10 +35,11 @@ def mpnn_binder(
     :return: an iterator of PackedPose objects.
     """
 
+    import sys
     from itertools import product
     from pathlib import Path
-    import sys
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
@@ -162,10 +164,11 @@ def fold_binder(
     :return: an iterator of PackedPose objects.
     """
 
-    from operator import lt, gt
-    from pathlib import Path
     import sys
+    from operator import gt, lt
+    from pathlib import Path
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.pose import Pose
@@ -174,8 +177,8 @@ def fold_binder(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     from crispy_shifty.protocols.folding import (
-        generate_decoys_from_pose,
         SuperfoldRunner,
+        generate_decoys_from_pose,
     )
     from crispy_shifty.protocols.mpnn import dict_to_fasta, fasta_to_dict
     from crispy_shifty.utils.io import cmd, print_timestamp
@@ -337,13 +340,13 @@ def thread_target(
     :param: kwargs: keyword arguments to be passed to the threading protocol.
     :return: an iterator of PackedPose objects.
     """
+    import sys
     from itertools import combinations
     from pathlib import Path
-    import sys
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
-
     from pyrosetta.rosetta.core.select.residue_selector import (
         AndResidueSelector,
         ChainSelector,
@@ -368,13 +371,9 @@ def thread_target(
             path=pdb_path, cluster_scores=True, pack_result=False
         )
     # see if there are contact filters in kwargs, would all end in "_contacts"
-    contact_filters = [
-        key for key in kwargs.keys() if key.endswith("_contacts")
-    ]
+    contact_filters = [key for key in kwargs.keys() if key.endswith("_contacts")]
     # obtain the contact filters, make a dict of target_name: int(contacts)
-    contact_filters_dict = {
-        key[:-9]: int(kwargs[key]) for key in contact_filters
-    }
+    contact_filters_dict = {key[:-9]: int(kwargs[key]) for key in contact_filters}
     # loop over inputs
     for pose in poses:
         pose.update_residue_neighbors()
@@ -485,9 +484,10 @@ def thread_target(
                 # check if there is a contact filter for the pose target_name
                 if best_pose.scores["target_name"] in contact_filters_dict.keys():
                     # check if the pose passes the contact filter
-                    if best_pose.scores["count_apolar"] > contact_filters_dict[
-                        best_pose.scores["target_name"]
-                    ]:
+                    if (
+                        best_pose.scores["count_apolar"]
+                        > contact_filters_dict[best_pose.scores["target_name"]]
+                    ):
                         pass
                     else:
                         continue
@@ -499,3 +499,140 @@ def thread_target(
                         best_pose, key, str(value)
                     )
                 yield best_pose
+
+
+@requires_init
+def detail(
+    packed_pose_in: Optional[PackedPose] = None, **kwargs
+) -> Iterator[PackedPose]:
+    """
+    :param packed_pose_in: PackedPose object.
+    :param kwargs: kwargs such as "pdb_path".
+    :return: Iterator of PackedPose objects with terminal repeats designed with MPNN.
+    """
+
+    import sys
+    from operator import gt, lt
+    from pathlib import Path
+    from time import time
+
+    import pyrosetta
+    import pyrosetta.distributed.io as io
+    from pyrosetta.rosetta.core.select.residue_selector import (
+        ChainSelector,
+        NeighborhoodResidueSelector,
+        ResidueIndexSelector,
+    )
+
+    # insert the root of the repo into the sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
+    from crispy_shifty.protocols.folding import (
+        SuperfoldRunner,
+        generate_decoys_from_pose,
+    )
+    from crispy_shifty.protocols.mpnn import MPNNDesign, dict_to_fasta, fasta_to_dict
+    from crispy_shifty.utils.io import print_timestamp
+
+    start_time = time()
+
+    # generate poses or convert input packed pose into pose
+    if packed_pose_in is not None:
+        poses = [io.to_pose(packed_pose_in)]
+    else:
+        poses = path_to_pose_or_ppose(
+            path=kwargs["pdb_path"], cluster_scores=True, pack_result=False
+        )
+    for pose in poses:
+        pose.update_residue_neighbors()
+        scores = dict(pose.scores)
+        # fix chain and residue labels and PDBInfo
+        sc = pyrosetta.rosetta.protocols.simple_moves.SwitchChainOrderMover()
+        sc.chain_order("".join(str(x) for x in range(1, pose.num_chains() + 1)))
+        sc.apply(pose)
+        # get number of repeats that were extended by
+        try:
+            resis = kwargs["resis"]
+        except KeyError:
+            resis = None
+        # see if a neighborhood distance is in kwargs
+        try:
+            neighborhood_distance = int(kwargs["neighborhood_distance"])
+        except KeyError:
+            neighborhood_distance = 6
+        # if resis is not None, use it to select the residues to design
+        if resis is not None:
+            resis_sel = ResidueIndexSelector(resis)
+            design_sel = NeighborhoodResidueSelector(resis_sel, neighborhood_distance)
+        else:
+            design_sel = ChainSelector(1)
+        print_timestamp("Redesigning with MPNN", start_time)
+        # construct the MPNNDesign object
+        mpnn_design = MPNNDesign(
+            design_selector=design_sel,
+            omit_AAs="CX",
+            temperature=0.05,
+            **kwargs,
+        )
+        # design the pose
+        mpnn_design.apply(pose)
+        print_timestamp("MPNN design complete, updating pose datacache", start_time)
+        # update the scores dict
+        scores.update(pose.scores)
+        print_timestamp("Filtering sequences with AF2", start_time)
+        # make a temporary fasta dict from the remaining mpnn_seq scores
+        tmp_fasta_dict = {k: v for k, v in pose.scores.items() if "mpnn_seq" in k}
+        # fix the fasta by splitting on chainbreaks '/' and rejoining the first two
+        tmp_fasta_dict = {
+            tag: "/".join(seq.split("/")[0:2]) for tag, seq in tmp_fasta_dict.items()
+        }
+        print_timestamp("Setting up for AF2", start_time)
+        # setup with dummy fasta path
+        runner = SuperfoldRunner(
+            pose=pose, fasta_path="dummy", load_decoys=True, **kwargs
+        )
+        runner.setup_runner()
+        # initial_guess, reference_pdb both are the tmp.pdb
+        initial_guess = str(Path(runner.get_tmpdir()) / "tmp.pdb")
+        reference_pdb = initial_guess
+        flag_update = {
+            "--initial_guess": initial_guess,
+            "--reference_pdb": reference_pdb,
+        }
+        # now we have to point to the right fasta file
+        new_fasta_path = str(Path(runner.get_tmpdir()) / "tmp.fa")
+        dict_to_fasta(tmp_fasta_dict, new_fasta_path)
+        runner.set_fasta_path(new_fasta_path)
+        runner.override_input_file(new_fasta_path)
+        runner.update_flags(flag_update)
+        runner.update_command()
+        print_timestamp("Running AF2", start_time)
+        runner.apply(pose)
+        print_timestamp("AF2 complete, updating pose datacache", start_time)
+        # check kwargs for filtering instructions
+        if "plddt_cutoff" in kwargs:
+            plddt_cutoff = kwargs["plddt_cutoff"]
+        else:
+            plddt_cutoff = 92.0
+        if "rmsd_cutoff" in kwargs:
+            rmsd_cutoff = kwargs["rmsd_cutoff"]
+        else:
+            rmsd_cutoff = 1.5
+        filter_dict = {
+            "mean_plddt": (gt, plddt_cutoff),
+            "rmsd_to_reference": (lt, rmsd_cutoff),
+        }
+        # setup prefix, rank_on
+        rank_on = "rmsd_to_reference"
+        prefix = "mpnn_seq"
+        print_timestamp("Adding passing sequences back into pose", start_time)
+        for decoy in generate_decoys_from_pose(
+            pose,
+            filter_dict=filter_dict,
+            generate_prediction_decoys=True,
+            label_first=False,
+            prefix=prefix,
+            rank_on=rank_on,
+        ):
+            packed_decoy = io.to_packed(decoy)
+            yield packed_decoy

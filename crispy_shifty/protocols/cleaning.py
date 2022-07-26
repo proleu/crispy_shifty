@@ -1061,7 +1061,7 @@ def finalize_peptide(
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import score_cms, interface_between_selectors
+    from crispy_shifty.protocols.design import interface_between_selectors, score_cms
     from crispy_shifty.protocols.folding import (
         SuperfoldRunner,
         af2_metrics,
@@ -1631,7 +1631,9 @@ def design_after_repeat_propagation(
                 n_extended = int(kwargs["n_extended"])
                 c_extended = int(kwargs["c_extended"])
             except KeyError:
-                raise KeyError("num_repeats_extended or c_ and n_extended must be specified.")
+                raise KeyError(
+                    "num_repeats_extended or c_ and n_extended must be specified."
+                )
         # see if a neighborhood distance is in kwargs
         try:
             neighborhood_distance = int(kwargs["neighborhood_distance"])
@@ -1652,9 +1654,7 @@ def design_after_repeat_propagation(
             ]
         else:
             end_nterm_chunk = c_endpoints[int(2 * n_extended)]
-            start_cterm_chunk = n_endpoints[
-                num_helices - int(1 + (2 * c_extended - 1))
-            ]
+            start_cterm_chunk = n_endpoints[num_helices - int(1 + (2 * c_extended - 1))]
         end_cterm_chunk = pose.chain_end(1)
         nterm_resis = ",".join(
             str(x) for x in range(start_nterm_chunk, end_nterm_chunk)

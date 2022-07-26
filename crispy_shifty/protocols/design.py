@@ -564,11 +564,11 @@ def fast_relax(
     :param: relax_script: str, the relax script to use.
     :param: repeats: int, the number of times to repeat the design.
     :param: cartesian: bool, whether to use cartesian minimization.
-    :param: coord_constrain_sidechains: bool, whether to constrain sidechains to their 
+    :param: coord_constrain_sidechains: bool, whether to constrain sidechains to their
     starting coordinates. (Need sfxn that ends with `_cst` to use this, and needs to be
     in cartesian mode I think.)
     :param: constrain_relax_to_start_coords: bool, whether to constrain the relax to
-    starting coordinates. (Need sfxn that ends with `_cst` to use this, and needs to be 
+    starting coordinates. (Need sfxn that ends with `_cst` to use this, and needs to be
     in cartesian mode I think.)
     :return: None.
     Runs FastRelax with the given task factory and score function.

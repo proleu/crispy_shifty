@@ -488,9 +488,10 @@ def filter_paired_state_OPS(
     init statement.
     """
 
+    import sys
     from pathlib import Path
     from time import time
-    import sys
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
@@ -500,23 +501,22 @@ def filter_paired_state_OPS(
 
     # insert the root of the repo into the sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from crispy_shifty.protocols.alignment import score_rmsd
     from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
-    from crispy_shifty.protocols.design import (
-        #     add_metadata_to_pose,
-        gen_std_layer_design,
-        gen_scorefxn,
-        gen_task_factory,
-        gen_movemap,
+    from crispy_shifty.protocols.design import (  # add_metadata_to_pose,
         fast_relax,
+        gen_movemap,
+        gen_scorefxn,
+        gen_std_layer_design,
+        gen_task_factory,
         pack_rotamers,
         score_cms,
         score_ddg,
         score_per_res,
         score_SAP,
-        score_wnm_helix,
         score_wnm_all,
+        score_wnm_helix,
     )
-    from crispy_shifty.protocols.alignment import score_rmsd
     from crispy_shifty.utils.io import print_timestamp
 
     start_time = time()

@@ -67,12 +67,12 @@ def generate_decoys_from_pose(
     """
     import json
     import sys
+    from copy import deepcopy
     from pathlib import Path
 
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.pose import setPoseExtraScore
-    from copy import deepcopy
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from crispy_shifty.protocols.mpnn import thread_full_sequence
@@ -518,9 +518,10 @@ class SuperfoldRunner:
         import json
         import os
         import sys
+
         import pyrosetta
         import pyrosetta.distributed.io as io
-        from pyrosetta.rosetta.core.pose import setPoseExtraScore, clearPoseExtraScores
+        from pyrosetta.rosetta.core.pose import clearPoseExtraScores, setPoseExtraScore
 
         # setup the tmpdir
         self.setup_tmpdir()
@@ -699,7 +700,7 @@ class SuperfoldMultiPDB(SuperfoldRunner):
 
         import pyrosetta
         import pyrosetta.distributed.io as io
-        from pyrosetta.rosetta.core.pose import setPoseExtraScore, clearPoseExtraScores
+        from pyrosetta.rosetta.core.pose import clearPoseExtraScores, setPoseExtraScore
 
         # insert the root of the repo into the sys.path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -1195,9 +1196,11 @@ def fold_paired_state_all(
     :return: an iterator of PackedPose objects.
     """
 
+    import os
+    import sys
     from pathlib import Path
-    import os, sys
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.pose import Pose

@@ -68,8 +68,9 @@ def add_azo(
     ramp_cart_bonded: bool = True,
     pdb_path: str = None,
 ):
-    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
     import pyrosetta
+
+    from crispy_shifty.protocols.cleaning import path_to_pose_or_ppose
 
     # Force correct typing
     residue_name = str(residue_name)
@@ -85,8 +86,8 @@ def add_azo(
     tors_fast_relax_rounds = int(tors_fast_relax_rounds)
     cart_fast_relax_rounds = int(cart_fast_relax_rounds)
     rmsd_filter = float(rmsd_filter)
-    #rmsd_sele = str(rmsd_sele)
-    #super_sele = str(super_sele)
+    # rmsd_sele = str(rmsd_sele)
+    # super_sele = str(super_sele)
     rmsd_type = str(rmsd_type)
     save_rmsd = bool(save_rmsd)
     invert_rmsd = bool(invert_rmsd)
@@ -385,6 +386,7 @@ def add_azo(
         from pyrosetta.rosetta.core.select.residue_selector import (
             TrueResidueSelector as TrueResidueSelector,
         )
+
         print(type(rmsd_sele))
         if rmsd_sele is None:
             rmsd_sele = AndResidueSelector(
@@ -401,13 +403,17 @@ def add_azo(
                 ResidueIndexSelector(super_sele),
                 NotResidueSelector(selection),
             )
-        rmsd_resis=",".join([str(i+1) for i,b in enumerate(rmsd_sele.apply(pose_in)) if b])
-        super_resis=",".join([str(i+1) for i,b in enumerate(super_sele.apply(pose_in)) if b])
-        print(rmsd_resis,flush=True)
-        print(super_resis,flush=True)
-        rmsd_sele=ResidueIndexSelector(rmsd_resis)
-        super_sele=ResidueIndexSelector(super_resis)
-        #rmsd_sele=AndResidueSelector(rmsd_sele,NotResidueSelector(ResidueIndexSelector(azo_index)))
+        rmsd_resis = ",".join(
+            [str(i + 1) for i, b in enumerate(rmsd_sele.apply(pose_in)) if b]
+        )
+        super_resis = ",".join(
+            [str(i + 1) for i, b in enumerate(super_sele.apply(pose_in)) if b]
+        )
+        print(rmsd_resis, flush=True)
+        print(super_resis, flush=True)
+        rmsd_sele = ResidueIndexSelector(rmsd_resis)
+        super_sele = ResidueIndexSelector(super_resis)
+        # rmsd_sele=AndResidueSelector(rmsd_sele,NotResidueSelector(ResidueIndexSelector(azo_index)))
         print(super_sele.apply(pose), flush=True)
         print(rmsd_sele.apply(pose), flush=True)
         print(super_sele, flush=True)
@@ -418,7 +424,10 @@ def add_azo(
         rmsd_metric.set_residue_selector_reference(rmsd_sele)
         rmsd_metric.set_residue_selector_super(super_sele)
         rmsd_metric.set_residue_selector_super_reference(super_sele)
-        print(f"setting rmsd_type: pyrosetta.rosetta.core.scoring.rmsd_atoms.{rmsd_type}", flush=True)
+        print(
+            f"setting rmsd_type: pyrosetta.rosetta.core.scoring.rmsd_atoms.{rmsd_type}",
+            flush=True,
+        )
         rmsd_metric.set_rmsd_type(
             eval(f"pyrosetta.rosetta.core.scoring.rmsd_atoms.{rmsd_type}")
         )
@@ -427,7 +436,7 @@ def add_azo(
         print("calculating", flush=True)
         rmsd = rmsd_metric.calculate(pose)
         if save_rmsd:
-            print("saving rmsd",flush=True)
+            print("saving rmsd", flush=True)
             pyrosetta.rosetta.core.pose.setPoseExtraScore(
                 pose, "crosslinking_rmsd", rmsd
             )
@@ -443,7 +452,7 @@ def add_azo(
             break
     pose = pose_in.clone()
     if type(selection) == str:
-        selection_str=selection
+        selection_str = selection
         selection = pyrosetta.rosetta.core.select.residue_selector.ResidueIndexSelector(
             selection
         )
@@ -571,15 +580,15 @@ def add_azo(
         azo_index = get_linker_index(pose, res_indices)
         print("Calculating RMSD", flush=True)
         rmsd_passed = filter_by_rmsd(
-                pose,
-                pose_in,
-                selection,
-                rmsd_filter,
-                rmsd_sele,
-                super_sele,
-                rmsd_type,
-                save_rmsd,
-            )
+            pose,
+            pose_in,
+            selection,
+            rmsd_filter,
+            rmsd_sele,
+            super_sele,
+            rmsd_type,
+            save_rmsd,
+        )
         if not pass_rmsd:
             if invert_rmsd:
                 assert rmsd_passed, "Failed RMSD filter"

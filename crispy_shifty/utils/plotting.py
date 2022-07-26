@@ -30,6 +30,7 @@ def get_aspect_ratio(num_plots: int, aspect_ratio: str = "wide") -> Tuple[int, i
 
     return subplot_rows, subplot_cols
 
+
 def histplot_df(
     df,
     cols: List[str],
@@ -73,7 +74,10 @@ def histplot_df(
 
     return fig, axs
 
-def pairplot_df(df, cols: List[str], hue: str = None, hue_order: List[str] = None, **kwargs):
+
+def pairplot_df(
+    df, cols: List[str], hue: str = None, hue_order: List[str] = None, **kwargs
+):
     import matplotlib.pyplot as plt
     import seaborn as sns
 
@@ -85,5 +89,6 @@ def pairplot_df(df, cols: List[str], hue: str = None, hue_order: List[str] = Non
         figsize = kwargs.pop("figsize")
 
     fig = plt.figure(figsize=figsize)
-    sns.pairplot(data=df, vars=cols, hue=hue, hue_order=hue_order, corner=True, **kwargs)
-
+    sns.pairplot(
+        data=df, vars=cols, hue=hue, hue_order=hue_order, corner=True, **kwargs
+    )

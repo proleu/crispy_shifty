@@ -1117,20 +1117,21 @@ def mpnn_paired_state_fixed(
     :return: an iterator of PackedPose objects.
     """
 
+    import sys
     from itertools import product
     from pathlib import Path
-    import sys
     from time import time
+
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
-        ChainSelector,
         AndResidueSelector,
-        OrResidueSelector,
-        NotResidueSelector,
-        NeighborhoodResidueSelector,
-        ResidueIndexSelector,
+        ChainSelector,
         FalseResidueSelector,
+        NeighborhoodResidueSelector,
+        NotResidueSelector,
+        OrResidueSelector,
+        ResidueIndexSelector,
     )
 
     # insert the root of the repo into the sys.path
@@ -1214,7 +1215,7 @@ def mpnn_paired_state_fixed(
         # get the length of state Y
         offset = pose.chain_end(2)
         # get the start of the peptide
-        peptide_start = pose.chain_end(3)+1
+        peptide_start = pose.chain_end(3) + 1
         # iterate over the mpnn parameter combinations
         mpnn_conditions = list(product(mpnn_temperatures, mpnn_design_areas))
         num_conditions = len(list(mpnn_conditions))
