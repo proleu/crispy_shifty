@@ -519,6 +519,7 @@ def detail(
     import pyrosetta
     import pyrosetta.distributed.io as io
     from pyrosetta.rosetta.core.select.residue_selector import (
+        AndResidueSelector,
         ChainSelector,
         NeighborhoodResidueSelector,
         ResidueIndexSelector,
@@ -563,7 +564,10 @@ def detail(
         # if resis is not None, use it to select the residues to design
         if resis is not None:
             resis_sel = ResidueIndexSelector(resis)
-            design_sel = NeighborhoodResidueSelector(resis_sel, neighborhood_distance)
+            design_sel = AndResidueSelector(
+                ChainSelector(1),
+                NeighborhoodResidueSelector(resis_sel, neighborhood_distance),
+            )
         else:
             design_sel = ChainSelector(1)
         print_timestamp("Redesigning with MPNN", start_time)
